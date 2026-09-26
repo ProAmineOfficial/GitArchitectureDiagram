@@ -12,9 +12,9 @@ Created by **Amine Saoud ibn al-Bashir — [ProAmineOfficial](https://github.com
 
 ## Open the website
 
-[Git Architecture Diagram](https://git-architecture-diagram.fun-eel-8318.chatgpt.site) is the hosted entrypoint for this repository.
+[Git Architecture Diagram](https://git-architecture-diagram.pro-amine.chatgpt.site) is the hosted entrypoint for this repository.
 
-[Open the NanoKit ultrasonic documentation](https://git-architecture-diagram.fun-eel-8318.chatgpt.site/ProAmineOfficial/NanoKit-ESP32/tree/main/examples_on_platformio/ultrasonic_distance/docs). Repository and folder links start analysis automatically. A documentation scope with authored Mermaid and no extracted code relationships opens the authored diagrams first.
+[Open the NanoKit ultrasonic documentation](https://git-architecture-diagram.pro-amine.chatgpt.site/ProAmineOfficial/NanoKit-ESP32/tree/main/examples_on_platformio/ultrasonic_distance/docs). Repository and folder links start analysis automatically. A documentation scope with authored Mermaid and no extracted code relationships opens the authored diagrams first.
 
 The canonical source remains **this original GitHub repository**, `ProAmineOfficial/GitArchitectureDiagram`. The interface, documentation, and generated explanations are in English.
 
@@ -60,7 +60,7 @@ The application already supports this route shape:
 ```text
 https://github.com/OWNER/REPOSITORY
                    ↓ replace the host after deployment
-https://git-architecture-diagram.fun-eel-8318.chatgpt.site/OWNER/REPOSITORY
+https://git-architecture-diagram.pro-amine.chatgpt.site/OWNER/REPOSITORY
 ```
 
 The same works for GitHub `tree` and `blob` paths. Replace the **entire host**, keeping the owner, repository, branch, and folder path. `gitarchitecturediagram.com` is not configured by this source update; using that exact custom domain requires ownership and DNS setup. A GitHub repository name does not automatically create a domain. See [deployment instructions](docs/DEPLOYMENT.md).

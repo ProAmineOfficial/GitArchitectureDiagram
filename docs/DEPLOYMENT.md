@@ -2,7 +2,7 @@
 
 The application supports a **hosted Cloudflare-compatible Worker** and the existing **local Node.js server**. Static hosting alone cannot run repository analysis.
 
-The configured website is [Git Architecture Diagram](https://git-architecture-diagram.fun-eel-8318.chatgpt.site). Its canonical source is the original `ProAmineOfficial/GitArchitectureDiagram` repository. Do not create a replacement repository for updates. The hosting identity is recorded in `.openai/hosting.json`; it is not a provider credential.
+The configured website is [Git Architecture Diagram](https://git-architecture-diagram.pro-amine.chatgpt.site). Its canonical source is the original `ProAmineOfficial/GitArchitectureDiagram` repository. Do not create a replacement repository for updates. The hosting identity is recorded in `.openai/hosting.json`; it is not a provider credential.
 
 ## Hosted build
 
@@ -60,7 +60,7 @@ Once your deployment is live, configure a domain you control using your hosting 
 
 ```text
 https://github.com/ProAmineOfficial/NanoKit-ESP32
-https://git-architecture-diagram.fun-eel-8318.chatgpt.site/ProAmineOfficial/NanoKit-ESP32
+https://git-architecture-diagram.pro-amine.chatgpt.site/ProAmineOfficial/NanoKit-ESP32
 ```
 
 The second link automatically starts analysis. Names containing dots and scoped tree/blob URLs are supported. A copied workspace link pins the commit through query parameters so another user can inspect the same revision using their own access.

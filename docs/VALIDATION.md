@@ -11,7 +11,7 @@ Validation date: **2026-09-26**. These observations describe the tested revision
 - That live check exposed GitHub's HTTP 422 response for an invalid branch-plus-folder candidate. The resolver now tries shorter candidates for both 404 and 422 responses, with a regression fixture covering 422.
 - Tracked project text was checked for Arabic characters after removing the translated README. Original source excerpts and filenames from analyzed repositories remain verbatim.
 
-The live ingestion check ran locally against GitHub using the compiled hosting adapter. Production publication is verified separately through the hosting provider's deployment status. No new browser visual or download pass was performed for this release. The optional, feature-detected WebMCP integration has not been exercised in a supporting browser.
+The live ingestion check ran locally against GitHub using the compiled hosting adapter. The hosting provider reported a successful production publication at `https://git-architecture-diagram.pro-amine.chatgpt.site`. This confirms deployment status, not a browser interaction pass on that URL. No new browser visual or download pass was performed for this release. The optional, feature-detected WebMCP integration has not been exercised in a supporting browser.
 
 ## Version 0.1.0: original workspace
 
