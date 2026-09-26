@@ -2,6 +2,14 @@
 
 Validation date: **2026-09-26**. These observations describe the tested revision and environment, not a guarantee for every repository or hosting provider.
 
+## Version 0.2.1: reported production failures
+
+The production API reproduced the reported `Cannot reach GitHub` error for `ProAmineOfficial/Driver-NanoKit-ESP32-of-T.U.M-Pro_Amine-IC`, while GitHub itself returned HTTP 200 for that repository. The reader was calling the native fetch function as an object method, which violates the Workers receiver contract. A native-style receiver regression reproduced the failure before the fix. The transport now invokes fetch without rebinding it to the reader.
+
+The browser response reader now checks content types before parsing. Regression tests cover HTML gateway pages, HTTP 200 HTML fallbacks, JSON access errors, malformed and interrupted streams, and UTF-8 characters split across network chunks. HTTP failures no longer surface as raw `Unexpected token '<'` exceptions. Configured custom domains are tested against an explicit origin allowlist, including rejection of lookalike and insecure origins.
+
+The full suite passes **25 tests**, all **13 application/build modules** pass syntax checks, and the production browser/Worker build succeeds. These checks do not imply a fresh browser visual pass or completed custom-domain DNS validation.
+
 ## Version 0.2.0: hosted workspace
 
 - `npm test`: **20 passing tests**. The added Worker tests exercise repository route fallback, streamed analysis with real ingestion logic and deterministic GitHub fixtures, request boundaries, role colors, and preservation of authored Mermaid styles.

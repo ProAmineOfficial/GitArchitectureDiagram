@@ -4,6 +4,7 @@ import DOMPurify from '/vendor/dompurify/purify.es.mjs'; // Sanitize Markdown ou
 import { renderDiagram, clearDiagram, getSource, getSVG, zoom, fit } from './diagram.js'; // Share the interactive Mermaid canvas.
 import { searchEvidence } from '/shared/evidence.mjs'; // Search only the current browser-held source without relying on server session affinity.
 import { exportGuide, exportDiagram } from './exports.js'; // Share local, portable report and diagram downloads.
+import { readAnalysisResponse } from './analysis-stream.js'; // Parse the streamed API contract and handle HTML hosting errors safely.
 const $ = selector => document.querySelector(selector); const $$ = selector => [...document.querySelectorAll(selector)]; // Keep DOM queries compact and explicit.
 let result = null; let view = 'architecture'; let controller = null; let toastTimer; let currentPath = ''; let treeModel = null; // Retain only the current tab's analysis and UI state.
 function node(tag, text, className) { const element = document.createElement(tag); if (text !== undefined) element.textContent = text; if (className) element.className = className; return element; } // Insert untrusted text using textContent exclusively.
@@ -16,10 +17,8 @@ function setBusy(busy) { $('#analyze').disabled = busy; $('#cancel').hidden = !b
 async function analyze(refresh = false) { // Request actual repository ingestion and consume streaming progress.
   if (controller) return; controller = new AbortController(); setBusy(true); status('Connecting to GitHub…'); const input = { ...settings(), refresh }; // Start one cancellable run using the chosen options.
   try { // Convert transport and API errors into visible workspace states.
-    const response = await fetch('/api/analyze', { method: 'POST', headers: headers(), body: JSON.stringify(input), signal: controller.signal }); if (!response.ok) { const body = await response.json(); throw new Error(body.error || 'Analysis could not start.'); } // Respect admission and credential errors before reading the stream.
-    const reader = response.body.getReader(); const decoder = new TextDecoder(); let pending = ''; let completed = false; // Incrementally decode UTF-8 NDJSON without losing split characters.
-    const receive = line => { if (!line.trim()) return; const event = JSON.parse(line); if (event.type === 'progress') status(`${event.stage} — ${event.detail || ''}`); if (event.type === 'error') throw new Error(event.message); if (event.type === 'result') { result = event.result; completed = true; showResult(); } }; // Distinguish actual progress, report completion, and failures.
-    while (true) { const { value, done } = await reader.read(); pending += decoder.decode(value, { stream: !done }); let end; while ((end = pending.indexOf('\n')) !== -1) { receive(pending.slice(0, end)); pending = pending.slice(end + 1); } if (done) break; } if (pending.trim()) receive(pending); if (!completed) throw new Error('The connection ended before analysis finished. Please try again.'); // Require a real final report instead of treating a dropped stream as success.
+    const response = await fetch('/api/analyze', { method: 'POST', headers: headers(), body: JSON.stringify(input), signal: controller.signal }); // Request the actual repository analysis from this deployment.
+    result = await readAnalysisResponse(response, event => status(`${event.stage} — ${event.detail || ''}`)); showResult(); // Show a complete report only after the response passes protocol validation.
     $('#status').hidden = true; // Leave the finished workspace clear of stale progress.
   } catch (error) { status(error.name === 'AbortError' ? 'Analysis canceled.' : error.message, true); } finally { controller = null; setBusy(false); } // Restore controls after success, failure, or cancellation.
 } // End streamed analysis.

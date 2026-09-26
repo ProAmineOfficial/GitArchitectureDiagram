@@ -3,7 +3,7 @@
 import { Buffer } from 'node:buffer'; // Make Git blob verification portable to the hosted Node-compatible runtime.
 import { createHash } from 'node:crypto'; // Verify Git blob identities before analyzing their contents.
 export class AppError extends Error { constructor(status, message) { super(message); this.status = status; } } // Carry safe HTTP error messages.
-export const VERSION = '0.2.0'; // Identify the report generator and its contracts.
+export const VERSION = '0.2.1'; // Identify the report generator and its contracts.
 const SEGMENT = /^[a-zA-Z0-9_.-]+$/; // Restrict repository identifiers to GitHub-compatible path segments.
 const SKIP = /(^|\/)(node_modules|vendor|dist|build|\.git|\.pio|coverage|__pycache__)(\/|$)/i; // Avoid generated and vendored content.
 const SECRET = /(^|\/)(\.env(?:\..*)?|.*(?:credential|secret|password|private[_-]?key).*|id_rsa|id_ed25519)$|\.(pem|p12|pfx|key)$/i; // Exclude likely credential files from ingestion.
@@ -37,7 +37,7 @@ export async function boundedJson(response, limit = 12_000_000) { // Bound netwo
   try { return JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { throw new AppError(502, 'The upstream service returned invalid JSON.'); } // Reject malformed provider data.
 } // End bounded JSON parsing.
 export class GitHubReader { // Keep credentials and network controls local to one analysis.
-  constructor({ token = '', signal, fetchImpl = fetch, maxRequests = Infinity } = {}) { this.token = token; this.signal = signal; this.fetchImpl = fetchImpl; this.maxRequests = maxRequests; this.requests = 0; } // Support injectable transport for contract tests.
+  constructor({ token = '', signal, fetchImpl = fetch, maxRequests = Infinity } = {}) { this.token = token; this.signal = signal; this.fetchImpl = (...args) => fetchImpl(...args); this.maxRequests = maxRequests; this.requests = 0; } // Call native fetch as a standalone function; binding it to this reader breaks the Workers runtime.
   async get(route) { // Read a fixed-host GitHub REST resource.
     if (++this.requests > this.maxRequests) throw new AppError(429, 'The hosted GitHub request budget was reached. Narrow the folder scope and analyze again.'); // Preserve a partial report before exceeding hosting request limits.
     const headers = { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': `GitArchitectureDiagram/${VERSION}` }; // Identify the API contract and application.

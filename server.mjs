@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises'; // Read allowlisted static assets.
 import path from 'node:path'; // Resolve static files within fixed roots.
 import { fileURLToPath } from 'node:url'; // Resolve the application directory independently of the working directory.
 import { timingSafeEqual } from 'node:crypto'; // Compare an optional instance access password safely.
-import { AppError } from './src/github.mjs'; // Reuse user-facing HTTP errors.
+import { AppError, VERSION } from './src/github.mjs'; // Reuse user-facing HTTP errors and the release identifier.
 import { runAnalysis, getSession } from './src/service.mjs'; // Expose the same analysis pipeline used by the CLI.
 import { searchEvidence } from './src/genius.mjs'; // Provide source-backed questions without an AI dependency.
 const ROOT = path.dirname(fileURLToPath(import.meta.url)); const rates = new Map(); let active = 0; // Scope assets and bound process-level resource usage.
@@ -37,7 +37,7 @@ export function createAppServer() { // Export the actual server for integration 
     response.setHeader('Content-Security-Policy', CSP); response.setHeader('X-Content-Type-Options', 'nosniff'); response.setHeader('Referrer-Policy', 'no-referrer'); response.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()'); // Apply browser protections before every response.
     try { // Convert all request failures into bounded user-facing errors.
       const url = new URL(request.url, 'http://localhost'); // Parse routing independently of an untrusted Host header.
-      if (url.pathname === '/api/health' && request.method === 'GET') return json(response, 200, { ok: true, version: '0.2.0', limits: { maxFiles: 120 }, aiAvailable: Boolean(process.env.OPENAI_API_KEY && process.env.GENIUS_MODEL && process.env.GENIUS_ACCESS_TOKEN), accessRequired: Boolean(process.env.GENIUS_ACCESS_TOKEN) }); // Expose capability state without secrets.
+      if (url.pathname === '/api/health' && request.method === 'GET') return json(response, 200, { ok: true, version: VERSION, limits: { maxFiles: 120 }, aiAvailable: Boolean(process.env.OPENAI_API_KEY && process.env.GENIUS_MODEL && process.env.GENIUS_ACCESS_TOKEN), accessRequired: Boolean(process.env.GENIUS_ACCESS_TOKEN) }); // Expose capability state without secrets.
       if (url.pathname.startsWith('/api/')) { // Admit only the documented same-origin API operations.
         if (request.method !== 'POST') throw new AppError(405, 'Use POST for this API endpoint.'); guard(request); // Require bounded authenticated browser actions where configured.
         if (!String(request.headers['content-type'] || '').startsWith('application/json')) throw new AppError(415, 'Use application/json.'); const input = await body(request); // Reject cross-site form submissions and oversized bodies.
