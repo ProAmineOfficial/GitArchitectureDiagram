@@ -12,9 +12,11 @@ Credentials are held in browser input fields and request memory, not browser sto
 
 A server-wide GitHub token cannot disclose a private repository: the caller must supply their own token. GitHub still decides which resources that token may read. Use the least repository read access needed. Never paste credentials into the repository URL, a query parameter, or a public issue.
 
-Private reports do not enter the shared public cache. They remain in their browser tab and in the server's bounded session map for evidence search. Sessions have a ten-minute access lifetime and unguessable IDs. Expired entries are cleaned up on subsequent requests; a process restart clears memory. Treat session IDs and downloaded source/documentation as sensitive. This initial version does not provide multi-user accounts or persistent encrypted storage.
+On the hosted Worker, neither public nor private reports enter a persistent report cache or server session map. Evidence search uses the source already held in the browser tab.
 
-Public structural reports are cached in memory by repository, commit, scope, and file budget for ten minutes, with at most twelve retained entries. AI output is not inserted into this shared cache. Refresh bypasses the public cache.
+On the local Node server, private reports do not enter the shared public cache. They remain in their browser tab and in the server's bounded session map for evidence search. Sessions have a ten-minute access lifetime and unguessable IDs. Expired entries are cleaned up on subsequent requests; a process restart clears memory. Treat session IDs and downloaded source/documentation as sensitive. This initial version does not provide multi-user accounts or persistent encrypted storage.
+
+On the local Node server, public structural reports are cached in memory by repository, commit, scope, and file budget for ten minutes, with at most twelve retained entries. AI output is not inserted into this shared cache. Refresh bypasses the public cache.
 
 ## What is and is not verified
 

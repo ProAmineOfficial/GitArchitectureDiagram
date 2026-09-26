@@ -6,9 +6,17 @@ Git Architecture Diagram turns a GitHub repository into an interactive **Mermaid
 
 Created by **Amine Saoud ibn al-Bashir — [ProAmineOfficial](https://github.com/ProAmineOfficial)**. Open source under the MIT license.
 
-[العربية](README.ar.md) · [Architecture](docs/ARCHITECTURE.md) · [Deployment](docs/DEPLOYMENT.md) · [Privacy and analysis limits](docs/PRIVACY.md) · [Contributing](CONTRIBUTING.md)
+[Architecture](docs/ARCHITECTURE.md) · [Deployment](docs/DEPLOYMENT.md) · [Privacy and analysis limits](docs/PRIVACY.md) · [Contributing](CONTRIBUTING.md)
 
 ![Git Architecture Diagram workspace](docs/images/workspace.png)
+
+## Open the website
+
+[Git Architecture Diagram](https://git-architecture-diagram.fun-eel-8318.chatgpt.site) is the hosted entrypoint for this repository.
+
+[Open the NanoKit ultrasonic documentation](https://git-architecture-diagram.fun-eel-8318.chatgpt.site/ProAmineOfficial/NanoKit-ESP32/tree/main/examples_on_platformio/ultrasonic_distance/docs). Repository and folder links start analysis automatically. A documentation scope with authored Mermaid and no extracted code relationships opens the authored diagrams first.
+
+The canonical source remains **this original GitHub repository**, `ProAmineOfficial/GitArchitectureDiagram`. The interface, documentation, and generated explanations are in English.
 
 ## Run it
 
@@ -31,7 +39,7 @@ Try `ProAmineOfficial/NanoKit-ESP32`. For a detailed hardware example, set **Fol
 | --- | --- |
 | Repository input | GitHub URL, `owner/repo`, `/tree/ref/folder`, or `/blob/ref/file`; explicit branch, tag, commit, and folder options |
 | Repository Tree | Searchable, expandable inventory; listed files are distinguished from files actually read |
-| Mermaid architecture | Source-located local imports/includes; directory groups; an 18-file preview with disclosed omissions |
+| Mermaid architecture | Source-located local imports/includes; directory groups; an 18-file preview with disclosed omissions; eight role colors and a visible legend |
 | Mind map | A hierarchy derived from the observed tree, with explicit preview limits |
 | Project diagrams | Existing Mermaid blocks from sampled Markdown, with their source path and line; useful for documented workflows and wiring |
 | Genius source mode | Coverage, stack hints, entrypoint candidates, documentation presence, dependency evidence, and a reproducible guide |
@@ -52,10 +60,10 @@ The application already supports this route shape:
 ```text
 https://github.com/OWNER/REPOSITORY
                    ↓ replace the host after deployment
-https://YOUR-DEPLOYED-HOST/OWNER/REPOSITORY
+https://git-architecture-diagram.fun-eel-8318.chatgpt.site/OWNER/REPOSITORY
 ```
 
-The same works for GitHub `tree` and `blob` paths. The host above is a placeholder, **not a provisioned public service**. Deploy this Node application and configure your domain first. Creating the GitHub repository alone does not host the analyzer. GitHub Pages cannot run this backend. See [deployment instructions](docs/DEPLOYMENT.md).
+The same works for GitHub `tree` and `blob` paths. Replace the **entire host**, keeping the owner, repository, branch, and folder path. `gitarchitecturediagram.com` is not configured by this source update; using that exact custom domain requires ownership and DNS setup. A GitHub repository name does not automatically create a domain. See [deployment instructions](docs/DEPLOYMENT.md).
 
 ## Genius: evidence first, optional AI
 
@@ -91,11 +99,11 @@ Generated guides identify the generator version, timestamp, commit, input blobs,
 - Any accessible GitHub repository can be **listed within API and size limits**. Depth of understanding depends on readable source and language support.
 - Local dependency extraction supports common **JavaScript/TypeScript, Python, and C/C++** import/include forms. Other languages still receive the tree, eligible text inspection, diagrams from documentation, and optional AI interpretation.
 - Extraction is lexical and best-effort: no compiler, runtime call graph, build execution, dependency installation, hardware validation, or security certification of the analyzed project.
-- Default budget: 32 files; configurable from 1 to 120. Limits: 96 KB per file, 900 KB total source, and 12,000 retained tree entries. Generated/vendor folders, likely credential filenames, symlinks, binary data, and oversized files are skipped. Filename filtering is not a secret scanner.
+- Default budget: 32 files; configurable from 1 to 40 on the hosted website, or 1 to 120 in the local Node server and CLI. Limits: 96 KB per file, 900 KB total source, and 12,000 retained tree entries. Generated/vendor folders, likely credential filenames, symlinks, binary data, and oversized files are skipped. Filename filtering is not a secret scanner.
 - AI context is capped at 6,500 characters per file and 110,000 source characters total. Path/line validation checks reference existence, **not the truth of every model interpretation**.
 - Large monorepos work best with a folder scope. The graph, mind map, and source inspector are bounded previews; evidence exports disclose their coverage.
-- Private repositories need a caller-supplied read token. Public reports have a bounded in-memory cache; private reports do not enter it. See the [data handling details](docs/PRIVACY.md).
-- There are no automatic webhooks, commit diffs, video generation, GitHub Enterprise support, or AST-level multi-language analyzers in v0.1.0.
+- Private repositories need a caller-supplied read token. The hosted Worker does not retain report caches or evidence-search sessions. The local Node server has a bounded public-report cache; private reports do not enter it. See the [data handling details](docs/PRIVACY.md).
+- There are no automatic webhooks, commit diffs, video generation, GitHub Enterprise support, or AST-level multi-language analyzers in v0.2.0.
 
 ## Develop and test
 
@@ -103,9 +111,27 @@ Generated guides identify the generator version, timestamp, commit, input blobs,
 npm run dev
 npm run check
 npm test
+npm run build
 ```
 
 Tests cover immutable GitHub ingestion, branch resolution, private-token isolation, source evidence, partial coverage, cache behavior, the mocked OpenAI contract, HTTP routing, origin checks, and static path containment. No real model credentials are needed to run them.
+
+## Diagram colors
+
+Colors describe file-role hints from names and paths; they do not verify runtime behavior. The visible legend lists only roles present in the preview.
+
+| Color | Role hint |
+| --- | --- |
+| Cyan | Entrypoint candidate |
+| Teal | General source and logic |
+| Pink | User interface |
+| Green | Hardware integration |
+| Amber | Configuration and build inputs |
+| Violet | Documentation |
+| Lime | Tests |
+| Rose | Safety-related filename |
+
+Repository-authored Mermaid retains its original class colors. Mind-map branches use a coordinated multicolor palette.
 
 ## Why this project
 

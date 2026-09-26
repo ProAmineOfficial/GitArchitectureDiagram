@@ -1,6 +1,19 @@
-# Initial release validation
+# Release validation
 
 Validation date: **2026-09-26**. These observations describe the tested revision and environment, not a guarantee for every repository or hosting provider.
+
+## Version 0.2.0: hosted workspace
+
+- `npm test`: **20 passing tests**. The added Worker tests exercise repository route fallback, streamed analysis with real ingestion logic and deterministic GitHub fixtures, request boundaries, role colors, and preservation of authored Mermaid styles.
+- `npm run check`: all **12 application and build modules** passed syntax checks.
+- `npm run build`: produced the browser assets and the Worker with a callable default `fetch` handler. The compiled health endpoint reported version `0.2.0` and a 40-file hosted limit.
+- A **live GitHub analysis through the compiled Worker** resolved the exact scoped URL `https://github.com/ProAmineOfficial/NanoKit-ESP32/tree/main/examples_on_platformio/ultrasonic_distance/docs` to commit `17834db850daec9b450239069c4aa2e758bf0644`. It read **2 files**, found **1 authored Mermaid block**, and skipped **0 files** in that scope.
+- That live check exposed GitHub's HTTP 422 response for an invalid branch-plus-folder candidate. The resolver now tries shorter candidates for both 404 and 422 responses, with a regression fixture covering 422.
+- Tracked project text was checked for Arabic characters after removing the translated README. Original source excerpts and filenames from analyzed repositories remain verbatim.
+
+The live ingestion check ran locally against GitHub using the compiled hosting adapter. Production publication is verified separately through the hosting provider's deployment status. No new browser visual or download pass was performed for this release. The optional, feature-detected WebMCP integration has not been exercised in a supporting browser.
+
+## Version 0.1.0: original workspace
 
 - `npm test`: **16 passing tests**, using actual module logic and deterministic provider fixtures.
 - `npm run check`: all **9 application modules** passed Node syntax checks.
@@ -28,7 +41,7 @@ A separate **live CLI analysis** of `examples_on_platformio/ultrasonic_distance`
 
 ## Not validated against a live service
 
-OpenAI integration was tested with a mocked Responses API contract. No paid model request was made because no provider key was configured. Private-token isolation was tested with fixtures, not a user's private repository. Docker and provider-specific public hosting were not deployed as part of this source release. A public domain must still be configured by the deployment operator.
+OpenAI integration was tested with a mocked Responses API contract. No paid model request was made because no provider key was configured. Private-token isolation was tested with fixtures, not a user's private repository. Docker has not been deployed in these checks. The custom domain `gitarchitecturediagram.com` still requires ownership verification and DNS configuration; it is separate from the generated hosting address.
 
 ## Reproduce essential checks
 
@@ -36,6 +49,7 @@ OpenAI integration was tested with a mocked Responses API contract. No paid mode
 npm ci
 npm run check
 npm test
+npm run build
 npm start
 ```
 

@@ -4,6 +4,17 @@ import path from 'node:path'; // Resolve repository-relative imports using POSIX
 import { VERSION, encodePath } from './github.mjs'; // Reuse version and immutable-link encoding rules.
 const CODE = /\.(m?[jc]?[jt]sx?|py|c|cc|cpp|h|hpp|rs|go|java|kt|cs|rb|php|swift|vue|svelte)$/i; // Identify files eligible for lexical dependency extraction.
 const EXTENSIONS = ['', '.js', '.mjs', '.cjs', '.ts', '.tsx', '.jsx', '.py', '.h', '.hpp', '.cpp', '/index.js', '/index.ts', '/__init__.py']; // Resolve common local module forms.
+export const ROLE_PALETTE = { entry: { label: 'Entrypoint', fill: '#12334c', stroke: '#66d4ff' }, source: { label: 'Source / logic', fill: '#123638', stroke: '#55d6ca' }, ui: { label: 'Interface', fill: '#3c2349', stroke: '#e3a0ed' }, hardware: { label: 'Hardware', fill: '#173d2c', stroke: '#79d99b' }, config: { label: 'Configuration', fill: '#44341b', stroke: '#f2c66d' }, document: { label: 'Documentation', fill: '#30294e', stroke: '#b8a6ff' }, test: { label: 'Tests', fill: '#263b21', stroke: '#b3df7a' }, safety: { label: 'Safety-named file', fill: '#442733', stroke: '#ff96ad' } }; // Assign stable, high-contrast colors to explicitly labeled filename-based roles.
+export function fileRole(file) { // Infer visual role hints without claiming runtime responsibility.
+  if (/\.(md|mdx|rst|txt)$/i.test(file) || /(^|\/)(LICENSE|NOTICE)(\.|$)/i.test(file)) return 'document'; // Keep explanatory material separate from executable code.
+  if (/(^|\/)(tests?|__tests__)\/|\.(test|spec)\./i.test(file)) return 'test'; // Identify conventional test locations.
+  if (/safety|failsafe|emergency|watchdog/i.test(file)) return 'safety'; // Highlight safety-related names as hints rather than verified safety guarantees.
+  if (/(^|\/)(main|app|server|index|cli)\.(cpp|c|py|[cm]?js|ts|tsx)$/i.test(file)) return 'entry'; // Color entrypoint candidates consistently with the Genius panel.
+  if (/config|settings|package\.json|platformio\.ini|Cargo\.toml|pyproject\.toml|go\.mod|Dockerfile|CMakeLists|\.(ya?ml|toml|ini)$/i.test(file)) return 'config'; // Separate configuration and build inputs.
+  if (/(^|\/)(ui|components|views|pages|web_controller|public)\/|\.(css|html|vue|svelte|jsx|tsx)$/i.test(file)) return 'ui'; // Mark common user-interface source paths.
+  if (/hardware|sensor|motor|gpio|camera|pinout|driver|actuator|servo|\.(sch|kicad_pcb)$/i.test(file)) return 'hardware'; // Mark names suggesting device integration without inferring physical wiring.
+  return 'source'; // Use the general source color when no defensible role hint is present.
+} // End visual-role classification.
 export const sourceUrl = (snapshot, file, line) => `${snapshot.htmlUrl}/blob/${snapshot.sha}/${encodePath(file)}${line ? `#L${line}` : ''}`; // Pin every evidence link to the analyzed commit.
 export function mermaidLabel(value) { return String(value).replace(/[\x00-\x1f]/g, ' ').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/[\[\]{}()|`]/g, ' ').slice(0, 90); } // Escape untrusted labels before producing Mermaid.
 export function stripComments(text, python = false) { // Remove comments while retaining strings and original line numbers.
@@ -58,11 +69,12 @@ export function buildDiagrams(snapshot, files, edges, maxNodes = 18) { // Keep t
   const components = []; const visited = new Set(); // Separate disconnected source components without inventing relationships.
   for (const folder of groups.keys()) { if (visited.has(folder)) continue; const queue = [folder]; const component = []; while (queue.length) { const next = queue.shift(); if (visited.has(next)) continue; visited.add(next); component.push(next); queue.push(...neighbors.get(next)); } components.push(component); } // Find the actual connected components of the displayed graph.
   const architecture = ['flowchart TD', '%% Invisible links only arrange disconnected components; they are not code relationships.']; let groupIndex = 0; // Start a documented, compact file-level graph.
-  components.forEach((component, index) => { architecture.push(`subgraph c${index}[" "]`); for (const folder of component) { architecture.push(`subgraph g${groupIndex++}["${mermaidLabel(folder === '.' ? snapshot.repo : folder.split('/').length > 3 ? '…/' + folder.split('/').slice(-3).join('/') : folder)}"]`); groups.get(folder).forEach(file => architecture.push(`${ids[file]}["${mermaidLabel(path.posix.basename(file))}"]:::${CODE.test(file) ? 'code' : 'document'}`)); architecture.push('end'); } architecture.push('end', `style c${index} fill:transparent,stroke:transparent`); }); // Preserve real folder boundaries within each connected source component.
+  components.forEach((component, index) => { architecture.push(`subgraph c${index}[" "]`); for (const folder of component) { architecture.push(`subgraph g${groupIndex++}["${mermaidLabel(folder === '.' ? snapshot.repo : folder.split('/').length > 3 ? '…/' + folder.split('/').slice(-3).join('/') : folder)}"]`); groups.get(folder).forEach(file => architecture.push(`${ids[file]}["${mermaidLabel(path.posix.basename(file))}"]:::${fileRole(file)}`)); architecture.push('end'); } architecture.push('end', `style c${index} fill:transparent,stroke:transparent`); }); // Preserve directory boundaries while coloring files by disclosed role hints.
   components.forEach((_, index) => { if (index >= 3) architecture.push(`c${index - 3} ~~~ c${index}`); }); // Arrange independent components in at most three columns using invisible layout constraints.
   edges.filter(edge => ids[edge.from] && ids[edge.to]).forEach(edge => architecture.push(`${ids[edge.from]} -->|${edge.kind === 'include' ? 'includes' : 'imports'}| ${ids[edge.to]}`)); // Draw only located source dependencies.
   if (!chosen.length) architecture.push('empty["No readable source in this scope"]'); // Render an honest empty analysis state.
-  architecture.push('classDef code fill:#142c3d,stroke:#56c8e8,color:#edfaff', 'classDef document fill:#292840,stroke:#b0a3ff,color:#f5f1ff'); // Apply restrained semantic colors inspired by NanoKit documentation.
+  const legend = Object.entries(ROLE_PALETTE).map(([role, colors]) => ({ role, ...colors, count: chosen.filter(file => fileRole(file) === role).length })).filter(item => item.count); // Explain every role color actually used in this preview.
+  Object.entries(ROLE_PALETTE).forEach(([role, colors]) => architecture.push(`classDef ${role} fill:${colors.fill},stroke:${colors.stroke},stroke-width:1.6px,color:#f3f7ff`)); // Preserve the same role palette in exported Mermaid and rendered diagrams.
   const mindmap = ['mindmap', `  root(("${mermaidLabel(snapshot.repo)}"))`]; // Start a hierarchical repository mind map.
   const top = snapshot.scope ? snapshot.scope.split('/').length : 0; const branches = new Map(); // Respect the selected folder depth.
   snapshot.entries.filter(entry => entry.type === 'blob').forEach(entry => { const relative = entry.path.split('/').slice(top).join('/') || path.posix.basename(entry.path); const section = relative.includes('/') ? relative.split('/')[0] : 'Root files'; if (!branches.has(section)) branches.set(section, []); branches.get(section).push(relative); }); // Group the observed file inventory.
@@ -74,7 +86,7 @@ export function buildDiagrams(snapshot, files, edges, maxNodes = 18) { // Keep t
     branchId++; // Advance the safe branch identifier.
   } // End hierarchical map generation.
   if (branches.size > 14) mindmap.push(`    other["${branches.size - 14} more folders in the tree"]`); // Disclose omitted map branches.
-  return { architecture: architecture.join('\n'), mindmap: mindmap.join('\n'), nodePaths, displayedFiles: chosen.length, omittedNodes: Math.max(0, new Set([...relevant, ...files.map(file => file.path)]).size - chosen.length) }; // Preserve graph scope metadata.
+  return { architecture: architecture.join('\n'), mindmap: mindmap.join('\n'), nodePaths, legend, roleBasis: 'Filename and directory hints; not runtime verification.', displayedFiles: chosen.length, omittedNodes: Math.max(0, new Set([...relevant, ...files.map(file => file.path)]).size - chosen.length) }; // Preserve graph scope and the meaning of its visual classifications.
 } // End diagram compilation.
 export function treeText(snapshot) { // Export a deterministic, indentation-based repository tree.
   const title = `${snapshot.fullName}${snapshot.scope ? ` / ${snapshot.scope}` : ''}`; // Name the analyzed scope.
@@ -102,10 +114,4 @@ export function guideMarkdown(result) { // Generate a downloadable, provenance-b
   if (result.ai) text.push('', '## Genius AI interpretation', '', `Model: ${result.ai.model}. AI-generated interpretation; review the cited source.`, '', result.ai.overview, '', ...result.ai.components.map(item => `- [${item.path}](${link(item.path)}) — ${item.description}`), '', ...result.ai.relationships.map(item => `- AI inference: [${item.evidencePath}:${item.evidenceLine}](${link(item.evidencePath, item.evidenceLine)}) — ${item.description}`), '', '### Suggested improvements', '', ...result.ai.recommendations.map(item => `- ${item}`), '', '### AI limitations', '', ...result.ai.limitations.map(item => `- ${item}`), '', `Discarded invalid references: ${result.ai.discardedReferences}. Excerpts supplied: ${result.ai.includedPaths.join(', ')}.`); // Keep model inference visibly separate from structural evidence.
   return text.join('\n'); // Return portable Markdown documentation.
 } // End guide generation.
-export function searchEvidence(result, question) { // Provide source search even when no language model is configured.
-  const words = String(question).toLowerCase().match(/[\p{L}\p{N}_]{3,}/gu)?.slice(0, 12) || []; const matches = []; // Extract a bounded multilingual query.
-  for (const file of result.files) { // Search only content actually read for this analysis.
-    file.content.split('\n').forEach((line, index) => { const haystack = `${file.path} ${line}`.toLowerCase(); const score = words.filter(word => haystack.includes(word)).length; if (score) matches.push({ path: file.path, line: index + 1, text: line.trim().slice(0, 400), score, url: sourceUrl(result.repository, file.path, index + 1) }); }); // Retain source-linked evidence hits.
-  } // End evidence search.
-  return matches.sort((a, b) => b.score - a.score).slice(0, 8); // Return a compact ranked set without fabricating an answer.
-} // End source evidence search.
+export { searchEvidence } from './evidence.mjs'; // Reuse the portable source search in the browser and local API.

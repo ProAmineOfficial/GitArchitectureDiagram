@@ -24,7 +24,8 @@ async function staticAsset(url, response, method) { // Serve only public files a
   let base = path.join(ROOT, 'public'); let relative = url.pathname.slice(1); // Default to the application public directory.
   const vendors = { '/vendor/mermaid/': 'mermaid/dist', '/vendor/dompurify/': 'dompurify/dist', '/vendor/marked/': 'marked/lib', '/vendor/fflate/': 'fflate/esm' }; // Restrict browser dependencies to known distribution roots.
   const vendor = Object.keys(vendors).find(prefix => url.pathname.startsWith(prefix)); // Detect an approved browser-module URL.
-  if (vendor) { base = path.join(ROOT, 'node_modules', vendors[vendor]); relative = url.pathname.slice(vendor.length); } // Resolve dependency assets under their distribution directory.
+  if (url.pathname === '/shared/evidence.mjs') { base = path.join(ROOT, 'src'); relative = 'evidence.mjs'; } // Serve the single portable browser search module from an explicit allowlist.
+  else if (vendor) { base = path.join(ROOT, 'node_modules', vendors[vendor]); relative = url.pathname.slice(vendor.length); } // Resolve dependency assets under their distribution directory.
   else if (relative === '' || /^[\w.-]+\/[\w.-]+(?:\/(?:tree|blob)\/.*)?\/?$/.test(relative)) relative = 'index.html'; // Serve repository names and scoped file URLs even when they contain dots.
   try { relative = decodeURIComponent(relative); } catch { throw new AppError(400, 'Invalid asset path.'); } // Decode once before containment checking.
   const file = path.resolve(base, relative); if (!file.startsWith(base + path.sep) || relative.includes('\\') || !MIME[path.extname(file)]) throw new AppError(404, 'Asset not found.'); // Prevent arbitrary filesystem reads and directory listing.
@@ -36,7 +37,7 @@ export function createAppServer() { // Export the actual server for integration 
     response.setHeader('Content-Security-Policy', CSP); response.setHeader('X-Content-Type-Options', 'nosniff'); response.setHeader('Referrer-Policy', 'no-referrer'); response.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()'); // Apply browser protections before every response.
     try { // Convert all request failures into bounded user-facing errors.
       const url = new URL(request.url, 'http://localhost'); // Parse routing independently of an untrusted Host header.
-      if (url.pathname === '/api/health' && request.method === 'GET') return json(response, 200, { ok: true, version: '0.1.0', aiAvailable: Boolean(process.env.OPENAI_API_KEY && process.env.GENIUS_MODEL && process.env.GENIUS_ACCESS_TOKEN), accessRequired: Boolean(process.env.GENIUS_ACCESS_TOKEN) }); // Expose capability state without secrets.
+      if (url.pathname === '/api/health' && request.method === 'GET') return json(response, 200, { ok: true, version: '0.2.0', limits: { maxFiles: 120 }, aiAvailable: Boolean(process.env.OPENAI_API_KEY && process.env.GENIUS_MODEL && process.env.GENIUS_ACCESS_TOKEN), accessRequired: Boolean(process.env.GENIUS_ACCESS_TOKEN) }); // Expose capability state without secrets.
       if (url.pathname.startsWith('/api/')) { // Admit only the documented same-origin API operations.
         if (request.method !== 'POST') throw new AppError(405, 'Use POST for this API endpoint.'); guard(request); // Require bounded authenticated browser actions where configured.
         if (!String(request.headers['content-type'] || '').startsWith('application/json')) throw new AppError(415, 'Use application/json.'); const input = await body(request); // Reject cross-site form submissions and oversized bodies.

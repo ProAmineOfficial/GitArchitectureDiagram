@@ -8,3 +8,8 @@ coverage
 test-results
 playwright-report
 *.log
+
+dist
+.sites-runtime
+.sites-checkout
+.wrangler

@@ -1,6 +1,23 @@
 # Deploy the analyzer
 
-This application needs a **persistent Node.js HTTP service**, not static hosting. No public domain, hosted service, cloud account, or provider billing is created by this repository.
+The application supports a **hosted Cloudflare-compatible Worker** and the existing **local Node.js server**. Static hosting alone cannot run repository analysis.
+
+The configured website is [Git Architecture Diagram](https://git-architecture-diagram.fun-eel-8318.chatgpt.site). Its canonical source is the original `ProAmineOfficial/GitArchitectureDiagram` repository. Do not create a replacement repository for updates. The hosting identity is recorded in `.openai/hosting.json`; it is not a provider credential.
+
+## Hosted build
+
+```bash
+npm ci
+npm run build
+```
+
+The build creates `dist/server/index.js` and `dist/client`, with an `ASSETS` binding and Node compatibility declared in `dist/server/wrangler.json`. The existing Site must be published from the same reviewed GitHub source commit. Future changes must update this repository and republish that Site; an arbitrary GitHub push alone does not trigger a Sites deployment.
+
+The hosted Worker accepts up to 40 files per run and does not retain report/session caches. Evidence search runs in the browser using already-read files. Optional AI remains disabled unless requested with an authorized key and model. No provider API key is bundled into browser assets.
+
+## Custom domain
+
+`gitarchitecturediagram.com` is separate from the GitHub repository and generated hosting address. A browser `DNS_PROBE_FINISHED_NXDOMAIN` error means that address could not be resolved. To use it, first confirm ownership or register the domain, then attach it through the hosting provider and set the required DNS records. Domain purchase and DNS ownership are not implied by publishing this code. Use the configured website address until the custom domain is verified.
 
 ## Node hosting
 
@@ -43,15 +60,15 @@ Once your deployment is live, configure a domain you control using your hosting 
 
 ```text
 https://github.com/ProAmineOfficial/NanoKit-ESP32
-https://YOUR-HOST/ProAmineOfficial/NanoKit-ESP32
+https://git-architecture-diagram.fun-eel-8318.chatgpt.site/ProAmineOfficial/NanoKit-ESP32
 ```
 
 The second link automatically starts analysis. Names containing dots and scoped tree/blob URLs are supported. A copied workspace link pins the commit through query parameters so another user can inspect the same revision using their own access.
 
 ## Operating limits
 
-Caches and sessions live in process memory and are not synchronized across replicas. Use one instance initially, or sticky routing if you run more than one. Restarting the process clears all reports and invalidates evidence-search sessions. Add a durable job queue and an access-controlled shared store before scaling beyond this design.
+For the local Node deployment, caches and sessions live in process memory and are not synchronized across replicas. Use one instance initially, or sticky routing if you run more than one. Restarting the process clears all reports and invalidates evidence-search sessions. Add a durable job queue and an access-controlled shared store before scaling beyond this design.
 
-The built-in limiter uses the direct socket address and does not trust arbitrary forwarded IP headers. Behind a proxy, clients may share that address; configure gateway limits or a deliberate trusted-proxy implementation before serving a large public audience. Rotate provider credentials through the host's secret settings. Disable request-body logging in the reverse proxy.
+The Node server's limiter uses the direct socket address and does not trust arbitrary forwarded IP headers. Behind a proxy, clients may share that address; configure gateway limits or a deliberate trusted-proxy implementation before serving a large public audience. The Worker uses the platform's `CF-Connecting-IP` header and bounds concurrent analysis per isolate; this is not a global distributed quota. Rotate provider credentials through the host's secret settings. Disable request-body logging in the reverse proxy.
 
 Validate a deployment using `/api/health`, a small public repository, a scoped analysis, and the export controls. A successful source release does not by itself prove that a particular hosting configuration works.

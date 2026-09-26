@@ -24,6 +24,9 @@ flowchart TD
 | `src/genius.mjs` | Resolve common local dependencies; preserve source locations; build Mermaid and documentation; search sampled evidence |
 | `src/ai.mjs` | Build bounded, line-numbered excerpts; call the Responses API only on request; validate model path/line references |
 | `src/service.mjs` | Orchestrate the pipeline; isolate credentials; cache public commit snapshots; retain short-lived analysis sessions |
+| `worker.mjs` | Hosted Fetch API adapter, asset routing, bounded streamed analysis, and no retained report sessions |
+| `src/evidence.mjs` | Shared keyword evidence search; the browser searches its existing report locally |
+| `scripts/build.mjs` | Bundle the browser and a Workers-compatible ESM server with local assets |
 | `server.mjs` | Stream NDJSON progress; serve allowlisted local modules; apply origin, input size, concurrency, and access checks |
 | `cli.mjs` | Write actual `.genius` artifacts from the same service |
 | `public/app.js` | Display coverage, trees, reports, source inspection, and evidence search |
@@ -47,8 +50,14 @@ Architecture previews contain at most 18 file nodes. Mind maps contain at most 1
 
 `POST /api/analyze` accepts JSON: `repository`, optional `ref`, `scope`, `maxFiles`, `githubToken`, `refresh`, `ai`, `apiKey`, and `model`. An optional deployment password belongs in the `X-Instance-Token` header. The response is `application/x-ndjson`, with `progress`, `result`, and `error` events. Errors after streaming starts remain HTTP 200 but carry an error event and status; clients must read the full stream.
 
-`POST /api/ask` accepts `id` and `question`. This endpoint returns **evidence-search results**, not a model-generated answer. Session IDs expire and are bearer capabilities; they must not be shared for private analyses.
+The browser searches evidence locally, so hosted requests do not depend on server affinity. On the local Node server only, `POST /api/ask` accepts `id` and `question`. This endpoint returns **evidence-search results**, not a model-generated answer. Session IDs expire and are bearer capabilities; they must not be shared for private analyses.
 
 `GET /api/health` returns availability information without keys. Static application and local vendor modules are served from fixed roots only.
 
 The server permits up to 3 concurrent analyses and 20 API requests per direct client address per minute. The direct-IP limiter is deliberately simple; production hosts should also apply their own gateway limits.
+
+## Hosted runtime
+
+The production Worker uses the same GitHub/Genius engine. It accepts up to 40 files and 48 GitHub requests per run, two active analyses per isolate, and 20 API requests per observed client address per minute. Results are streamed to the browser without retention in Worker report caches or session maps. Gateway protections remain the hosting operator's responsibility.
+
+Build with `npm run build`. The output is `dist/client` plus `dist/server/index.js`, whose default export has a callable `fetch(request, env, ctx)` handler. `dist/server/wrangler.json` declares the assets binding and Node compatibility.

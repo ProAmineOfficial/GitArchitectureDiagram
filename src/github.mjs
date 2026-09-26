@@ -1,8 +1,9 @@
 // Project: Git Architecture Diagram | Component: GitHub reader | Author: Amine Saoud ibn al-Bashir.
 // Features: immutable snapshots, bounded text ingestion, private-token isolation, and explicit coverage.
+import { Buffer } from 'node:buffer'; // Make Git blob verification portable to the hosted Node-compatible runtime.
 import { createHash } from 'node:crypto'; // Verify Git blob identities before analyzing their contents.
 export class AppError extends Error { constructor(status, message) { super(message); this.status = status; } } // Carry safe HTTP error messages.
-export const VERSION = '0.1.0'; // Identify the report generator and its contracts.
+export const VERSION = '0.2.0'; // Identify the report generator and its contracts.
 const SEGMENT = /^[a-zA-Z0-9_.-]+$/; // Restrict repository identifiers to GitHub-compatible path segments.
 const SKIP = /(^|\/)(node_modules|vendor|dist|build|\.git|\.pio|coverage|__pycache__)(\/|$)/i; // Avoid generated and vendored content.
 const SECRET = /(^|\/)(\.env(?:\..*)?|.*(?:credential|secret|password|private[_-]?key).*|id_rsa|id_ed25519)$|\.(pem|p12|pfx|key)$/i; // Exclude likely credential files from ingestion.
@@ -36,8 +37,9 @@ export async function boundedJson(response, limit = 12_000_000) { // Bound netwo
   try { return JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { throw new AppError(502, 'The upstream service returned invalid JSON.'); } // Reject malformed provider data.
 } // End bounded JSON parsing.
 export class GitHubReader { // Keep credentials and network controls local to one analysis.
-  constructor({ token = '', signal, fetchImpl = fetch } = {}) { this.token = token; this.signal = signal; this.fetchImpl = fetchImpl; } // Support injectable transport for contract tests.
+  constructor({ token = '', signal, fetchImpl = fetch, maxRequests = Infinity } = {}) { this.token = token; this.signal = signal; this.fetchImpl = fetchImpl; this.maxRequests = maxRequests; this.requests = 0; } // Support injectable transport for contract tests.
   async get(route) { // Read a fixed-host GitHub REST resource.
+    if (++this.requests > this.maxRequests) throw new AppError(429, 'The hosted GitHub request budget was reached. Narrow the folder scope and analyze again.'); // Preserve a partial report before exceeding hosting request limits.
     const headers = { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': `GitArchitectureDiagram/${VERSION}` }; // Identify the API contract and application.
     if (this.token) headers.Authorization = `Bearer ${this.token}`; // Send the optional token only to GitHub.
     const signal = this.signal ? AbortSignal.any([this.signal, AbortSignal.timeout(25000)]) : AbortSignal.timeout(25000); // Apply both whole-run and individual request deadlines.
@@ -47,6 +49,7 @@ export class GitHubReader { // Keep credentials and network controls local to on
       if (response.status === 403 || response.status === 429) throw new AppError(429, 'GitHub denied this request or its rate limit was reached. Add a read token or retry later.'); // Surface rate limits and access restrictions.
       if (response.status === 401) throw new AppError(401, 'GitHub rejected the read token.'); // Handle expired or invalid credentials.
       if (response.status === 409) throw new AppError(409, 'This repository has no commit to analyze yet.'); // Handle newly created empty repositories.
+      if (response.status === 422 && route.includes('/commits/')) throw new AppError(422, 'GitHub could not resolve this repository reference.'); // Distinguish an invalid ref candidate from a failed repository request.
       throw new AppError(502, `GitHub returned HTTP ${response.status}.`); // Return a bounded general upstream error.
     } // End GitHub error handling.
     return boundedJson(response); // Parse the bounded successful response.
@@ -58,7 +61,7 @@ export class GitHubReader { // Keep credentials and network controls local to on
     let revision = String(ref).trim() || metadata.default_branch; let selectedScope = normalizeScope(scope); let commit; // Initialize explicit or default scope selection.
     if (!ref && target.tail.length) { // Resolve branch names containing slashes using the longest valid prefix.
       for (let count = Math.min(target.tail.length, 12); count >= 1; count--) { // Bound reference-disambiguation requests.
-        try { revision = target.tail.slice(0, count).join('/'); commit = await this.get(`${route}/commits/${encodeURIComponent(revision)}`); selectedScope ||= normalizeScope(target.tail.slice(count).join('/')); break; } catch (error) { if (error.status !== 404) throw error; } // Preserve all non-reference failures.
+        try { revision = target.tail.slice(0, count).join('/'); commit = await this.get(`${route}/commits/${encodeURIComponent(revision)}`); selectedScope ||= normalizeScope(target.tail.slice(count).join('/')); break; } catch (error) { if (![404, 422].includes(error.status)) throw error; } // GitHub can return either 404 or 422 for a branch-plus-folder candidate; preserve other failures.
       } // End longest-prefix resolution.
       if (!commit) throw new AppError(404, 'Cannot resolve this tree URL. Enter an explicit branch and folder.'); // Explain unsupported or missing references.
     } else { // Resolve a plain repository or an explicitly chosen branch.

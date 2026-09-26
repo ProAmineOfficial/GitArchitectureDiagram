@@ -1,6 +1,6 @@
 {
   "name": "git-architecture-diagram",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Mermaid architecture, repository trees, and source-grounded Genius guides for GitHub repositories.",
   "type": "module",
   "private": true,
@@ -14,12 +14,16 @@
     "dev": "node --env-file-if-exists=.env --watch server.mjs",
     "test": "node --test tests/*.test.mjs",
     "check": "node scripts/check.mjs",
-    "analyze": "node --env-file-if-exists=.env cli.mjs"
+    "analyze": "node --env-file-if-exists=.env cli.mjs",
+    "build": "node scripts/build.mjs"
   },
   "dependencies": {
     "dompurify": "^3.4.16",
     "fflate": "^0.8.3",
     "marked": "^17.0.6",
     "mermaid": "^11.17.2"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
   }
 }
