@@ -1,0 +1,10 @@
+node_modules/
+.env
+.env.*
+!.env.example
+.genius/
+coverage/
+test-results/
+playwright-report/
+*.log
+.DS_Store

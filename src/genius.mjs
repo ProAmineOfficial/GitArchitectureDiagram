@@ -1,0 +1,111 @@
+// Project: Git Architecture Diagram | Component: Genius | Author: Amine Saoud ibn al-Bashir.
+// Description: Generate reproducible architecture, evidence, documentation checks, and engineering guides.
+import path from 'node:path'; // Resolve repository-relative imports using POSIX paths.
+import { VERSION, encodePath } from './github.mjs'; // Reuse version and immutable-link encoding rules.
+const CODE = /\.(m?[jc]?[jt]sx?|py|c|cc|cpp|h|hpp|rs|go|java|kt|cs|rb|php|swift|vue|svelte)$/i; // Identify files eligible for lexical dependency extraction.
+const EXTENSIONS = ['', '.js', '.mjs', '.cjs', '.ts', '.tsx', '.jsx', '.py', '.h', '.hpp', '.cpp', '/index.js', '/index.ts', '/__init__.py']; // Resolve common local module forms.
+export const sourceUrl = (snapshot, file, line) => `${snapshot.htmlUrl}/blob/${snapshot.sha}/${encodePath(file)}${line ? `#L${line}` : ''}`; // Pin every evidence link to the analyzed commit.
+export function mermaidLabel(value) { return String(value).replace(/[\x00-\x1f]/g, ' ').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/[\[\]{}()|`]/g, ' ').slice(0, 90); } // Escape untrusted labels before producing Mermaid.
+export function stripComments(text, python = false) { // Remove comments while retaining strings and original line numbers.
+  let result = ''; let quote = ''; let block = false; let line = false; // Track a small lexical scanner's state.
+  for (let index = 0; index < text.length; index++) { // Visit each source character exactly once.
+    const char = text[index]; const next = text[index + 1]; // Read the current and next characters.
+    if (char === '\n') { line = false; result += '\n'; continue; } // Preserve evidence line numbers.
+    if (line) { result += ' '; continue; } // Blank line comments without shifting columns.
+    if (block) { if (char === '*' && next === '/') { block = false; result += '  '; index++; } else result += ' '; continue; } // Blank block comments.
+    if (quote) { result += char; if (char === '\\') { result += next || ''; index++; } else if (char === quote) quote = ''; continue; } // Preserve quoted module specifiers.
+    if (char === '"' || char === "'" || (!python && char === '`')) { quote = char; result += char; continue; } // Track ordinary source strings.
+    if ((!python && char === '/' && next === '/') || (python && char === '#')) { line = true; result += ' '; continue; } // Start a language-appropriate line comment.
+    if (!python && char === '/' && next === '*') { block = true; result += '  '; index++; continue; } // Start a C-family block comment.
+    result += char; // Preserve code characters.
+  } // End the lexical pass.
+  return result; // Return text with stable line positions.
+} // End comment stripping.
+function codeMask(text) { let quote = ''; let output = ''; for (let index = 0; index < text.length; index++) { const char = text[index]; if (quote) { output += char === '\n' ? '\n' : ' '; if (char === '\\') { output += text[index + 1] === '\n' ? '\n' : ' '; index++; } else if (char === quote) quote = ''; } else if (['"', "'", '`'].includes(char)) { quote = char; output += ' '; } else output += char; } return output; } // Mask string bodies so import-like examples inside strings do not create false edges.
+export function extractDependencies(files, entries) { // Extract import/include references without claiming a complete runtime call graph.
+  const paths = new Set(entries.filter(entry => entry.type === 'blob').map(entry => entry.path)); const edges = []; const external = []; const seen = new Set(); // Track actual repository targets and deduplicated evidence.
+  const resolve = (file, specifier, kind) => { // Resolve only defensible local path candidates.
+    const directory = path.posix.dirname(file); let bases = []; // Start from the importing file's directory.
+    if (kind === 'python') { const dots = specifier.match(/^\.+/)?.[0].length || 0; const module = specifier.slice(dots).replaceAll('.', '/'); bases = dots ? [path.posix.join(directory, '../'.repeat(Math.max(0, dots - 1)), module)] : [module, `src/${module}`]; } // Handle root and relative Python module paths.
+    else if (specifier.startsWith('.')) bases = [path.posix.normalize(path.posix.join(directory, specifier))]; // Resolve JavaScript-style relative imports.
+    else if (kind === 'include') { bases = [path.posix.join(directory, specifier)]; let ancestor = directory; while (true) { bases.push(path.posix.join(ancestor, 'include', specifier), path.posix.join(ancestor, 'src', specifier)); if (ancestor === '.' || paths.has(path.posix.join(ancestor, 'platformio.ini')) || paths.has(path.posix.join(ancestor, 'CMakeLists.txt'))) break; ancestor = path.posix.dirname(ancestor); } } // Resolve conventional local include roots without jumping into an unrelated monorepo project.
+    for (const base of bases) for (const extension of EXTENSIONS) if (paths.has(base + extension)) return base + extension; // Require an actual repository path.
+    return null; // Leave external or ambiguous imports unresolved.
+  }; // End path resolution.
+  for (const file of files.filter(item => CODE.test(item.path))) { // Analyze supported text samples only.
+    const python = file.path.endsWith('.py'); const stripped = stripComments(file.content, python); const lines = stripped.split('\n'); const masks = codeMask(stripped).split('\n'); // Preserve locations while distinguishing code tokens from string contents.
+    lines.forEach((line, index) => { // Inspect source statements with explicit syntax patterns.
+      const refs = []; let match; // Accumulate module references found on this line.
+      if (python) { if (/^\s*from\b/.test(masks[index]) && (match = line.match(/^\s*from\s+([.\w]+)\s+import\s+(\w+)/))) refs.push([match[1].endsWith('.') ? match[1] + match[2] : match[1], 'python']); else if (/^\s*import\b/.test(masks[index]) && (match = line.match(/^\s*import\s+([\w.]+)/))) refs.push([match[1], 'python']); } // Recognize common Python imports outside string bodies.
+      else { if (/^\s*#\s*include\b/.test(masks[index]) && (match = line.match(/^\s*#\s*include\s*["<]([^">]+)[">]/))) refs.push([match[1], 'include']); if (/^\s*(?:import|export)\b/.test(masks[index]) && (match = line.match(/^\s*(?:import|export)\s+(?:.*?\s+from\s+)?["']([^"']+)["']/))) refs.push([match[1], 'import']); for (const item of line.matchAll(/\b(?:require|import)\s*\(\s*["']([^"']+)["']\s*\)/g)) if (/^(?:require|import)\b/.test(masks[index].slice(item.index))) refs.push([item[1], 'import']); } // Accept literal references only when the import token is actual code.
+      for (const [specifier, kind] of refs) { // Convert each reference into located evidence.
+        const target = resolve(file.path, specifier, kind); const key = `${file.path}|${target || specifier}|${index}`; if (seen.has(key)) continue; seen.add(key); // Avoid duplicate evidence for the same statement.
+        const evidence = { from: file.path, to: target, specifier, kind, line: index + 1, excerpt: file.content.split('\n')[index].trim().slice(0, 300), basis: 'source' }; // Preserve a source snippet without inventing behavior.
+        if (target && target !== file.path) edges.push(evidence); else if (!target) external.push(evidence); // Keep unresolved references separate from proven path matches.
+      } // End reference classification.
+    }); // End source-line inspection.
+  } // End sampled dependency extraction.
+  return { edges, external }; // Return local edges and explicitly unresolved references.
+} // End dependency extraction.
+export function buildDiagrams(snapshot, files, edges, maxNodes = 18) { // Keep the first file-level preview readable; full evidence remains in the guide and JSON.
+  const relevant = new Set(edges.flatMap(edge => [edge.from, edge.to])); // Favor nodes that participate in actual dependencies.
+  const chosen = [...new Set([...relevant, ...files.filter(file => CODE.test(file.path)).map(file => file.path), ...files.map(file => file.path)])].slice(0, maxNodes); // Bound graph complexity while retaining source diversity.
+  const ids = Object.fromEntries(chosen.map((file, index) => [file, `n${index}`])); const nodePaths = Object.fromEntries(chosen.map(file => [ids[file], file])); // Keep a safe node-to-file mapping for client interaction.
+  const groups = new Map(); // Group files by their actual parent directories.
+  chosen.forEach(file => { const folder = path.posix.dirname(file); if (!groups.has(folder)) groups.set(folder, []); groups.get(folder).push(file); }); // Avoid inventing subsystem boundaries.
+  const neighbors = new Map([...groups.keys()].map(folder => [folder, new Set()])); // Track connected directory components to arrange independent examples clearly.
+  edges.filter(edge => ids[edge.from] && ids[edge.to]).forEach(edge => { const from = path.posix.dirname(edge.from); const to = path.posix.dirname(edge.to); neighbors.get(from).add(to); neighbors.get(to).add(from); }); // Use only observed references to group connected directories.
+  const components = []; const visited = new Set(); // Separate disconnected source components without inventing relationships.
+  for (const folder of groups.keys()) { if (visited.has(folder)) continue; const queue = [folder]; const component = []; while (queue.length) { const next = queue.shift(); if (visited.has(next)) continue; visited.add(next); component.push(next); queue.push(...neighbors.get(next)); } components.push(component); } // Find the actual connected components of the displayed graph.
+  const architecture = ['flowchart TD', '%% Invisible links only arrange disconnected components; they are not code relationships.']; let groupIndex = 0; // Start a documented, compact file-level graph.
+  components.forEach((component, index) => { architecture.push(`subgraph c${index}[" "]`); for (const folder of component) { architecture.push(`subgraph g${groupIndex++}["${mermaidLabel(folder === '.' ? snapshot.repo : folder.split('/').length > 3 ? '…/' + folder.split('/').slice(-3).join('/') : folder)}"]`); groups.get(folder).forEach(file => architecture.push(`${ids[file]}["${mermaidLabel(path.posix.basename(file))}"]:::${CODE.test(file) ? 'code' : 'document'}`)); architecture.push('end'); } architecture.push('end', `style c${index} fill:transparent,stroke:transparent`); }); // Preserve real folder boundaries within each connected source component.
+  components.forEach((_, index) => { if (index >= 3) architecture.push(`c${index - 3} ~~~ c${index}`); }); // Arrange independent components in at most three columns using invisible layout constraints.
+  edges.filter(edge => ids[edge.from] && ids[edge.to]).forEach(edge => architecture.push(`${ids[edge.from]} -->|${edge.kind === 'include' ? 'includes' : 'imports'}| ${ids[edge.to]}`)); // Draw only located source dependencies.
+  if (!chosen.length) architecture.push('empty["No readable source in this scope"]'); // Render an honest empty analysis state.
+  architecture.push('classDef code fill:#142c3d,stroke:#56c8e8,color:#edfaff', 'classDef document fill:#292840,stroke:#b0a3ff,color:#f5f1ff'); // Apply restrained semantic colors inspired by NanoKit documentation.
+  const mindmap = ['mindmap', `  root(("${mermaidLabel(snapshot.repo)}"))`]; // Start a hierarchical repository mind map.
+  const top = snapshot.scope ? snapshot.scope.split('/').length : 0; const branches = new Map(); // Respect the selected folder depth.
+  snapshot.entries.filter(entry => entry.type === 'blob').forEach(entry => { const relative = entry.path.split('/').slice(top).join('/') || path.posix.basename(entry.path); const section = relative.includes('/') ? relative.split('/')[0] : 'Root files'; if (!branches.has(section)) branches.set(section, []); branches.get(section).push(relative); }); // Group the observed file inventory.
+  let branchId = 0; // Generate safe identifiers independent of filenames.
+  for (const [section, members] of [...branches].slice(0, 14)) { // Keep the mind map readable for large repositories.
+    mindmap.push(`    b${branchId}["${mermaidLabel(section)} · ${members.length} files"]`); // Report actual observed file counts.
+    members.slice(0, 5).forEach((file, index) => mindmap.push(`      b${branchId}f${index}["${mermaidLabel(file)}"]`)); // Expose representative files from each branch.
+    if (members.length > 5) mindmap.push(`      b${branchId}more["${members.length - 5} more in the tree"]`); // Disclose mind-map sampling.
+    branchId++; // Advance the safe branch identifier.
+  } // End hierarchical map generation.
+  if (branches.size > 14) mindmap.push(`    other["${branches.size - 14} more folders in the tree"]`); // Disclose omitted map branches.
+  return { architecture: architecture.join('\n'), mindmap: mindmap.join('\n'), nodePaths, displayedFiles: chosen.length, omittedNodes: Math.max(0, new Set([...relevant, ...files.map(file => file.path)]).size - chosen.length) }; // Preserve graph scope metadata.
+} // End diagram compilation.
+export function treeText(snapshot) { // Export a deterministic, indentation-based repository tree.
+  const title = `${snapshot.fullName}${snapshot.scope ? ` / ${snapshot.scope}` : ''}`; // Name the analyzed scope.
+  return [title, ...snapshot.entries.map(entry => `${'  '.repeat(entry.path.split('/').length)}${path.posix.basename(entry.path)}${entry.type === 'tree' ? '/' : entry.type === 'commit' ? ' [submodule]' : ''}`), ...(snapshot.treeTruncated ? ['[The GitHub tree is partial.]'] : [])].join('\n'); // Keep every retained entry visible in the export.
+} // End repository-tree export.
+export function analyzeSnapshot(snapshot, files, coverage) { // Build the real Genius structural analysis from the collected evidence.
+  const { edges, external } = extractDependencies(files, snapshot.entries); const diagrams = buildDiagrams(snapshot, files, edges); // Extract located dependencies and compile their diagrams.
+  const entrypoints = files.filter(file => /(^|\/)(main|app|server|index|cli)\.(cpp|c|py|[cm]?js|ts|tsx)$/i.test(file.path)).map(file => ({ path: file.path, basis: 'filename', note: 'Entrypoint candidate by filename; runtime behavior is not executed.' })); // Label filename-based entrypoint hints honestly.
+  const documented = []; // Collect Mermaid blocks written by repository authors.
+  for (const file of files.filter(item => /\.(md|mdx)$/i.test(item.path))) for (const match of file.content.matchAll(/```mermaid\s*\n([\s\S]*?)```/g)) { if (documented.length >= 25) break; documented.push({ path: file.path, line: file.content.slice(0, match.index).split('\n').length, source: match[1].slice(0, 24000), basis: 'documentation' }); } // Preserve existing workflow and hardware diagrams as attributed documentation.
+  const names = snapshot.entries.filter(entry => entry.type === 'blob').map(entry => entry.path); // Build the factual file inventory.
+  const checks = [{ name: 'README', found: names.some(name => /(^|\/)readme\.md$/i.test(name)) }, { name: 'Documentation', found: names.some(name => /(^|\/)docs?\//i.test(name)) }, { name: 'Tests', found: names.some(name => /(^|\/)(tests?|__tests__)\/|\.(test|spec)\./i.test(name)) }, { name: 'Build manifest', found: names.some(name => /(package\.json|platformio\.ini|pyproject\.toml|Cargo\.toml|go\.mod|CMakeLists\.txt)$/i.test(name)) }, { name: 'License', found: names.some(name => /(^|\/)LICENSE(?:\.[\w]+)?$/i.test(name)) }]; // Check presence without pretending to validate content quality.
+  const extensions = {}; names.forEach(name => { const ext = path.posix.extname(name).slice(1) || 'other'; extensions[ext] = (extensions[ext] || 0) + 1; }); // Count file types in the listed scope.
+  const technologies = [...new Set(names.flatMap(name => [/platformio\.ini$/i.test(name) ? 'PlatformIO / embedded' : '', /package\.json$/i.test(name) ? 'Node.js ecosystem' : '', /pyproject\.toml$|requirements.*\.txt$/i.test(name) ? 'Python' : '', /Cargo\.toml$/i.test(name) ? 'Rust' : '', /go\.mod$/i.test(name) ? 'Go' : '', /Dockerfile$/i.test(name) ? 'Docker' : '']).filter(Boolean))]; // Derive stack hints from observed manifests.
+  const result = { generator: { name: 'Genius', version: VERSION }, generatedAt: new Date().toISOString(), repository: snapshot, coverage, files, dependencies: edges, unresolved: external, entrypoints, checks, technologies, extensions, documented, diagrams, ai: null, warnings: [] }; // Assemble a reproducible analysis result.
+  result.summary = `${snapshot.fullName} contains ${coverage.listedFiles} listed files in this scope. Genius read ${coverage.readFiles} of ${coverage.eligibleFiles} eligible text files, located ${edges.length} local import/include references, and found ${documented.length} documented Mermaid diagrams.`; // Summarize only measured evidence.
+  if (coverage.treeTruncated) result.warnings.push('GitHub returned a partial tree, or the 12,000-entry display limit was reached. Counts describe the retained listing.'); // Disclose partial inventories.
+  if (coverage.unsampledFiles) result.warnings.push(`${coverage.unsampledFiles} eligible files were not read. Increase the file budget or narrow the folder scope.`); // Disclose omitted source evidence.
+  result.warnings.push('Dependency extraction is lexical and best-effort; it does not prove runtime calls, dynamic imports, or successful builds.'); // State the analyzer's actual capability boundary.
+  return result; // Return a complete report suitable for UI, CLI, and export.
+} // End Genius structural analysis.
+export function guideMarkdown(result) { // Generate a downloadable, provenance-bearing Genius guide.
+  const { repository: repo, coverage } = result; const link = (file, line) => sourceUrl(repo, file, line); // Reuse immutable source links throughout the report.
+  const text = [`# Genius Guide — ${repo.fullName}`, '', '**Developed by Amine Saoud ibn al-Bashir.**', '', `Generator: Genius ${VERSION}`, `Generated: ${result.generatedAt}`, `Commit: ${repo.sha}`, `Reference: ${repo.branch}`, `Scope: ${repo.scope || '/'}`, `Reproduce: npm run analyze -- ${repo.fullName} --ref ${repo.sha}${repo.scope ? ` --scope ${JSON.stringify(repo.scope)}` : ''} --max-files ${coverage.maxFiles}`, '', '## What was inspected', '', result.summary, '', ...result.warnings.map(item => `- ${item}`), '', '## Project purpose', '', repo.description || 'No repository description is provided.', '', '## Technology hints', '', result.technologies.join(', ') || 'No recognized build manifest in the listed scope.', '', '## Entrypoint candidates', '', ...result.entrypoints.map(item => `- [${item.path}](${link(item.path)}) — ${item.note}`), '', '## Architecture', '', '```mermaid', result.diagrams.architecture, '```', '', '## Repository mind map', '', '```mermaid', result.diagrams.mindmap, '```', '', '## Located dependency evidence', '', ...result.dependencies.map(edge => `- [${edge.from}:${edge.line}](${link(edge.from, edge.line)}) ${edge.kind === 'include' ? 'includes' : 'imports'} [${edge.to}](${link(edge.to)})`), '', '## Documentation presence', '', ...result.checks.map(check => `- ${check.found ? '[x]' : '[ ]'} ${check.name} — ${check.found ? 'present in the tree; content not certified' : 'not found in this scope'}`), '', '## Input files', '', ...result.files.map(file => `- [${file.path}](${link(file.path)}) — blob ${file.sha}`), '', '## Skipped reads', '', ...coverage.skipped.map(file => `- ${file.path}: ${file.reason}`), '', '## Validation status', '', 'Generated from actual GitHub metadata and verified blob bytes. Repository code was not executed or built. This report is not a security, correctness, or hardware certification.']; // Include reproducibility, evidence, and limitations.
+  if (result.ai) text.push('', '## Genius AI interpretation', '', `Model: ${result.ai.model}. AI-generated interpretation; review the cited source.`, '', result.ai.overview, '', ...result.ai.components.map(item => `- [${item.path}](${link(item.path)}) — ${item.description}`), '', ...result.ai.relationships.map(item => `- AI inference: [${item.evidencePath}:${item.evidenceLine}](${link(item.evidencePath, item.evidenceLine)}) — ${item.description}`), '', '### Suggested improvements', '', ...result.ai.recommendations.map(item => `- ${item}`), '', '### AI limitations', '', ...result.ai.limitations.map(item => `- ${item}`), '', `Discarded invalid references: ${result.ai.discardedReferences}. Excerpts supplied: ${result.ai.includedPaths.join(', ')}.`); // Keep model inference visibly separate from structural evidence.
+  return text.join('\n'); // Return portable Markdown documentation.
+} // End guide generation.
+export function searchEvidence(result, question) { // Provide source search even when no language model is configured.
+  const words = String(question).toLowerCase().match(/[\p{L}\p{N}_]{3,}/gu)?.slice(0, 12) || []; const matches = []; // Extract a bounded multilingual query.
+  for (const file of result.files) { // Search only content actually read for this analysis.
+    file.content.split('\n').forEach((line, index) => { const haystack = `${file.path} ${line}`.toLowerCase(); const score = words.filter(word => haystack.includes(word)).length; if (score) matches.push({ path: file.path, line: index + 1, text: line.trim().slice(0, 400), score, url: sourceUrl(result.repository, file.path, index + 1) }); }); // Retain source-linked evidence hits.
+  } // End evidence search.
+  return matches.sort((a, b) => b.score - a.score).slice(0, 8); // Return a compact ranked set without fabricating an answer.
+} // End source evidence search.
