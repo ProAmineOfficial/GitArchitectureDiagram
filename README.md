@@ -43,7 +43,7 @@ Try `ProAmineOfficial/NanoKit-ESP32`. For a detailed hardware example, set **Fol
 | Mind map | A hierarchy derived from the observed tree, with explicit preview limits |
 | Project diagrams | Existing Mermaid blocks from sampled Markdown, with their source path and line; useful for documented workflows and wiring |
 | Genius source mode | Coverage, stack hints, entrypoint candidates, documentation presence, dependency evidence, and a reproducible guide |
-| Genius AI | Optional OpenAI interpretation of disclosed source excerpts, with validated path/line references and separately labeled inference |
+| Genius AI | Optional OpenAI, Claude, Gemini, or Kimi interpretation of disclosed source excerpts, with validated path/line references and separately labeled inference |
 | Source inspector | Verified file bytes, line numbers, and links pinned to the analyzed commit |
 | Evidence search | Keyword matches in the files actually read; works without a model |
 | Diagram controls | Pan, zoom, fit, fullscreen, editable Mermaid preview, dark/light themes, responsive layout |
@@ -69,12 +69,13 @@ The same works for GitHub `tree` and `blob` paths. Replace the **entire host**, 
 
 The default analysis uses GitHub metadata and source text. It does **not** require a model. It can identify structure, imports/includes, manifests, author-written diagrams, and documentation presence. It does not claim to understand every runtime behavior from filenames.
 
-For deeper explanation, open **Settings**, supply an OpenAI API key and an explicit model ID supporting the Responses API's structured output, then enable **Add Genius AI interpretation** under Options. Only this opt-in path calls the model. Provider charges may apply. A failed AI request leaves the structural report available.
+For deeper explanation, open **Settings**, choose OpenAI, Claude, Gemini, or Kimi and supply that provider's API key and a supported model ID, then enable **Add Genius AI interpretation** under Options. The preset list was checked on September 27, 2026; a custom model ID can be entered as providers release new models. Only this opt-in path calls the model. Provider charges may apply. A failed AI request leaves the structural report available.
 
 For a protected hosted instance, copy `.env.example` to `.env` and configure:
 
 ```dotenv
 OPENAI_API_KEY=your-key
+GENIUS_PROVIDER=openai
 GENIUS_MODEL=your-explicit-model-id
 GENIUS_ACCESS_TOKEN=your-instance-access-password
 ```
@@ -90,7 +91,7 @@ npm run analyze -- ProAmineOfficial/NanoKit-ESP32 \
   --output .genius
 ```
 
-Add `--ref COMMIT_SHA` to reproduce an exact snapshot. Add `--ai` only when you want model interpretation and have configured `OPENAI_API_KEY` and `GENIUS_MODEL`. `GITHUB_TOKEN` may be used for repositories your local CLI is authorized to read.
+Add `--ref COMMIT_SHA` to reproduce an exact snapshot. Add `--ai` only when you want model interpretation and have configured `GENIUS_PROVIDER`, its provider key, and `GENIUS_MODEL`. `GITHUB_TOKEN` may be used for repositories your local CLI is authorized to read.
 
 Generated guides identify the generator version, timestamp, commit, input blobs, coverage, skipped reads, and validation limits. Exporting does not write back to the analyzed repository.
 
@@ -114,7 +115,7 @@ npm test
 npm run build
 ```
 
-Tests cover immutable GitHub ingestion, branch resolution, private-token isolation, source evidence, partial coverage, cache behavior, the mocked OpenAI contract, HTTP routing, origin checks, and static path containment. No real model credentials are needed to run them.
+Tests cover immutable GitHub ingestion, branch resolution, private-token isolation, source evidence, partial coverage, cache behavior, the four mocked provider contracts, HTTP routing, origin checks, and static path containment. No real model credentials are needed to run them.
 
 ## Diagram colors
 
@@ -138,3 +139,13 @@ Repository-authored Mermaid retains its original class colors. Mind-map branches
 [GitDiagram](https://github.com/ahmedkhaleel2004/gitdiagram) demonstrates how useful a repository diagram can be. [NanoKit-ESP32](https://github.com/ProAmineOfficial/NanoKit-ESP32) demonstrates the value of organized Mermaid documentation, repository structure, and reproducible guides. This independent implementation brings those workflows together around source evidence and portable documentation. It does not claim affiliation with GitDiagram or copy its code.
 
 Built with Node.js, Mermaid, DOMPurify, marked, and fflate. Their licenses remain their respective authors' licenses.
+
+## Workspace navigation and examples
+
+- Replace `github.com` with the active hostname **`git-architecture-diagram.pro-amine.chatgpt.site`**, preserving `/owner/repository` and any `/tree/ref/path` or `/blob/ref/path` suffix. `gitarchitecturediagram.com` is not an active domain for this project.
+- [Examples](https://git-architecture-diagram.pro-amine.chatgpt.site/examples) contains real, checked public analysis snapshots. Their counts describe the files read; they are not claims that repository tests passed.
+- Generated architecture and mind-map nodes open the pinned GitHub file or folder by default. Choose **Inspect in workspace** to reveal the file in the classic tree and view located dependency lines. Keyboard users can focus a linked node and press Enter or Space.
+- **Project diagrams** preserves the author's Mermaid styles and provides a link to the original Markdown block. Authored diagrams and edited source never acquire guessed file mappings.
+- With Genius AI enabled, **Architecture → Genius interpretation** shows a separately labeled model interpretation. Source references, model interpretations, and authored diagrams remain separate. The `.genius` export includes the optional interpreted Mermaid source.
+
+See [AI providers](docs/AI_PROVIDERS.md) for native APIs, current presets, data handling, and validation limitations.

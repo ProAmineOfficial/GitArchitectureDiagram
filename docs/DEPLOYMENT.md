@@ -25,7 +25,7 @@ When a Worker serves both the generated address and a custom domain, set `PUBLIC
 
 ## Node hosting
 
-Use a host that supports Node 22.12+, outbound HTTPS to `api.github.com`, and streamed responses. Optional AI also needs outbound HTTPS to `api.openai.com`.
+Use a host that supports Node 22.12+, outbound HTTPS to `api.github.com`, and streamed responses. Optional AI needs outbound HTTPS to the selected provider: `api.openai.com`, `api.anthropic.com`, `generativelanguage.googleapis.com`, or `api.moonshot.ai`.
 
 ```bash
 npm ci --omit=dev
@@ -50,13 +50,14 @@ Remove `HOST=127.0.0.1` from a copied `.env` or change it to `HOST=0.0.0.0` when
 | Variable | Purpose |
 | --- | --- |
 | `GITHUB_TOKEN` | Optional server token for public-repository API allowance. It is not a way to expose private repositories to anonymous users. |
-| `OPENAI_API_KEY` | Optional server-side key for explicitly requested AI interpretation. |
+| `GENIUS_PROVIDER` | `openai` (default), `anthropic`, `gemini`, or `kimi`. |
+| `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `MOONSHOT_API_KEY` | Optional server key for the configured provider. A different selected provider cannot reuse it. |
 | `GENIUS_MODEL` | Explicit provider model ID; no default model or price is assumed. |
 | `GENIUS_ACCESS_TOKEN` | Shared instance password. When set, every analysis/search request needs it. Required before web requests can use the server-side AI key. |
 | `PUBLIC_ORIGIN` | Canonical externally visible origin used for browser request validation. |
 | `HOST`, `PORT` | Listening interface and port; local defaults are `127.0.0.1:3000`. |
 
-Users can instead provide their own GitHub/OpenAI keys in Settings. Keys pass through your server, so offer this only from a deployment whose operator they trust. Private repositories always require a request-specific GitHub token. Never publish an unrestricted proxy to a paid model key.
+Users can instead provide their own GitHub/provider keys in Settings. Keys pass through your server, so offer this only from a deployment whose operator they trust. Private repositories always require a request-specific GitHub token. Never publish an unrestricted proxy to a paid model key.
 
 ## Domain replacement
 

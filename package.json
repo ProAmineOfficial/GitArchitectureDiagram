@@ -1,6 +1,6 @@
 {
   "name": "git-architecture-diagram",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "Mermaid architecture, repository trees, and source-grounded Genius guides for GitHub repositories.",
   "type": "module",
   "private": true,

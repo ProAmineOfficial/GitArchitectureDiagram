@@ -1,8 +1,9 @@
 // Project: Git Architecture Diagram | Component: Analysis service | Author: Amine Saoud ibn al-Bashir.
 import { randomUUID } from 'node:crypto'; // Create unguessable ephemeral analysis-session identifiers.
 import { AppError, GitHubReader, parseRepository, ingest } from './github.mjs'; // Use the verified GitHub ingestion layer.
-import { analyzeSnapshot, guideMarkdown, treeText } from './genius.mjs'; // Produce real structural reports and exports.
+import { analyzeSnapshot, buildDiagrams, guideMarkdown, treeText } from './genius.mjs'; // Produce real structural reports and exports.
 import { explainWithAI } from './ai.mjs'; // Add model interpretation only when explicitly requested.
+import { PROVIDERS } from './providers.mjs'; // Keep provider credentials isolated by their configured identity.
 const publicCache = new Map(); const sessions = new Map(); // Keep bounded, process-local caches without any persisted credentials.
 const TTL = 10 * 60 * 1000; // Expire retained analysis contents after ten minutes.
 function prune(map, limit = 12) { for (const [key, item] of map) if (item.expires < Date.now()) map.delete(key); while (map.size >= limit) map.delete(map.keys().next().value); } // Bound both lifetime and retained report count.
@@ -21,10 +22,11 @@ export async function runAnalysis(input, { signal, progress = () => {}, env = pr
   if (cached && cached.expires >= Date.now()) { result = structuredClone(cached.result); result.repository = snapshot; progress({ stage: 'Opening saved analysis', detail: snapshot.sha.slice(0, 10) }); } // Reuse the same commit's evidence while preserving the newly requested reference.
   else { const { files, coverage } = await ingest(snapshot, reader, maxFiles, progress); progress({ stage: 'Genius is mapping the project', detail: `${files.length} files read` }); result = analyzeSnapshot(snapshot, files, coverage); if (cachePublic && !snapshot.private) publicCache.set(key, { result: structuredClone(result), expires: Date.now() + TTL }); } // Build and optionally cache a factual structural report.
   if (input.ai === true) { // Spend model resources only after an explicit AI request.
-    const apiKey = input.apiKey || (allowEnvAI ? env.OPENAI_API_KEY : ''); const model = input.model || env.GENIUS_MODEL; // Restrict server-key usage to authenticated or local contexts.
+    const provider = input.provider || env.GENIUS_PROVIDER || 'openai'; if (!Object.hasOwn(PROVIDERS, provider)) throw new AppError(400, 'Unknown AI provider.'); const sameProvider = provider === (env.GENIUS_PROVIDER || 'openai'); const apiKey = input.apiKey || (allowEnvAI && sameProvider ? env[PROVIDERS[provider].keyEnv] : ''); const model = input.model || (sameProvider ? env.GENIUS_MODEL : ''); // Restrict server-key usage to authenticated or local contexts.
     if (!apiKey || !model) result.warnings.push('AI interpretation was requested but no authorized key/model was configured. This is a structural Genius report.'); // Make missing configuration visible.
-    else { progress({ stage: 'Genius AI is explaining the source', detail: 'Only the disclosed source excerpts are sent to OpenAI.' }); try { result.ai = await explainWithAI(result, { apiKey, model, signal, fetchImpl }); } catch (error) { result.warnings.push(error.message); } } // Preserve the structural report if optional model work fails.
+    else { progress({ stage: 'Genius AI is explaining the source', detail: `Selected source excerpts are sent to ${PROVIDERS[provider].name}.` }); try { result.ai = await explainWithAI(result, { apiKey, model, provider, signal, fetchImpl }); } catch (error) { result.warnings.push(error.message); } } // Preserve the structural report if optional model work fails.
   } // End optional AI interpretation.
+  if (result.ai) result.ai.diagrams = buildDiagrams(result.repository, result.ai.components.map(item => ({ path: item.path })), result.ai.relationships.map(item => ({ from: item.from, to: item.to, kind: 'ai' }))); // Compile a separately labeled interpretation using validated repository paths.
   result.id = randomUUID(); result.cacheHit = Boolean(cached); result.guide = guideMarkdown(result); result.tree = treeText(result.repository); // Finalize portable report outputs.
   if (retainSession) sessions.set(result.id, { result, expires: Date.now() + TTL }); // Hold current source evidence in memory for ten minutes; never retain tokens.
   progress({ stage: 'Ready', detail: `${result.coverage.readFiles} source files · ${result.dependencies.length} located relationships` }); // Announce completion with actual counts.

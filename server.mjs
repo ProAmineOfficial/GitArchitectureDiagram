@@ -10,6 +10,7 @@ import { runAnalysis, getSession } from './src/service.mjs'; // Expose the same 
 import { searchEvidence } from './src/genius.mjs'; // Provide source-backed questions without an AI dependency.
 const ROOT = path.dirname(fileURLToPath(import.meta.url)); const rates = new Map(); let active = 0; // Scope assets and bound process-level resource usage.
 const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.json': 'application/json', '.woff2': 'font/woff2' }; // Define static content types explicitly.
+import { PROVIDERS } from './src/providers.mjs'; // Describe the same authorized provider catalog as the analysis service.
 const CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"; // Keep repository content from loading arbitrary scripts or remote assets.
 function json(response, status, data) { response.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); response.end(JSON.stringify(data)); } // Return compact uncached API responses.
 async function body(request) { let text = ''; for await (const chunk of request) { text += chunk; if (Buffer.byteLength(text) > 20000) throw new AppError(413, 'The request is too large.'); } try { return JSON.parse(text); } catch { throw new AppError(400, 'Expected a JSON request.'); } } // Bound and parse incoming JSON.
@@ -26,7 +27,7 @@ async function staticAsset(url, response, method) { // Serve only public files a
   const vendor = Object.keys(vendors).find(prefix => url.pathname.startsWith(prefix)); // Detect an approved browser-module URL.
   if (url.pathname === '/shared/evidence.mjs') { base = path.join(ROOT, 'src'); relative = 'evidence.mjs'; } // Serve the single portable browser search module from an explicit allowlist.
   else if (vendor) { base = path.join(ROOT, 'node_modules', vendors[vendor]); relative = url.pathname.slice(vendor.length); } // Resolve dependency assets under their distribution directory.
-  else if (relative === '' || /^[\w.-]+\/[\w.-]+(?:\/(?:tree|blob)\/.*)?\/?$/.test(relative)) relative = 'index.html'; // Serve repository names and scoped file URLs even when they contain dots.
+  else if (relative === '' || /^examples\/?$/.test(relative) || /^[\w.-]+\/[\w.-]+(?:\/(?:tree|blob)\/.*)?\/?$/.test(relative)) relative = 'index.html'; // Serve repository names and scoped file URLs even when they contain dots.
   try { relative = decodeURIComponent(relative); } catch { throw new AppError(400, 'Invalid asset path.'); } // Decode once before containment checking.
   const file = path.resolve(base, relative); if (!file.startsWith(base + path.sep) || relative.includes('\\') || !MIME[path.extname(file)]) throw new AppError(404, 'Asset not found.'); // Prevent arbitrary filesystem reads and directory listing.
   let data; try { data = await readFile(file); } catch { throw new AppError(404, 'Asset not found.'); } // Return a predictable missing-file response.
@@ -37,7 +38,7 @@ export function createAppServer() { // Export the actual server for integration 
     response.setHeader('Content-Security-Policy', CSP); response.setHeader('X-Content-Type-Options', 'nosniff'); response.setHeader('Referrer-Policy', 'no-referrer'); response.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()'); // Apply browser protections before every response.
     try { // Convert all request failures into bounded user-facing errors.
       const url = new URL(request.url, 'http://localhost'); // Parse routing independently of an untrusted Host header.
-      if (url.pathname === '/api/health' && request.method === 'GET') return json(response, 200, { ok: true, version: VERSION, limits: { maxFiles: 120 }, aiAvailable: Boolean(process.env.OPENAI_API_KEY && process.env.GENIUS_MODEL && process.env.GENIUS_ACCESS_TOKEN), accessRequired: Boolean(process.env.GENIUS_ACCESS_TOKEN) }); // Expose capability state without secrets.
+      if (url.pathname === '/api/health' && request.method === 'GET') return json(response, 200, { ok: true, version: VERSION, limits: { maxFiles: 120 }, aiAvailable: Boolean(process.env[PROVIDERS[process.env.GENIUS_PROVIDER || 'openai']?.keyEnv] && process.env.GENIUS_MODEL && process.env.GENIUS_ACCESS_TOKEN), accessRequired: Boolean(process.env.GENIUS_ACCESS_TOKEN) }); // Expose capability state without secrets.
       if (url.pathname.startsWith('/api/')) { // Admit only the documented same-origin API operations.
         if (request.method !== 'POST') throw new AppError(405, 'Use POST for this API endpoint.'); guard(request); // Require bounded authenticated browser actions where configured.
         if (!String(request.headers['content-type'] || '').startsWith('application/json')) throw new AppError(415, 'Use application/json.'); const input = await body(request); // Reject cross-site form submissions and oversized bodies.

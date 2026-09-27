@@ -4,9 +4,11 @@
 
 The browser sends repository identifiers, options, and any supplied credentials to the instance you are using. The instance reads metadata and source from GitHub. Repository code is never installed or executed. Browser dependencies are served locally; there is no analytics or external font service in the application.
 
-OpenAI is contacted only when AI interpretation is explicitly enabled and an authorized key plus model is available. It receives repository identity, description, coverage, dependency evidence, and selected source excerpts. The request sets `store: false`; this does not override the provider's account policies or contractual data handling terms. File-name exclusions do not guarantee that source code contains no secrets. Review your repository and use AI only when authorized to share those excerpts.
+The selected provider (OpenAI, Anthropic, Google, or Moonshot) is contacted only when AI interpretation is explicitly enabled and an authorized key plus model is available. It receives repository identity, description, coverage, dependency evidence, and selected source excerpts. OpenAI requests set `store: false`; this does not override any provider's account policies or contractual data handling terms. File-name exclusions do not guarantee that source code contains no secrets. Review your repository and use AI only when authorized to share those excerpts.
 
 ## Credentials and private repositories
+
+Switching providers clears the previous provider key. Fixed official API endpoints prevent an input URL from redirecting credentials.
 
 Credentials are held in browser input fields and request memory, not browser storage or report exports. Only the color theme is saved in `localStorage`. The application does not log request bodies or keys. A hosting operator or reverse proxy must maintain equivalent controls.
 

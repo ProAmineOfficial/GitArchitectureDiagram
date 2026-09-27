@@ -66,3 +66,22 @@ npm start
 ```
 
 In the browser, analyze a small repository, inspect both a read and an unread file, switch all four views, edit/reset Mermaid, export every format, and repeat at mobile width. For a large repository, narrow the folder scope and confirm the coverage changes. Do not enable paid AI during routine validation unless you intend to use provider credits.
+
+## v0.3.0 — provider and workspace expansion
+
+The v0.2.2 fix was published to the existing website and verified through real hosted analysis requests. The Worker reported version `0.2.2` and successfully returned reports for:
+
+| Repository / scope | Commit | Files read | Authored Mermaid blocks | Located relationships |
+| --- | --- | ---: | ---: | ---: |
+| Driver-NanoKit-ESP32-of-T.U.M-Pro_Amine-IC | `4fddb896b515fc31896737c2fbe9b71478947969` | 3 | 0 | 0 |
+| NanoKit-ESP32 / docs | `17834db850daec9b450239069c4aa2e758bf0644` | 6 | 0 | 0 |
+| NanoKit-ESP32 / examples_on_platformio/ultrasonic_distance/docs | `17834db850daec9b450239069c4aa2e758bf0644` | 2 | 1 | 0 |
+| GitArchitectureDiagram | `7479a8dc36a179fd2b86c2ee09e48c6af4cfde1d` | 10 | 1 | 8 |
+
+The public examples catalog records these real snapshots and their coverage. A successful analyzer request is not a successful test or build of the analyzed project.
+
+The v0.3.0 regression suite covers four native provider contracts, invalid or truncated model output, provider credential isolation, scoped file/folder navigation, and the examples/blob routes. A separate DOM-backed interaction check exercised the actual application with a stubbed Mermaid SVG renderer: provider changes cleared the previous key, example search filtered cards, generated nodes supported keyboard navigation, the inspector exposed exact dependency lines, and edited/authored diagrams stayed unmapped even after a theme change.
+
+Mermaid syntax is also checked with the installed real parser against generated architecture, generated mind maps, and the preserved NanoKit authored flowchart. These checks do not substitute for a browser layout review. No fresh browser visual review or paid-provider generation is claimed.
+
+Final local release checks: **31 tests passed**, **19 shipped modules passed syntax checks**, the production Worker/browser build completed, all eight generated/authored Mermaid samples parsed, and both DOM interaction scenarios passed. Paid provider responses and browser layout remain outside this validation.
