@@ -1,6 +1,6 @@
 {
   "name": "git-architecture-diagram",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Mermaid architecture, repository trees, and source-grounded Genius guides for GitHub repositories.",
   "type": "module",
   "private": true,
@@ -24,6 +24,7 @@
     "mermaid": "^11.17.2"
   },
   "devDependencies": {
-    "esbuild": "0.28.2"
+    "esbuild": "0.28.2",
+    "miniflare": "4.20260730.0"
   }
 }

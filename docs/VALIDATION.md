@@ -4,6 +4,10 @@ Validation date: **2026-09-26**. These observations describe the tested revision
 
 ## Version 0.2.1: reported production failures
 
+Follow-up: version 0.2.1 passed the Node tests but still failed on the production Worker. An actual workerd probe identified an additional failure: `redirect: 'error'` is rejected by that runtime before a network request starts. Version **0.2.2** uses `redirect: 'manual'` and explicitly rejects redirected GitHub requests without forwarding credentials. The optional AI request uses the same supported mode. A permanent workerd integration test bundles the actual Worker, substitutes only the two external providers, and verifies GitHub ingestion, blob hashing, optional AI, the streamed browser protocol, and both generated diagram sources. No paid AI request is involved.
+
+Version 0.2.2 passes **27 tests**, including the native runtime test, plus the syntax checks and production build. The configured Mermaid parser also accepts the generated architecture, generated mind map, and authored flowchart fixtures in a DOM-backed syntax check; that is not a browser visual/layout check.
+
 The production API reproduced the reported `Cannot reach GitHub` error for `ProAmineOfficial/Driver-NanoKit-ESP32-of-T.U.M-Pro_Amine-IC`, while GitHub itself returned HTTP 200 for that repository. The reader was calling the native fetch function as an object method, which violates the Workers receiver contract. A native-style receiver regression reproduced the failure before the fix. The transport now invokes fetch without rebinding it to the reader.
 
 The browser response reader now checks content types before parsing. Regression tests cover HTML gateway pages, HTTP 200 HTML fallbacks, JSON access errors, malformed and interrupted streams, and UTF-8 characters split across network chunks. HTTP failures no longer surface as raw `Unexpected token '<'` exceptions. Configured custom domains are tested against an explicit origin allowlist, including rejection of lookalike and insecure origins.

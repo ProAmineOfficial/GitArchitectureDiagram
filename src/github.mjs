@@ -3,7 +3,7 @@
 import { Buffer } from 'node:buffer'; // Make Git blob verification portable to the hosted Node-compatible runtime.
 import { createHash } from 'node:crypto'; // Verify Git blob identities before analyzing their contents.
 export class AppError extends Error { constructor(status, message) { super(message); this.status = status; } } // Carry safe HTTP error messages.
-export const VERSION = '0.2.1'; // Identify the report generator and its contracts.
+export const VERSION = '0.2.2'; // Identify the report generator and its contracts.
 const SEGMENT = /^[a-zA-Z0-9_.-]+$/; // Restrict repository identifiers to GitHub-compatible path segments.
 const SKIP = /(^|\/)(node_modules|vendor|dist|build|\.git|\.pio|coverage|__pycache__)(\/|$)/i; // Avoid generated and vendored content.
 const SECRET = /(^|\/)(\.env(?:\..*)?|.*(?:credential|secret|password|private[_-]?key).*|id_rsa|id_ed25519)$|\.(pem|p12|pfx|key)$/i; // Exclude likely credential files from ingestion.
@@ -43,7 +43,8 @@ export class GitHubReader { // Keep credentials and network controls local to on
     const headers = { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': `GitArchitectureDiagram/${VERSION}` }; // Identify the API contract and application.
     if (this.token) headers.Authorization = `Bearer ${this.token}`; // Send the optional token only to GitHub.
     const signal = this.signal ? AbortSignal.any([this.signal, AbortSignal.timeout(25000)]) : AbortSignal.timeout(25000); // Apply both whole-run and individual request deadlines.
-    let response; try { response = await this.fetchImpl(`https://api.github.com${route}`, { headers, signal, redirect: 'error' }); } catch (error) { if (signal.aborted) throw new AppError(408, 'GitHub reading timed out or was cancelled.'); throw new AppError(502, 'Cannot reach GitHub. Check connectivity and try again.'); } // Prevent redirected credential forwarding.
+    let response; try { response = await this.fetchImpl(`https://api.github.com${route}`, { headers, signal, redirect: 'manual' }); } catch (error) { if (signal.aborted) throw new AppError(408, 'GitHub reading timed out or was cancelled.'); throw new AppError(502, 'Cannot reach GitHub. Check connectivity and try again.'); } // Workers requires manual redirect handling; never forward credentials to another destination.
+    if (response.status >= 300 && response.status < 400) throw new AppError(502, 'GitHub redirected this request. Use the repository\'s current GitHub URL.'); // Reject redirects explicitly instead of using the unsupported Workers redirect-error mode.
     if (!response.ok) { // Translate GitHub failures without exposing tokens or raw response bodies.
       if (response.status === 404) throw new AppError(404, 'Repository, reference, or file not found; private repositories need a read token.'); // Explain missing and inaccessible resources.
       if (response.status === 403 || response.status === 429) throw new AppError(429, 'GitHub denied this request or its rate limit was reached. Add a read token or retry later.'); // Surface rate limits and access restrictions.
