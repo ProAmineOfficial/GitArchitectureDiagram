@@ -1,6 +1,6 @@
 # Release validation
 
-Validation date: **2026-09-26**. These observations describe the tested revision and environment, not a guarantee for every repository or hosting provider.
+Latest validation: **2026-09-29**. Earlier release checks are retained below. These observations describe the tested revision and environment, not a guarantee for every repository or hosting provider.
 
 ## Version 0.2.1: reported production failures
 
@@ -87,3 +87,36 @@ Mermaid syntax is also checked with the installed real parser against generated 
 Final local release checks: **31 tests passed**, **19 shipped modules passed syntax checks**, the production Worker/browser build completed, all eight generated/authored Mermaid samples parsed, and both DOM interaction scenarios passed. Paid provider responses and browser layout remain outside this validation.
 
 Post-publication check: v0.3.0 was published successfully and GitHub CI passed for `96e97511a9ddfa4ea920d0dbbda317f2f8c900ae`. The final anonymous production analysis attempt returned GitHub's access/rate-limit error before a report completed. Earlier real v0.2.2 requests succeeded as listed above; the later request is not counted as a successful analysis. A caller-supplied GitHub read token in API settings provides authenticated allowance; no real token or paid AI key was available for this final check. The custom hostname `diagram.proamine.tech` remains pending DNS validation because Hostinger blocked cloud-browser access.
+
+
+## v0.4.0 — connected workspace and source-grounded Genius
+
+Validated on **September 29, 2026**:
+
+- **65 automated tests passed**, including the actual application in a DOM harness, four mocked provider contracts, graph validation with the real Mermaid parser, and the bundled Worker running in workerd.
+- **22 application/build modules passed syntax checks.** The production browser and Worker build completed.
+- The native runtime test exercises ingestion, verified source browsing, optional interpretation, paid-question streaming, credential separation, and exact answer citations. Its external GitHub and provider responses are fixtures; no paid API call was made.
+- DOM integration tests exercise direct blob routes, line ranges beyond the first 240 lines, tree/diagram/inspector selection, keyboard activation, source edits and theme changes, sidebar controls, Back navigation, refresh without paid replay, on-demand file reads, deliberate AI questions, stale-response cancellation, visible input errors, and the actual Mermaid/ZIP export bytes. The Mermaid SVG renderer is stubbed in these DOM tests, so they do **not** establish layout or visual correctness.
+- Adversarial graph labels and all supported generated shapes pass the installed real Mermaid parser. Eight generated/authored Mermaid sources from the fresh live reports below also parse successfully.
+- Independent read-only review covered navigation, private-source access, cache isolation, graph provenance, and cancellation. The branch/scope resolver, selection restoration, stale source selection, and form-validation findings were fixed before publication.
+
+### Fresh live GitHub checks through the compiled Worker
+
+These requests ran against the actual GitHub API through the built `dist/server/index.js`, with no GitHub token or AI key. They were **local compiled-Worker checks**, not browser tests of the production website.
+
+| Repository / scope | Commit | Read / listed files | Authored diagrams | Located references |
+| --- | --- | ---: | ---: | ---: |
+| NanoKit-ESP32 / examples_on_platformio/ultrasonic_distance | `17834db850daec9b450239069c4aa2e758bf0644` | 12 / 13 | 2 | 0 |
+| expressjs/express / repository root | `7ef98448f8b38099ab1ded55e458538ad47a51e7` | 8 / 214 | 0 | 2 |
+
+NanoKit was supplied as the full `/tree/main/examples_on_platformio/ultrasonic_distance` GitHub URL, confirming reference/scope resolution in the compiled service. Express was supplied as an unrelated library. Its 168 eligible unread files are disclosed; this is a bounded source sample, not complete runtime analysis. The Examples page stores these actual checks and their inventory previews.
+
+### Explicit validation limits
+
+- The required managed browser-control capability was unavailable. No fresh desktop/mobile layout inspection, browser screenshot, browser PNG/SVG download, fullscreen interaction, or visual comparison is claimed for v0.4.0. `docs/images/workspace.png` is a historical image, not evidence for this release.
+- All four providers have request/response fixture coverage; real paid model generation and a user's private repository remain untested because no authorized credentials were available.
+- The custom domain is attached but pending DNS/SSL validation. See [Domain setup](DOMAIN_SETUP.md). Hostinger DNS was not changed.
+- Repository code is never executed. A successful analyzer request does not mean that repository's tests/build pass.
+- Narrated video tours are deferred; no generated video, playback, or video-generation cost is represented as implemented.
+
+The deployment provider's final status is reported separately at publication time. These source checks do not claim that a pending DNS hostname is live.

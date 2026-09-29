@@ -3,11 +3,11 @@
 import { Buffer } from 'node:buffer'; // Make Git blob verification portable to the hosted Node-compatible runtime.
 import { createHash } from 'node:crypto'; // Verify Git blob identities before analyzing their contents.
 export class AppError extends Error { constructor(status, message) { super(message); this.status = status; } } // Carry safe HTTP error messages.
-export const VERSION = '0.3.0'; // Identify the report generator and its contracts.
+export const VERSION = '0.4.0'; // Identify the report generator and its contracts.
 const SEGMENT = /^[a-zA-Z0-9_.-]+$/; // Restrict repository identifiers to GitHub-compatible path segments.
 const SKIP = /(^|\/)(node_modules|vendor|dist|build|\.git|\.pio|coverage|__pycache__)(\/|$)/i; // Avoid generated and vendored content.
 const SECRET = /(^|\/)(\.env(?:\..*)?|.*(?:credential|secret|password|private[_-]?key).*|id_rsa|id_ed25519)$|\.(pem|p12|pfx|key)$/i; // Exclude likely credential files from ingestion.
-const TEXT = /\.(m?[jc]?[jt]sx?|py|pyi|c|cc|cpp|cxx|h|hpp|rs|go|java|kt|cs|rb|php|swift|vue|svelte|md|mdx|rst|txt|json|toml|ini|ya?ml|sh|html|css|sql|proto|graphql)$/i; // Recognize useful textual files.
+const TEXT = /\.(m?[jc]?[jt]sx?|py|pyi|c|cc|cpp|cxx|h|hpp|rs|go|java|kt|cs|rb|php|swift|vue|svelte|md|mdx|mmd|mermaid|rst|txt|json|toml|ini|ya?ml|sh|html|css|sql|proto|graphql)$/i; // Recognize source, standalone Mermaid, and explanatory text.
 export const safeTextPath = path => !SKIP.test(path) && !SECRET.test(path) && (TEXT.test(path) || /(^|\/)(Dockerfile|Makefile|CMakeLists.txt|LICENSE)$/i.test(path)); // Select inspectable source and documentation.
 export const encodePath = value => value.split('/').map(encodeURIComponent).join('/'); // Encode repository paths without losing their hierarchy.
 export function parseRepository(input) { // Accept a GitHub URL or owner/repository shorthand.
@@ -32,6 +32,7 @@ export function normalizeScope(value = '') { // Normalize the optional repositor
   return scope; // Preserve spaces and legitimate filename characters.
 } // End scope normalization.
 export async function boundedJson(response, limit = 12_000_000) { // Bound network responses before parsing them.
+  if (!response.body || !/\b(?:application|text)\/(?:[\w.-]+\+)?json\b/i.test(response.headers.get('Content-Type') || '')) throw new AppError(502, 'The upstream service returned a non-JSON response. Check the service status and try again.'); // Reject HTML gateway pages before attempting JSON parsing.
   const chunks = []; let bytes = 0; // Track bytes and retained response chunks.
   for await (const chunk of response.body) { bytes += chunk.length; if (bytes > limit) throw new AppError(413, 'The upstream response exceeded the read limit.'); chunks.push(Buffer.from(chunk)); } // Enforce the bound while streaming.
   try { return JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { throw new AppError(502, 'The upstream service returned invalid JSON.'); } // Reject malformed provider data.
@@ -60,13 +61,13 @@ export class GitHubReader { // Keep credentials and network controls local to on
     const metadata = await this.get(route); // Read visibility and the default branch.
     if (metadata.private && !suppliedToken) throw new AppError(403, 'Private repositories require your own request-specific GitHub read token.'); // Never publish private repositories through a server-wide token.
     let revision = String(ref).trim() || metadata.default_branch; let selectedScope = normalizeScope(scope); let commit; // Initialize explicit or default scope selection.
-    if (!ref && target.tail.length) { // Resolve branch names containing slashes using the longest valid prefix.
+    if (target.tail.length && (!ref || !selectedScope)) { // Resolve a URL reference even when its folder is explicitly overridden.
       for (let count = Math.min(target.tail.length, 12); count >= 1; count--) { // Bound reference-disambiguation requests.
         try { revision = target.tail.slice(0, count).join('/'); commit = await this.get(`${route}/commits/${encodeURIComponent(revision)}`); selectedScope ||= normalizeScope(target.tail.slice(count).join('/')); break; } catch (error) { if (![404, 422].includes(error.status)) throw error; } // GitHub can return either 404 or 422 for a branch-plus-folder candidate; preserve other failures.
       } // End longest-prefix resolution.
       if (!commit) throw new AppError(404, 'Cannot resolve this tree URL. Enter an explicit branch and folder.'); // Explain unsupported or missing references.
+      if (ref && revision !== String(ref).trim()) { revision = String(ref).trim(); commit = await this.get(`${route}/commits/${encodeURIComponent(revision)}`); } // Preserve the resolved folder while inspecting a different branch or pinned commit.
     } else { // Resolve a plain repository or an explicitly chosen branch.
-      if (target.tail.length && !selectedScope) { const prefix = String(ref).split('/'); if (prefix.every((part, index) => target.tail[index] === part)) selectedScope = normalizeScope(target.tail.slice(prefix.length).join('/')); } // Preserve a supplied URL folder when it matches the explicit reference.
       commit = await this.get(`${route}/commits/${encodeURIComponent(revision)}`); // Resolve exactly one commit before reading its tree.
     } // End revision selection.
     const listing = await this.get(`${route}/git/trees/${commit.commit.tree.sha}?recursive=1`); // Fetch the immutable repository tree.
@@ -74,7 +75,7 @@ export class GitHubReader { // Keep credentials and network controls local to on
     const scoped = all.filter(entry => !selectedScope || entry.path === selectedScope || entry.path.startsWith(`${selectedScope}/`)); // Restrict analysis and browsing to the requested scope.
     if (selectedScope && !scoped.length) throw new AppError(404, 'The selected file or folder does not exist in this commit.'); // Reject empty or mistyped scopes.
     const entries = scoped.slice(0, 12000); // Bound retained tree size for large repositories.
-    return { route, owner: target.owner, repo: target.repo, fullName: metadata.full_name, description: metadata.description || '', private: metadata.private, branch: revision, sha: commit.sha, scope: selectedScope, entries, treeTruncated: Boolean(listing.truncated) || scoped.length > entries.length, listedEntries: scoped.length, htmlUrl: `https://github.com/${metadata.full_name}`, committedAt: commit.commit.committer?.date ?? null }; // Report truncation explicitly.
+    return { route, owner: target.owner, repo: target.repo, fullName: metadata.full_name, description: metadata.description || '', private: metadata.private, branch: revision, defaultBranch: metadata.default_branch, sha: commit.sha, scope: selectedScope, entries, treeTruncated: Boolean(listing.truncated) || scoped.length > entries.length, listedEntries: scoped.length, htmlUrl: `https://github.com/${metadata.full_name}`, committedAt: commit.commit.committer?.date ?? null }; // Report truncation and preserve the default reference for explicit refresh.
   } // End immutable snapshot construction.
   async blob(snapshot, entry) { // Fetch and verify one small textual Git blob.
     const data = await this.get(`${snapshot.route}/git/blobs/${entry.sha}`); // Avoid branch drift by using the immutable blob SHA.
@@ -88,7 +89,7 @@ export class GitHubReader { // Keep credentials and network controls local to on
 } // End the GitHub reader.
 export function selectFiles(snapshot, maxFiles = 32) { // Select a bounded, distributed sample of code and documentation.
   const candidates = snapshot.entries.filter(entry => entry.type === 'blob' && entry.mode !== '120000' && entry.size <= 96000 && safeTextPath(entry.path)); // Skip symlinks, secrets, binaries, and large files.
-  const score = path => (/readme\.md$/i.test(path) ? 65 : 0) + (/(^|\/)(main|index|app|server)\./i.test(path) ? 55 : 0) + (/(package\.json|platformio\.ini|pyproject\.toml|Cargo\.toml|go\.mod)$/i.test(path) ? 60 : 0) + (/architecture|implementation|wiring|connection-diagram|system-diagram/i.test(path) ? 35 : 0) + (/\.(cpp|h|py|js|ts|tsx|go|rs)$/i.test(path) ? 20 : 0) - path.split('/').length * 2; // Prioritize actual entry points and explanatory material.
+  const score = path => (/readme\.md$/i.test(path) ? 65 : 0) + (/(^|\/)(main|index|app|server)\./i.test(path) ? 55 : 0) + (/(package\.json|platformio\.ini|pyproject\.toml|Cargo\.toml|go\.mod)$/i.test(path) ? 60 : 0) + (/architecture|implementation|wiring|connection-diagram|system-diagram|\.genius\/|\.(mmd|mermaid)$/i.test(path) ? 35 : 0) + (/\.(cpp|h|py|js|ts|tsx|go|rs)$/i.test(path) ? 20 : 0) - path.split('/').length * 2; // Prioritize actual entry points and explanatory material.
   const remaining = candidates.map(entry => ({ ...entry, score: score(entry.path) })); const chosen = []; const counts = new Map(); // Track directory diversity while selecting.
   while (remaining.length && chosen.length < maxFiles) { // Fill the requested file budget.
     remaining.sort((a, b) => (b.score - (counts.get(b.path.split('/').slice(0, -1).join('/')) || 0) * 18) - (a.score - (counts.get(a.path.split('/').slice(0, -1).join('/')) || 0) * 18) || a.path.localeCompare(b.path)); // Avoid allowing one folder to consume the sample.

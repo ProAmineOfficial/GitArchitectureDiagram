@@ -13,13 +13,13 @@ npm run build
 
 The build creates `dist/server/index.js` and `dist/client`, with an `ASSETS` binding and Node compatibility declared in `dist/server/wrangler.json`. The existing Site must be published from the same reviewed GitHub source commit. Future changes must update this repository and republish that Site; an arbitrary GitHub push alone does not trigger a Sites deployment.
 
-The hosted Worker accepts up to 40 files per run and does not retain report/session caches. Evidence search runs in the browser using already-read files. Optional AI remains disabled unless requested with an authorized key and model. No provider API key is bundled into browser assets.
+The hosted Worker accepts up to 40 files per run. Anonymous public structural results can be reused from a ten-minute, twelve-entry cache in the current isolate. Private and credential-specific analyses bypass that cache; hosted sessions and paid answers are not retained. Evidence search runs in the browser using already-read files. Optional AI remains disabled unless requested with an authorized key and model. No provider API key is bundled into browser assets.
 
 When a Worker serves both the generated address and a custom domain, set `PUBLIC_ORIGINS` to a comma-separated list of their exact HTTPS origins. Keep `PUBLIC_ORIGIN` as the primary origin. Without `PUBLIC_ORIGINS`, the Worker uses `PUBLIC_ORIGIN` as before. The local Node server continues to use its single `PUBLIC_ORIGIN`.
 
 ## Custom domain
 
-`gitarchitecturediagram.com` is separate from the GitHub repository and generated hosting address. A browser `DNS_PROBE_FINISHED_NXDOMAIN` error means that address could not be resolved. To use it, first confirm ownership or register the domain, then attach it through the hosting provider and set the required DNS records. Domain purchase and DNS ownership are not implied by publishing this code. Use the configured website address until the custom domain is verified.
+`gitarchitecturediagram.com` was attached to the existing Site on September 29, 2026 and is pending DNS and HTTPS validation. See [Domain setup](DOMAIN_SETUP.md) for the actual required records. It is separate from the GitHub repository and generated hosting address. A browser `DNS_PROBE_FINISHED_NXDOMAIN` error means that address could not be resolved. To use it, first confirm ownership or register the domain, then attach it through the hosting provider and set the required DNS records. Domain purchase and DNS ownership are not implied by publishing this code. Use the configured website address until the custom domain is verified.
 
 `diagram.proamine.tech` has been attached to the existing Site and is **pending DNS validation**, not yet a working public address. The original `proamine.tech` website and DNS have not been changed. A custom hostname alone does not fix application-level GitHub transport or response-format errors.
 

@@ -2,14 +2,22 @@
 
 Genius performs tree, import/include, documentation, and Mermaid analysis without an AI service. Optional interpretation uses the provider chosen in **API settings** only after **Add Genius AI interpretation** is enabled. It sends bounded source excerpts and validates returned paths and line references before showing an explanation. An AI failure preserves the structural report.
 
+## Analysis and questions
+
+Architecture interpretation uses one request with at most 110,000 source characters and 6,000 output tokens. The response is a validated structured graph: IDs, roles, shapes, groups, verified paths, and quoted edge evidence. The application compiles Mermaid itself. Unsupported paths and citations are removed; conceptual nodes are visibly unmapped. A bounded overview shows up to 24 nodes, with omission counts.
+
+In the Genius panel, **Search source** is free keyword matching. Choose **Ask Genius AI**, review the disclosed file list, and submit to request one paid answer. Each question freshly verifies repository access and the commit, rereads up to eight files, sends at most 24,000 source characters, and limits output to 3,000 tokens. Accepted findings carry exact file/line/quote citations; an inference is labeled explicitly. Suggested follow-up questions only fill the input and never purchase another call automatically.
+
+These are request and token limits, not a guaranteed currency ceiling. Provider/account/model pricing controls the bill. Browser history, direct links, refresh, and folder focusing never replay a paid request. Cancellation stops application processing and signals the provider, but cannot guarantee reversal of charges already incurred.
+
 ## Model presets
 
-The following presets were checked against official catalogs on **September 27, 2026**. They are editable suggestions, not a promise of automatic access, ongoing availability, or the same cost. Enter another supported text model ID when needed.
+The following presets were checked against official catalogs on **September 29, 2026**. They are editable suggestions, not a promise of automatic access, ongoing availability, or the same cost. Enter another supported text model ID when needed.
 
 | Provider | Initial preset | Other presets | Native endpoint |
 | --- | --- | --- | --- |
 | OpenAI | `gpt-6-sol` | `gpt-6-astra`, `gpt-6-luna` | Responses |
-| Claude / Anthropic | `claude-sonnet-5` | `claude-opus-5-5`, `claude-fable-5-1` | Messages |
+| Claude / Anthropic | `claude-sonnet-5-5` | `claude-opus-5-5`, `claude-fable-5-1` | Messages |
 | Gemini / Google | `gemini-3.8-flash` | `gemini-3.5-flash-lite`, `gemini-3.1-pro-preview` | generateContent |
 | Kimi / Moonshot | `kimi-k3` | `kimi-k2.7-code` | Chat Completions |
 
