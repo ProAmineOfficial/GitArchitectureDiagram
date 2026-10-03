@@ -3,53 +3,224 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Understand a GitHub repository with source-linked architecture diagrams, mind maps, a repository tree, and Genius guides.">
+  <meta name="description" content="Replace github.com with this address to open any repository as an architecture diagram, mind map, file tree, and source-grounded guide.">
   <meta name="color-scheme" content="dark light">
-  <title>Git Architecture Diagram — Understand the code</title>
+  <title>Git Architecture Diagram</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="preload" href="/fonts/ibm-plex-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/styles.css">
   <script type="module" src="/app.js"></script>
 </head>
 <body>
+  <a class="skip-link" href="#main">Skip to content</a>
   <header class="topbar">
-    <a class="brand" href="/" aria-label="Git Architecture Diagram home"><span class="brand-icon glass-icon" data-icon="network"></span><span>Git Architecture <strong>Diagram</strong><small>SOURCE. STRUCTURE. UNDERSTANDING.</small></span></a>
-    <nav class="top-actions" aria-label="Application"><a class="nav-link" href="/" id="workspace-nav">Workspace</a><a class="nav-link" href="/examples" id="examples-nav">Examples</a><a class="text-link github-link" href="https://github.com/ProAmineOfficial/GitArchitectureDiagram" target="_blank" rel="noreferrer">GitHub ↗</a><button id="theme" class="icon-button" title="Change color theme" aria-label="Change color theme">◐</button><button id="settings-open" class="quiet-button"><span data-icon="key"></span> API settings</button></nav>
+    <a class="brand" href="/" aria-label="Git Architecture Diagram home"><span class="brand-icon" data-icon="network"></span><span class="brand-name">Git Architecture <strong>Diagram</strong></span></a>
+    <nav class="top-actions" aria-label="Application">
+      <a class="nav-link" href="/" id="workspace-nav">Workspace</a>
+      <a class="nav-link" href="/browse" id="browse-nav">Browse</a>
+      <a class="nav-link github-link" href="https://github.com/ProAmineOfficial/GitArchitectureDiagram" target="_blank" rel="noreferrer">GitHub</a>
+      <button id="theme" class="icon-button" type="button" aria-label="Switch to light theme" title="Switch theme"><span data-icon="moon"></span></button>
+      <button id="settings-open" class="quiet-button" type="button"><span data-icon="key"></span><span>API settings</span></button>
+    </nav>
   </header>
-  <main>
-    <section class="command-bar" aria-label="Repository analysis">
-      <form id="analyze-form" class="repo-form"><label class="repo-label" for="repository"><span data-icon="branch"></span><span class="sr-only">GitHub repository URL or owner/repository</span></label><input id="repository" name="repository" placeholder="Paste a GitHub URL or owner/repository" required autocomplete="off" spellcheck="false"><button type="button" id="options-toggle" class="quiet-button" aria-expanded="false" aria-controls="analysis-options">Options</button><button id="analyze" class="primary-button" type="submit">Analyze repository <span>↗</span></button><button id="cancel" class="quiet-button" type="button" hidden>Cancel</button></form>
-      <div id="analysis-options" class="analysis-options" hidden><label>Branch, tag or commit<input id="ref" placeholder="Default branch" maxlength="200"></label><label>Folder scope<input id="scope" placeholder="Entire repository" maxlength="1000"></label><label>Files to read<input id="max-files" type="number" min="1" max="120" value="32"></label><label class="check-label"><input id="use-ai" type="checkbox">Add Genius AI interpretation</label><span class="subtle" id="analysis-cost-note">Structural analysis uses no model. Optional AI sends up to 110,000 source characters and 6,000 output tokens in one bounded request; provider charges depend on your model.</span></div>
-      <div class="command-hint"><span>Repository Tree · Mermaid · Mind Map · Genius</span><button class="inline-button" id="try-example">Try NanoKit-ESP32 ↗</button></div>
-    </section>
-    <div id="status" class="status" role="status" aria-live="polite" hidden><span class="status-dot"></span><span id="status-text"></span></div>
-    <section id="welcome" class="welcome">
-      <div class="welcome-heading"><div><span class="eyebrow">YOUR CODE, IN CONTEXT</span><h1>Understand the architecture.</h1><p>Open a repository. Explore its files, connections, and documented workflows.</p></div><span class="glass-icon welcome-mark" data-icon="network"></span></div>
-      <div class="shortcut-panel"><span class="glass-icon small-glass" data-icon="branch"></span><div><strong>Change the address. Keep the repository.</strong><p>Replace <code>github.com</code> with <code class="site-host"></code>. Keep <code>/owner/repository</code> and any branch or folder path.</p></div><button id="copy-host" class="quiet-button">Copy hostname</button></div>
-      <div class="section-heading"><h2>Start with a real project</h2><a href="/examples">Browse examples ↗</a></div><div id="starter-examples" class="example-grid"></div>
-      <p class="welcome-note">Tree and source analysis need no AI key. Add your own provider key for an optional Genius interpretation.</p>
-    </section>
-    <section id="examples-view" class="examples-view" hidden>
-      <div class="catalog-heading"><span class="glass-icon" data-icon="layers"></span><div><span class="eyebrow">EXPLORE BY EXAMPLE</span><h1>Repositories, revealed.</h1><p>Real analysis snapshots, with their exact commits and coverage. Open one to explore it yourself.</p></div></div>
-      <div class="catalog-toolbar"><label class="search-box"><span data-icon="search"></span><input id="example-search" type="search" placeholder="Find a repository or project type" aria-label="Search example repositories"></label><select id="example-filter" aria-label="Filter example type"><option value="all">All project types</option><option value="embedded">Embedded / hardware</option><option value="software">Software</option></select><span id="example-count" class="subtle"></span></div>
-      <div id="example-grid" class="example-grid"></div><p id="examples-empty" hidden>No examples match your search.</p>
-      <div class="catalog-note"><span data-icon="check"></span><p>Analysis checks confirm that the analyzer read these snapshots. They do not certify the repositories or execute their tests. Each link reruns analysis; changes to the default branch do not alter the pinned snapshot.</p></div>
-    </section>
-    <section id="workspace" hidden>
-      <div class="repo-heading"><div><div class="eyebrow">REPOSITORY WORKSPACE</div><h1 id="repo-title"></h1><p id="repo-description"></p></div><div class="repo-controls"><span id="commit" class="pill"></span><button id="refresh" class="quiet-button" title="Read the latest selected reference again">↻ Refresh</button><button id="share" class="quiet-button">Copy link</button><button id="export-guide" class="primary-button">↓ Export .genius</button></div></div>
-      <div id="metrics" class="metrics"></div><div class="workspace-tools"><nav id="breadcrumbs" aria-label="Repository scope" class="breadcrumbs"></nav><div><button id="toggle-tree" class="quiet-button" aria-controls="tree-panel" aria-expanded="true">Repository tree</button><button id="toggle-genius" class="quiet-button" aria-controls="genius-panel" aria-expanded="true">Genius</button></div></div>
-      <div class="studio">
-        <aside id="tree-panel" class="tree-panel panel"><div class="panel-title"><span class="panel-label"><span data-icon="folder"></span> REPOSITORY TREE</span><span id="tree-count" class="count"></span></div><label class="search-box"><span>⌕</span><input id="tree-search" placeholder="Find a file…" aria-label="Find a file"></label><label class="tree-filter-label"><span>Show</span><select id="tree-filter" aria-label="Filter repository files"><option value="all">All files</option><option value="read">Read in analysis</option><option value="unread">Not read</option><option value="code">Source code</option><option value="docs">Documentation / diagrams</option></select></label><div id="tree" class="tree" aria-label="Repository files"></div><div class="panel-foot" id="tree-foot"></div></aside>
-        <section class="diagram-panel panel"><div class="view-tabs" role="tablist" aria-label="Analysis views"><button role="tab" aria-selected="true" data-view="architecture">Architecture</button><button role="tab" aria-selected="false" data-view="mindmap">Mind map</button><button role="tab" aria-selected="false" data-view="documented">Project diagrams <span id="docs-count">0</span></button><button role="tab" aria-selected="false" data-view="guide">Guide</button></div><div class="diagram-meta"><span id="diagram-basis" class="evidence-badge"></span><a id="diagram-source-link" class="text-link" target="_blank" rel="noreferrer" hidden>Open diagram source ↗</a><button id="source-toggle" class="inline-button">&lt;/&gt; Mermaid source</button></div><div class="diagram-options"><label>Architecture <select id="architecture-mode"><option value="overview">Component overview</option><option value="source">File references</option><option value="ai" disabled>Genius interpretation</option></select></label><label>Node click <select id="node-action"><option value="inspect">Inspect in workspace</option><option value="github">Open GitHub source</option></select></label></div><div id="diagram-legend" class="diagram-legend" aria-label="Diagram color legend" hidden></div><label id="document-picker" class="document-picker" hidden>From the repository <select id="document-select" aria-label="Documented Mermaid diagram"></select></label><div id="canvas" class="canvas"><div id="diagram-content" class="diagram-content"></div><div id="diagram-empty" class="canvas-message" hidden></div><div id="canvas-tools" class="canvas-tools"><button id="zoom-out" title="Zoom out" aria-label="Zoom out">−</button><span id="zoom-label">100%</span><button id="zoom-in" title="Zoom in" aria-label="Zoom in">+</button><button id="fit" title="Fit diagram">Fit</button><button id="fullscreen" title="Fullscreen" aria-label="Fullscreen">⛶</button><select id="export-format" aria-label="Export diagram"><option value="">↓ Export</option><option value="mmd">Mermaid</option><option value="svg">SVG</option><option value="png">PNG</option></select></div></div><article id="guide" class="guide prose" hidden></article><div id="source-panel" class="source-panel" hidden><div><span>MERMAID SOURCE · Changes affect this preview only</span><button id="render-source" class="quiet-button">Render changes</button><button id="reset-source" class="quiet-button">Reset</button></div><textarea id="mermaid-source" aria-label="Editable Mermaid source" spellcheck="false"></textarea><p>Custom edits are exported with the diagram. The .genius package preserves the original analysis.</p></div><div class="diagram-foot"><span id="diagram-caption"></span><span>Drag to pan · Scroll to zoom</span></div></section>
-        <aside id="genius-panel" class="genius-panel panel"><div class="panel-title"><span class="panel-label"><span data-icon="spark"></span> GENIUS</span><span id="genius-mode" class="mini-pill">SOURCE MODE</span></div><div id="genius-content" class="genius-content"></div><section class="evidence-search"><h3>Ask Genius</h3><label class="question-mode-label">Mode <select id="question-mode"><option value="search">Source search · no AI</option><option value="ai">AI answer · provider charges</option></select></label><p id="question-disclosure">Find matching lines in the files read. This is keyword search.</p><form id="ask-form"><input id="question" aria-label="Question or source search" placeholder="Ask about this project or find a symbol" required maxlength="600"><button id="ask-submit" class="icon-button" title="Submit question" aria-label="Submit question">↗</button></form><button id="cancel-question" class="inline-button" hidden>Cancel answer</button><div id="search-results" aria-live="polite"></div></section></aside>
+  <main id="main">
+    <section class="command-bar" aria-label="Open a repository">
+      <form id="analyze-form" class="repo-form">
+        <label class="repo-label" for="repository"><span data-icon="branch"></span><span class="sr-only">GitHub URL or owner/repository</span></label>
+        <input id="repository" name="repository" placeholder="github.com/owner/repository, a folder, or a file URL" required autocomplete="off" spellcheck="false">
+        <button type="button" id="options-toggle" class="quiet-button" aria-expanded="false" aria-controls="analysis-options">Options</button>
+        <button id="analyze" class="primary-button" type="submit">Analyze</button>
+        <button id="cancel" class="quiet-button" type="button" hidden>Cancel</button>
+      </form>
+      <div id="analysis-options" class="analysis-options" hidden>
+        <label>Branch, tag, or commit<input id="ref" placeholder="Default branch" maxlength="200" autocomplete="off" spellcheck="false"></label>
+        <label>Folder<input id="scope" placeholder="Entire repository" maxlength="1000" autocomplete="off" spellcheck="false"></label>
+        <label>Files to read<input id="max-files" type="number" min="1" max="120" value="32"></label>
+        <label class="check-label"><input id="use-ai" type="checkbox"> Draw an AI system map</label>
+        <p id="ai-cost" class="subtle ai-cost">Structure, tree, and source links need no AI key.</p>
       </div>
-      <section id="file-inspector" class="file-inspector panel" hidden><div class="inspector-header"><div><span class="eyebrow">SOURCE INSPECTOR</span><h2 id="file-name"></h2></div><div><a id="source-link" class="text-link" target="_blank" rel="noreferrer">Open pinned source ↗</a><button id="close-inspector" class="icon-button" aria-label="Close file inspector">×</button></div></div><div id="file-info" class="subtle"></div><div class="inspector-actions"><button id="load-source" class="quiet-button" hidden>Read this file · no AI</button><button id="focus-folder" class="quiet-button">Analyze this folder</button><span id="source-read-status" class="subtle" role="status"></span></div><div id="file-relationships" class="file-relationships"></div><pre id="file-code" tabindex="0"></pre></section>
+    </section>
+    <div id="status" class="status" role="status" aria-live="polite" hidden><span class="status-dot"></span><span id="status-text"></span><span class="status-bar" aria-hidden="true"><i id="status-progress"></i></span></div>
+
+    <section id="welcome" class="welcome">
+      <div class="hero">
+        <h1>Replace github.com in any repository link, and read the project as a diagram.</h1>
+        <div id="hero-slot" class="hero-slot"></div>
+        <div class="address-swap" aria-label="Replace github.com with this site's hostname">
+          <div class="address"><span class="address-host was">github.com</span><span class="address-path">/ProAmineOfficial/NanoKit-ESP32</span></div>
+          <div class="address"><span class="address-host now site-host"></span><span class="address-path">/ProAmineOfficial/NanoKit-ESP32</span></div>
+          <button id="copy-host" class="quiet-button" type="button"><span data-icon="link"></span> Copy hostname</button>
+        </div>
+        <p class="hero-note">Folders, branches, files, and line anchors carry over: <code>/tree/main/examples</code>, <code>/blob/main/src/main.cpp#L12</code>. The first view opens without an AI key.</p>
+      </div>
+      <div class="section-heading"><h2>Start with a real project</h2><a href="/browse">Browse all examples</a></div>
+      <div id="starter-examples" class="example-grid"></div>
+    </section>
+
+    <section id="browse-view" class="browse-view" hidden>
+      <div class="catalog-heading"><h1>Browse examples</h1><p>Saved snapshots of real public repositories. Opening one runs a fresh analysis at the saved commit, so what you see is live, not a stored picture.</p></div>
+      <div class="catalog-toolbar">
+        <label class="search-box"><span data-icon="search"></span><input id="example-search" type="search" placeholder="Search by repository or project type" aria-label="Search examples"></label>
+        <div id="kind-filters" class="chip-row" role="group" aria-label="Filter by project type"></div>
+        <label class="sort-label">Sort<select id="example-sort"><option value="checked">Recently checked</option><option value="read">Most files read</option><option value="diagrams">Most authored diagrams</option><option value="name">Name</option></select></label>
+      </div>
+      <p id="example-count" class="subtle" aria-live="polite"></p>
+      <div id="example-grid" class="example-grid"></div>
+      <p id="examples-empty" class="empty-note" hidden>No examples match. Clear the search or choose another type.</p>
+    </section>
+
+    <section id="workspace" hidden aria-labelledby="repo-title">
+      <div class="action-bar" role="toolbar" aria-label="Repository actions">
+        <div class="repo-chip">
+          <span class="repo-mark" data-icon="repo"></span>
+          <div class="repo-identity"><h1 id="repo-title"></h1><nav id="scope-crumbs" class="crumbs" aria-label="Analyzed scope"></nav></div>
+          <button id="change-repo" class="icon-button" type="button" aria-label="Open another repository" title="Open another repository"><span data-icon="search"></span></button>
+        </div>
+        <button id="commit" class="pill-button" type="button" title="Change branch, tag, or commit"></button>
+        <div class="actions">
+          <button id="tour-action" class="glass-button accent" type="button" hidden><span data-icon="play"></span><span>Tour</span></button>
+          <div class="menu"><button id="hl-toggle" class="glass-button" type="button" aria-expanded="false" aria-controls="hl-menu"><span data-icon="target"></span><span>Highlights</span><span class="caret" data-icon="down"></span></button>
+            <div id="hl-menu" class="popover hl-menu" hidden></div></div>
+          <div class="menu"><button id="info-toggle" class="glass-button" type="button" aria-expanded="false" aria-controls="info-panel"><span data-icon="info"></span><span>Info</span><span class="caret" data-icon="down"></span></button>
+            <div id="info-panel" class="popover info-panel" hidden><p id="repo-description"></p><div id="metrics" class="metrics"></div><div id="info-body"></div></div></div>
+          <button id="zoom-toggle" class="glass-button" type="button" aria-pressed="false" title="Make scrolling over the diagram zoom without clicking it first"><span data-icon="zoom"></span><span>Zoom</span></button>
+          <button id="fullscreen-action" class="glass-button" type="button" title="Fullscreen diagram"><span data-icon="expand"></span><span>Fullscreen</span></button>
+          <div class="menu"><button id="export-toggle" class="glass-button" type="button" aria-expanded="false" aria-controls="export-menu"><span data-icon="download"></span><span>Export</span><span class="caret" data-icon="down"></span></button>
+            <div id="export-menu" class="popover menu-list export-menu" role="menu" hidden>
+              <div class="menu-tabs" role="tablist" aria-label="Export groups"><button role="tab" data-group-tab="visual" aria-selected="true" type="button">Visual</button><button role="tab" data-group-tab="architecture" aria-selected="false" type="button">Architecture</button><button role="tab" data-group-tab="genius" aria-selected="false" type="button">Genius</button><button role="tab" data-group-tab="context" aria-selected="false" type="button">Project context</button></div>
+              <div data-group="visual"><button role="menuitem" data-export="png" type="button"><span data-icon="download"></span>Download PNG</button><button role="menuitem" data-export="svg" type="button"><span data-icon="download"></span>Download SVG</button><button role="menuitem" data-export="copy" type="button"><span data-icon="link"></span>Copy Mermaid (this view)</button><button role="menuitem" data-export="mmd" type="button"><span data-icon="code"></span>Download Mermaid</button><button role="menuitem" data-action="readme-picture" type="button"><span data-icon="file"></span>README picture…</button><button role="menuitem" data-action="readme-badge" type="button"><span data-icon="spark"></span>README badge…</button></div>
+              <div data-group="architecture" hidden><button role="menuitem" data-action="mermaid-architecture" type="button">Architecture (Mermaid)…</button><button role="menuitem" data-action="mermaid-system" type="button">System map (Mermaid)…</button><button role="menuitem" data-action="hierarchy" type="button">Software hierarchy…</button><button role="menuitem" data-action="mermaid-hierarchy" type="button">Software hierarchy (Mermaid)…</button><button role="menuitem" data-action="mermaid-mindmap" type="button">Repository mind map (Mermaid)…</button><button role="menuitem" data-action="tree" type="button">Repository tree…</button></div>
+              <div data-group="genius" hidden><button role="menuitem" id="export-guide" type="button">Genius guide (.genius package)</button><button role="menuitem" data-action="prompt" type="button">Generate development prompt…</button><button role="menuitem" data-action="skills" type="button">Export development skills…</button><button role="menuitem" data-action="blueprint" type="button">Generate app blueprint…</button><button role="menuitem" data-action="roadmap" type="button">Implementation roadmap…</button></div>
+              <div data-group="context" hidden><button role="menuitem" data-action="context" type="button">AI-ready context…</button><button role="menuitem" data-action="extract" type="button">Export Project</button><button role="menuitem" data-action="pack" type="button">Project reconstruction pack (.zip)</button><button role="menuitem" data-action="clone" type="button">Clone repository…</button></div>
+            </div></div>
+          <button id="refresh" class="glass-button" type="button" title="Read the branch's latest commit again; also regenerates the system map when AI is on"><span data-icon="refresh"></span><span>Refresh</span></button>
+          <button id="share" class="glass-button" type="button" title="Copy a link pinned to this commit"><span data-icon="link"></span><span>Permalink</span></button>
+          <span class="bar-divider" aria-hidden="true"></span>
+          <button class="glass-button" type="button" data-drawer="tree" aria-pressed="false"><span data-icon="folder"></span><span>Files</span></button>
+          <button class="glass-button" type="button" data-drawer="genius" aria-pressed="false"><span data-icon="spark"></span><span>Genius</span></button>
+          <button id="layout-toggle" class="icon-button" type="button" aria-pressed="false" aria-label="Show panels side by side" title="Show panels side by side"><span data-icon="panel"></span></button>
+        </div>
+      </div>
+      <div class="mobile-switch" role="tablist" aria-label="Workspace panels">
+        <button role="tab" data-pane="tree" aria-selected="false">Files</button>
+        <button role="tab" data-pane="diagram" aria-selected="true">Diagram</button>
+        <button role="tab" data-pane="genius" aria-selected="false">Genius</button>
+      </div>
+      <nav class="dock-wrap" aria-label="Repository views">
+        <div id="view-dock" class="dock" role="tablist" aria-label="Views">
+          <button class="dock-item" role="tab" type="button" data-view="system" aria-selected="false" aria-label="System Map"><span class="dock-icon"><span data-icon="dock-system"></span><span class="dock-badge ai" aria-hidden="true">AI</span></span><i class="dock-dot" aria-hidden="true"></i><span class="dock-label">System Map</span><span class="dock-tip" aria-hidden="true">System Map</span></button>
+          <button class="dock-item" role="tab" type="button" data-view="architecture" aria-selected="false" aria-label="Architecture"><span class="dock-icon"><span data-icon="dock-architecture"></span></span><i class="dock-dot" aria-hidden="true"></i><span class="dock-label">Architecture</span><span class="dock-tip" aria-hidden="true">Architecture</span></button>
+          <button class="dock-item" role="tab" type="button" data-view="hierarchy" aria-selected="false" aria-label="Software Hierarchy"><span class="dock-icon"><span data-icon="dock-hierarchy"></span></span><i class="dock-dot" aria-hidden="true"></i><span class="dock-label">Hierarchy</span><span class="dock-tip" aria-hidden="true">Software Hierarchy</span></button>
+          <button class="dock-item" role="tab" type="button" data-view="mindmap" aria-selected="false" aria-label="Repository Mind Map"><span class="dock-icon"><span data-icon="dock-mindmap"></span></span><i class="dock-dot" aria-hidden="true"></i><span class="dock-label">Mind Map</span><span class="dock-tip" aria-hidden="true">Repository Mind Map</span></button>
+          <span class="dock-sep" aria-hidden="true"></span>
+          <button class="dock-item" role="tab" type="button" data-view="documented" aria-selected="false" aria-label="Project Diagrams"><span class="dock-icon"><span data-icon="dock-diagrams"></span><span id="docs-count" class="dock-badge count" aria-hidden="true">0</span></span><i class="dock-dot" aria-hidden="true"></i><span class="dock-label">Diagrams</span><span class="dock-tip" aria-hidden="true">Project Diagrams</span></button>
+          <button class="dock-item" role="tab" type="button" data-view="source" aria-selected="false" aria-label="Mermaid Source"><span class="dock-icon"><span data-icon="dock-source"></span></span><i class="dock-dot" aria-hidden="true"></i><span class="dock-label">Source</span><span class="dock-tip" aria-hidden="true">Mermaid Source</span></button>
+          <button class="dock-item" role="tab" type="button" data-view="guide" aria-selected="false" aria-label="Genius Guide"><span class="dock-icon"><span data-icon="dock-guide"></span></span><i class="dock-dot" aria-hidden="true"></i><span class="dock-label">Genius</span><span class="dock-tip" aria-hidden="true">Genius Guide</span></button>
+          <span class="dock-sep" aria-hidden="true"></span>
+          <button class="dock-item" role="tab" type="button" data-view="extract" aria-selected="false" aria-label="Export Project"><span class="dock-icon"><span data-icon="dock-export-project"></span></span><i class="dock-dot" aria-hidden="true"></i><span class="dock-label">Export Project</span><span class="dock-tip" aria-hidden="true">Export Project</span></button>
+          <button id="dock-export" class="dock-item" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Export"><span class="dock-icon"><span data-icon="dock-export"></span></span><i class="dock-dot" aria-hidden="true"></i><span class="dock-label">Export</span><span class="dock-tip" aria-hidden="true">Export</span></button>
+          <button id="dock-build" class="dock-item" type="button" aria-label="Build With Genius"><span class="dock-icon"><span data-icon="dock-build"></span></span><i class="dock-dot" aria-hidden="true"></i><span class="dock-label">Build</span><span class="dock-tip" aria-hidden="true">Build With Genius</span></button>
+        </div>
+      </nav>
+      <div id="studio" class="studio" data-layout="focus" data-tree="closed" data-genius="closed" data-pane="diagram">
+        <aside class="tree-panel panel" aria-label="Repository files">
+          <div class="panel-title"><button class="icon-button collapse" data-collapse="tree" aria-expanded="true" aria-label="Hide files" title="Hide files"><span data-icon="panel"></span></button><h2>Files</h2><span id="tree-count" class="count"></span></div>
+          <div class="panel-body">
+            <label class="search-box"><span data-icon="search"></span><input id="tree-search" placeholder="Find a file ( / )" aria-label="Find a file" autocomplete="off" spellcheck="false"></label>
+            <div id="tree-filters" class="chip-row small" role="group" aria-label="Filter files"><button class="chip" data-filter="all" aria-pressed="true">All</button><button class="chip" data-filter="read" aria-pressed="false">Read</button><button class="chip" data-filter="code" aria-pressed="false">Code</button><button class="chip" data-filter="docs" aria-pressed="false">Docs</button></div>
+            <div id="tree" class="tree" role="tree" aria-label="Repository files"></div>
+            <div class="panel-foot" id="tree-foot"></div>
+          </div>
+        </aside>
+        <section class="diagram-panel panel" aria-label="Diagrams">
+          <div class="diagram-meta">
+            <span id="diagram-basis" class="evidence-badge"></span>
+            <label id="architecture-mode-label">View <select id="architecture-mode"><option value="overview">Components</option><option value="files">Files and imports</option></select></label>
+            <span id="drill-chip" class="drill-chip" hidden><span id="drill-label"></span><button id="drill-clear" class="icon-button" type="button" aria-label="Back to all components"><span data-icon="close"></span></button></span>
+            <label id="mindmap-mode-label" hidden>Show <select id="mindmap-mode"><option value="concepts">Concepts</option><option value="folders">Folders</option></select></label>
+            <span id="hl-chip" class="hl-chip" hidden><span id="hl-label"></span><span id="hl-basis" class="basis-tag"></span><button id="hl-clear" class="icon-button" type="button" aria-label="Clear highlight"><span data-icon="close"></span></button></span>
+            <label id="document-picker" hidden>Diagram <select id="document-select" aria-label="Authored Mermaid diagram"></select></label>
+            <a id="diagram-source-link" class="text-link" target="_blank" rel="noreferrer" hidden>Open in the repository</a>
+            <button id="tour-start" class="glass-pill" type="button" hidden><span data-icon="play"></span> Play tour</button>
+            <label class="node-action">On click <select id="node-action"><option value="inspect">Show in workspace</option><option value="github">Open on GitHub</option></select></label>
+          </div>
+          <div id="diagram-legend" class="diagram-legend" aria-label="Diagram legend" hidden></div>
+          <div id="canvas" class="canvas" tabindex="0" aria-label="Diagram canvas. Use plus and minus to zoom, arrow keys to pan, 0 to fit.">
+            <div id="diagram-content" class="diagram-content"></div>
+            <div id="diagram-empty" class="canvas-message" hidden></div>
+            <div id="tour" class="tour-card" hidden role="region" aria-label="Guided tour" aria-live="polite"><div class="tour-meta"><span id="tour-count"></span><strong id="tour-node"></strong></div><p id="tour-text"></p><div class="tour-controls"><button id="tour-prev" class="icon-button" type="button" aria-label="Previous step"><span data-icon="prev"></span></button><button id="tour-play" class="icon-button" type="button" aria-label="Pause tour" data-state="playing"><span class="when-paused" data-icon="play"></span><span class="when-playing" data-icon="pause"></span></button><button id="tour-next" class="icon-button" type="button" aria-label="Next step"><span data-icon="next"></span></button><button id="tour-close" class="icon-button" type="button" aria-label="End tour"><span data-icon="close"></span></button></div><div id="tour-progress" class="tour-progress"><i></i></div></div>
+            <div id="canvas-tools" class="canvas-tools">
+              <button id="zoom-out" type="button" aria-label="Zoom out" title="Zoom out (−)"><span data-icon="minus"></span></button>
+              <span id="zoom-label">100%</span>
+              <button id="zoom-in" type="button" aria-label="Zoom in" title="Zoom in (+)"><span data-icon="plus"></span></button>
+              <button id="fit" type="button" aria-label="Fit diagram" title="Fit (0)"><span data-icon="fit"></span></button>
+              <button id="fullscreen" type="button" aria-label="Fullscreen" title="Fullscreen"><span data-icon="expand"></span></button>
+              <select id="export-format" aria-label="Export diagram"><option value="">Export</option><option value="mmd">Mermaid (.mmd)</option><option value="svg">SVG</option><option value="png">PNG</option></select>
+            </div>
+          </div>
+          <div id="system-empty" class="system-empty" hidden><div class="system-card"><span class="system-orb" data-icon="spark"></span><h3>The whole system, in one picture</h3><p id="system-empty-text"></p><button id="system-generate" class="primary-button" type="button">Generate system map</button><p id="system-cost" class="subtle"></p></div></div>
+          <div id="hierarchy-view" class="hierarchy-view" hidden></div>
+          <div id="extract-view" class="extract-view" hidden aria-label="Export Project"></div>
+          <div id="source-view" class="source-view" hidden>
+            <div class="source-toolbar"><label>Editing <select id="source-target" aria-label="Diagram to edit"></select></label><span id="source-status" class="source-status" aria-live="polite"></span></div>
+            <textarea id="mermaid-source" aria-label="Editable Mermaid source" spellcheck="false"></textarea>
+            <div class="source-actions"><button id="validate-source" class="quiet-button" type="button">Check syntax</button><button id="render-source" class="primary-button" type="button">Preview edits</button><button id="reset-source" class="quiet-button" type="button">Reset</button><button id="copy-source" class="quiet-button" type="button">Copy</button></div>
+            <p class="subtle">Edits change this preview and diagram exports only. Edited nodes lose their source links, because a hand-edited node has no verified file. The .genius package keeps the original analysis.</p>
+          </div>
+          <article id="guide" class="guide prose" hidden></article>
+          <div class="diagram-foot"><span id="diagram-caption"></span><span class="hint">Drag to pan. Click the diagram, then scroll to zoom; Ctrl or ⌘ + scroll zooms anytime.</span></div>
+        </section>
+        <aside class="genius-panel panel" aria-label="Genius">
+          <div class="panel-title"><button class="icon-button collapse" data-collapse="genius" aria-expanded="true" aria-label="Hide Genius" title="Hide Genius"><span data-icon="panel"></span></button><h2>Genius</h2><span id="genius-mode" class="mini-pill">Source mode</span></div>
+          <div class="panel-body">
+            <div class="genius-scroll">
+            <section id="genius-focus" class="genius-focus" hidden aria-live="polite"></section>
+            <section id="build-genius" class="build-genius" aria-labelledby="build-title">
+              <h3 id="build-title"><span data-icon="spark"></span> Build with Genius</h3>
+              <div class="build-grid"><button type="button" data-action="prompt">Development prompt</button><button type="button" data-action="skills">Development skills</button><button type="button" data-action="blueprint">App blueprint</button><button type="button" data-action="roadmap">Implementation roadmap</button><button type="button" data-action="context">AI-ready context</button><button type="button" data-action="pack">Reconstruction pack</button><button type="button" data-action="extract">Export Project</button><button type="button" data-action="clone">Clone repository</button></div>
+              <form id="your-app-form" class="your-app"><label for="your-app">Skills needed to build your app</label><textarea id="your-app" rows="2" maxlength="400" placeholder="Describe your app, e.g. an ESP32 sensor logger with a web dashboard"></textarea><button class="quiet-button" type="submit">List the skills</button></form>
+              <p class="fineprint">Generated from this analysis without a model call. Parts that came from the AI system map are labeled.</p>
+            </section>
+            <div id="genius-content" class="genius-content"></div>
+            </div>
+            <section class="ask" aria-labelledby="ask-title">
+              <h3 id="ask-title">Ask about this repository</h3>
+              <form id="ask-form"><input id="question" aria-label="Question or keyword" placeholder="How is the sensor read? Where is routing set up?" required maxlength="600" autocomplete="off"><div class="ask-actions"><button id="ask-search" class="quiet-button" type="submit">Search sources</button><button id="ask-ai" class="primary-button" type="button" hidden></button><button id="ask-cancel" class="quiet-button" type="button" hidden>Cancel</button></div></form>
+              <p id="ask-disclosure" class="subtle"></p>
+              <div id="search-results" aria-live="polite"></div>
+            </section>
+          </div>
+        </aside>
+      </div>
+      <section id="file-inspector" class="file-inspector panel" hidden aria-labelledby="file-name">
+        <div class="inspector-header"><div><h2 id="file-name"></h2><div id="file-info" class="subtle"></div></div><div class="inspector-actions"><span id="inspector-actions"></span><a id="source-link" class="text-link" target="_blank" rel="noreferrer">Open on GitHub at this commit</a><button id="close-inspector" class="icon-button" type="button" aria-label="Close inspector"><span data-icon="close"></span></button></div></div>
+        <div id="file-relationships" class="file-relationships"></div>
+        <pre id="file-code" tabindex="0"></pre>
+      </section>
     </section>
   </main>
-  <footer><span><span class="spark">⌘</span> Git Architecture Diagram</span><span>Built by <a href="https://github.com/ProAmineOfficial" target="_blank" rel="noreferrer">Amine Saoud ibn al-Bashir</a></span><span>Open source · MIT</span></footer>
-  <dialog id="settings"><form method="dialog"><div class="dialog-heading"><div><span class="eyebrow">GENIUS CONNECTIONS</span><h2>API settings</h2></div><button class="icon-button" aria-label="Close settings">×</button></div><p>Keys stay in this tab. They are sent to this instance for the selected provider and are never saved in browser storage.</p>
-    <label>GitHub token <span>Optional · required for private repositories</span><input id="github-token" type="password" autocomplete="off" placeholder="Repository read access"></label>
-    <div class="provider-section"><label>AI provider<select id="provider"><option value="openai">OpenAI</option><option value="anthropic">Claude · Anthropic</option><option value="gemini">Gemini · Google</option><option value="kimi">Kimi · Moonshot</option></select></label><label><span id="provider-key-label" class="field-title">OpenAI API key</span><input id="api-key" type="password" autocomplete="off" placeholder="Paste your provider API key"></label><label>Model ID<input id="model" list="model-presets" autocomplete="off" spellcheck="false" maxlength="120"><datalist id="model-presets"></datalist><span>Choose a preset or enter another supported text model ID.</span></label><div class="model-help"><span>Presets checked September 2026</span><a id="provider-docs" target="_blank" rel="noreferrer">Provider model catalog ↗</a></div></div>
-    <label>Instance access password <span>Only for protected deployments</span><input id="instance-token" type="password" autocomplete="off"></label><div class="settings-note" id="provider-disclosure"></div><p class="subtle">Enable “Add Genius AI interpretation” under Options to use your key. Changing providers clears the previous provider key.</p><div class="dialog-actions"><button id="clear-credentials" class="quiet-button" type="button">Clear credentials</button><button class="primary-button">Done</button></div></form></dialog>
+  <footer><span>Git Architecture Diagram</span><span>Built by <a href="https://github.com/ProAmineOfficial" target="_blank" rel="noreferrer">Amine Saoud ibn al-Bashir</a></span><span>Open source, MIT license</span></footer>
+  <dialog id="settings" aria-labelledby="settings-title"><form method="dialog">
+    <div class="dialog-heading"><h2 id="settings-title">API settings</h2><button class="icon-button" aria-label="Close settings"><span data-icon="close"></span></button></div>
+    <p>Keys stay in this tab's memory. They are sent to this site's server only for the request you start, forwarded to the provider you choose, and never saved in browser storage, links, or exports.</p>
+    <label>GitHub token <span>Optional. Needed for private repositories and a higher rate limit. A fine-grained token with Contents: read is enough.</span><input id="github-token" type="password" autocomplete="off" placeholder="github_pat_…"></label>
+    <div class="provider-section">
+      <label>AI provider<select id="provider"><option value="openai">OpenAI</option><option value="anthropic">Claude (Anthropic)</option><option value="gemini">Gemini (Google)</option><option value="kimi">Kimi (Moonshot)</option></select></label>
+      <label><span id="provider-key-label" class="field-title">OpenAI API key</span><input id="api-key" type="password" autocomplete="off" placeholder="Paste your provider API key"></label>
+      <label>Model ID<input id="model" list="model-presets" autocomplete="off" spellcheck="false" maxlength="120"><datalist id="model-presets"></datalist><span>Pick a preset or type any text model your account can use. Image models such as DALL·E cannot analyze code.</span></label>
+      <div class="model-help"><span id="preset-note"></span><a id="provider-docs" target="_blank" rel="noreferrer">Provider model list</a></div>
+    </div>
+    <label>Instance password <span>Only for protected deployments.</span><input id="instance-token" type="password" autocomplete="off"></label>
+    <div class="settings-note" id="provider-disclosure"></div>
+    <div class="dialog-actions"><button id="clear-credentials" class="quiet-button" type="button">Remove all keys</button><button class="primary-button">Done</button></div>
+  </form></dialog>
+  <dialog id="doc-dialog" class="doc-dialog" aria-labelledby="doc-title"><form method="dialog">
+    <div class="dialog-heading"><div><h2 id="doc-title"></h2><span id="doc-basis" class="basis-tag"></span></div><button class="icon-button" aria-label="Close"><span data-icon="close"></span></button></div>
+    <p id="doc-note" class="subtle"></p><div id="doc-picture" class="doc-picture" hidden></div>
+    <div class="doc-controls"><label id="doc-mode-label" hidden>Mode <select id="doc-mode"></select></label><label>Format <select id="doc-format"></select></label></div>
+    <pre id="doc-text" tabindex="0"></pre>
+    <div class="dialog-actions"><button id="doc-copy" class="quiet-button" type="button"><span data-icon="link"></span> Copy</button><button id="doc-download" class="primary-button" type="button"><span data-icon="download"></span> Download</button></div>
+  </form></dialog>
   <div id="toast" class="toast" role="status" hidden></div>
 </body>
 </html>

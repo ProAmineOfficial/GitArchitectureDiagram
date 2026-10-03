@@ -4,21 +4,23 @@
 
 The browser sends repository identifiers, options, and any supplied credentials to the instance you are using. The instance reads metadata and source from GitHub. Repository code is never installed or executed. Browser dependencies are served locally; there is no analytics or external font service in the application.
 
-The selected provider (OpenAI, Anthropic, Google, or Moonshot) is contacted only when AI interpretation is explicitly enabled and an authorized key plus model is available. An interpretation receives repository identity, description, coverage, dependency evidence, and selected source excerpts. A deliberately submitted AI question rereads up to eight verified files at the same commit and sends bounded relevant excerpts. Free keyword search and source browsing make no model calls. OpenAI requests set `store: false`; this does not override any provider's account policies or contractual data handling terms. File-name exclusions do not guarantee that source code contains no secrets. Review your repository and use AI only when authorized to share those excerpts.
+The selected provider (OpenAI, Anthropic, Google, or Moonshot) is contacted only when you enable AI interpretation or press an **Ask** button, and an authorized key plus model is available. A question sends only the question and up to 12 excerpts (at most 32,000 characters) chosen in your browser from files already read; the server validates the size and forwards them to the provider without storing them. It receives repository identity, description, coverage, dependency evidence, and selected source excerpts. OpenAI requests set `store: false`; this does not override any provider's account policies or contractual data handling terms. File-name exclusions do not guarantee that source code contains no secrets. Review your repository and use AI only when authorized to share those excerpts.
 
 ## Credentials and private repositories
 
 Switching providers clears the previous provider key. Fixed official API endpoints prevent an input URL from redirecting credentials.
 
-Credentials are held in browser input fields and request memory, not browser storage or report exports. Only the color theme is saved in `localStorage`. The application does not log request bodies or keys. A hosting operator or reverse proxy must maintain equivalent controls.
+Credentials are held in browser input fields and request memory, not browser storage or report exports. **Project extract, entire repository:** the server downloads the analyzed commit's archive from GitHub (one `api.github.com` request redirected to `codeload.github.com`), reads it in memory under size limits, returns the selected text, and keeps nothing. Your GitHub token, if given, is sent to `api.github.com` only. Credential files (`.env`, private keys, `.npmrc`, and similar) are never read.
+
+Only interface preferences are saved in `localStorage`: the color theme and whether each side panel is collapsed. The current tab also keeps up to four finished analyses in memory so Back and Forward do not repeat GitHub requests; **Remove all keys** clears them, and closing the tab discards them. The application does not log request bodies or keys. A hosting operator or reverse proxy must maintain equivalent controls.
 
 A server-wide GitHub token cannot disclose a private repository: the caller must supply their own token. GitHub still decides which resources that token may read. Use the least repository read access needed. Never paste credentials into the repository URL, a query parameter, or a public issue.
 
-On the hosted Worker, anonymous public structural reports can enter a short-lived cache in the current isolate. It expires after ten minutes, holds at most twelve reports, and is not persistent or shared between isolates. There is no hosted server session map. Private reports and any analysis using a caller or server GitHub token bypass the shared cache. Paid interpretations and question answers are not cached. Evidence search uses source already held in the browser tab.
+On the hosted Worker, neither public nor private reports enter a persistent report cache or server session map. Evidence search uses the source already held in the browser tab.
 
 On the local Node server, private reports do not enter the shared public cache. They remain in their browser tab and in the server's bounded session map for evidence search. Sessions have a ten-minute access lifetime and unguessable IDs. Expired entries are cleaned up on subsequent requests; a process restart clears memory. Treat session IDs and downloaded source/documentation as sensitive. This initial version does not provide multi-user accounts or persistent encrypted storage.
 
-On the local Node server, anonymous public structural reports are cached in memory by analyzer version, repository, commit, scope, and file budget for ten minutes, with at most twelve retained entries. AI output is not inserted into this shared cache. Refresh bypasses the public cache.
+On the local Node server, public structural reports are cached in memory by repository, commit, scope, and file budget for ten minutes, with at most twelve retained entries. AI output is not inserted into this shared cache. Refresh bypasses the public cache.
 
 ## What is and is not verified
 
@@ -26,6 +28,6 @@ GitHub file bytes are checked against their Git blob SHA. Source links are pinne
 
 Dependency extraction recognizes common literal JS/TS imports, Python imports, and C/C++ includes. It is not an AST or compiler and may miss aliases, multiline constructs, dynamic behavior, or language-specific resolution. An import is not proof of a runtime call. A documented wiring diagram is authored intent, not a hardware safety verification.
 
-AI graph references are checked against actual repository paths and excerpt line ranges; graph edges also require an exact source-line quote. AI question findings require exact quoted citations within the excerpts sent for that question. Findings with invalid citations are dropped. Concepts without source paths remain visibly unmapped. A valid citation can still accompany an incorrect explanation. AI interpretations, recommendations, and proposed relationships require review. Failed or incomplete model calls leave the structural result available.
+AI references are checked against actual repository paths and excerpt line ranges. A valid citation can still accompany an incorrect explanation. AI interpretations, recommendations, and proposed relationships require review. Failed or incomplete model calls leave the structural result available.
 
 Mermaid renders with strict security settings, bounded graph size, sanitized SVG, and rejected configuration directives. Reports use sanitized Markdown, and repository images are not loaded in the generated guide. Unsupported author diagrams remain inspectable as source.

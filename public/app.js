@@ -1,136 +1,503 @@
 // Project: Git Architecture Diagram | Component: Repository workspace | Author: Amine Saoud ibn al-Bashir.
-import { marked } from '/vendor/marked/marked.esm.js'; // Render the generated guide as Markdown.
-import DOMPurify from '/vendor/dompurify/purify.es.mjs'; // Sanitize Markdown output before displaying repository-derived text.
-import { renderDiagram, redrawDiagram, clearDiagram, getSource, getSVG, zoom, fit, selectTarget, renderPreview } from './diagram.js'; // Share the interactive Mermaid canvas.
-import { searchEvidence } from '/shared/evidence.mjs'; // Search only the current browser-held source without relying on server session affinity.
-import { exportGuide, exportDiagram } from './exports.js'; // Share local, portable report and diagram downloads.
-import { readAnalysisResponse, readQuestionResponse } from './analysis-stream.js'; // Parse the streamed API contract and handle HTML hosting errors safely.
-import { PROVIDERS } from './providers.js'; // Offer the same provider choices as the analysis server.
-import { pinnedSourceURL } from './source-navigation.js'; // Share immutable path and line navigation.
-import { parseWorkspaceRoute, parseGitHubInput, analysisInputForRoute, resolveRepositoryState, buildWorkspaceURL } from './route-state.js'; // Keep branch, snapshot, source selection, and browser history separate.
-import { EXAMPLES } from './examples.js'; // Show measured public analysis snapshots, never invented results.
-import { icon, installIcons } from './icons.js'; // Use local vector icons throughout the workspace.
-const $ = selector => document.querySelector(selector); const $$ = selector => [...document.querySelectorAll(selector)]; // Keep DOM queries compact and explicit.
-let result = null; let view = 'architecture'; let controller = null; let toastTimer; let currentPath = ''; let treeModel = null; let routeState = null; let requestId = 0; let sourceController = null; let questionController = null; let selectedTarget = null; let sourceCache = new Map(); let previewId = 0; // Retain only the current tab's analysis and UI state.
-function node(tag, text, className) { const element = document.createElement(tag); if (text !== undefined) element.textContent = text; if (className) element.className = className; return element; } // Insert untrusted text using textContent exclusively.
-function toast(text) { $('#toast').textContent = text; $('#toast').hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { $('#toast').hidden = true; }, 4000); } // Announce short action outcomes accessibly.
-function status(text, error = false) { $('#status').hidden = false; $('#status').classList.toggle('error', error); $('#status-text').textContent = text; } // Show genuine analysis progress and actionable errors.
-function sourceURL(path, line) { return pinnedSourceURL(result.repository, { path, line, type: result.repository.entries.find(item => item.path === path)?.type === 'tree' ? 'tree' : 'blob' }); } // Always navigate to the exact analyzed source revision.
-function headers() { return { 'Content-Type': 'application/json', ...($('#instance-token').value ? { 'X-Instance-Token': $('#instance-token').value } : {}) }; } // Transmit optional access credentials only in request headers.
-function settings() { return { repository: $('#repository').value.trim(), ref: $('#ref').value.trim(), scope: $('#scope').value.trim(), maxFiles: Number($('#max-files').value), ai: $('#use-ai').checked, githubToken: $('#github-token').value.trim(), apiKey: $('#api-key').value.trim(), model: $('#model').value.trim(), provider: $('#provider').value }; } // Read credentials from memory-backed inputs without persisting them.
-function setBusy(busy) { $('#analyze').disabled = busy; $('#cancel').hidden = !busy; $('#refresh').disabled = busy; $('#try-example').disabled = busy; $('#analyze').textContent = busy ? 'Analyzing…' : 'Analyze repository ↗'; $('#workspace').setAttribute('aria-busy', String(busy)); } // Prevent conflicting analysis runs while preserving cancellation.
-function writeRoute(mode = 'replace') { if (!routeState) return; const url = buildWorkspaceURL(routeState, location.origin); if (mode === 'push' && url !== location.href) history.pushState({}, '', url); else history.replaceState({}, '', url); } // Serialize only allowlisted route state, never credentials or paid settings.
-async function runRoute(state, { historyMode = 'replace', refresh = false, ai = false } = {}) { // Coordinate cancellable navigation and prevent outdated requests from replacing current results.
-  try { buildWorkspaceURL(state, location.origin); } catch (error) { status(error.message, true); return; } // Report invalid form values before changing history or canceling a valid request.
-  const id = ++requestId; controller?.abort(); sourceController?.abort(); questionController?.abort(); const active = new AbortController(); controller = active; routeState = state; writeRoute(historyMode); setBusy(true); status('Connecting to GitHub…'); // Start a new navigation with its own generation guard.
-  $('#workspace').hidden = true; $('#welcome').hidden = true; $('#examples-view').hidden = true; const input = { ...settings(), ...analysisInputForRoute(state, { refresh }), ai }; // Automatic navigation and history restoration never purchase model calls.
-  try { const response = await fetch('/api/analyze', { method: 'POST', headers: headers(), body: JSON.stringify(input), signal: active.signal }); const report = await readAnalysisResponse(response, event => { if (id === requestId) status(`${event.stage} — ${event.detail || ''}`); }); if (id !== requestId || active.signal.aborted) return; result = report; routeState = resolveRepositoryState(state, report.repository, { files: report.coverage.maxFiles }); showResult(); $('#status').hidden = true; } catch (error) { if (id === requestId) status(active.signal.aborted ? 'Analysis canceled.' : error.message, true); } finally { if (id === requestId) { controller = null; setBusy(false); } } // Ignore stale callbacks even if an upstream service finishes after cancellation.
-} // End route analysis.
-function analyze(refresh = false) { // Build a deliberate analysis request from the current form and any pasted GitHub anchor.
-  try { let state = parseGitHubInput($('#repository').value, { maxFiles: Number($('#max-files').max) }); if (refresh && routeState?.kind === 'repository') state = { ...routeState }; else { state.selectedRef = $('#ref').value.trim() || state.selectedRef; state.snapshotRef = ''; state.scope = $('#scope').value.trim() || state.scope; } state.files = Number($('#max-files').value); return runRoute(state, { historyMode: refresh ? 'replace' : 'push', refresh, ai: !refresh && $('#use-ai').checked }); } catch (error) { status(error.message, true); } // Refresh reads the selected branch without repeating a paid interpretation.
-} // End manual analysis setup.
-function showResult() { // Populate every panel from the actual server result.
-  $('#welcome').hidden = true; $('#examples-view').hidden = true; $('#workspace').hidden = false; $('#file-inspector').hidden = true; $('#search-results').replaceChildren(); currentPath = ''; selectedTarget = null; sourceCache = new Map(); // Clear stale repository-specific UI.
-  $('#repo-title').textContent = result.repository.fullName; $('#repo-description').textContent = result.repository.description || 'Explore this repository through its source and documentation.'; $('#commit').textContent = `${result.repository.private ? 'Private · ' : ''}${result.repository.sha.slice(0, 7)}`; $('#commit').title = `${result.repository.branch} · ${result.repository.sha}`; // Display snapshot identity and visibility.
-  const metrics = [[result.coverage.listedFiles, 'files listed'], [result.coverage.readFiles, 'files read'], [result.dependencies.length, 'local references'], [result.documented.length, 'documented diagrams'], [result.cacheHit ? 'Cached' : 'Fresh', `snapshot · ${result.repository.scope || 'entire repository'}`]]; $('#metrics').replaceChildren(...metrics.map(([value, label]) => { const item = node('span', undefined, 'metric'); item.append(node('strong', String(value)), document.createTextNode(label)); return item; })); // Show measured coverage rather than invented percentages.
-  $('#architecture-mode').value = 'overview'; $('#architecture-mode option[value=ai]').disabled = !result.ai; // Offer the inferred architecture only when the provider returned a validated interpretation.
-  $('#docs-count').textContent = result.documented.length; $('#tree-count').textContent = result.repository.entries.length; $('#tree-foot').textContent = `${result.coverage.readFiles} files read · ${result.coverage.treeTruncated ? 'partial tree' : 'listed tree'} · shaded files are unread`; $('#tree-search').value = ''; $('#tree-filter').value = 'all'; // Label tree coverage explicitly.
-  treeModel = buildTree(); renderTree(); renderGenius(); updateQuestionDisclosure(); $('#document-select').replaceChildren(...result.documented.map((item, index) => { const option = node('option', `${item.path}:${item.line}`); option.value = index; return option; })); // Build the synchronized browsing panels.
-  $('#guide').innerHTML = DOMPurify.sanitize(marked.parse(result.guide), { FORBID_TAGS: ['img', 'iframe', 'video', 'audio', 'form', 'style', 'input'], FORBID_ATTR: ['style'] }); $('#guide').querySelectorAll('a').forEach(anchor => { if (!anchor.href.startsWith('https://github.com/')) anchor.removeAttribute('href'); anchor.target = '_blank'; anchor.rel = 'noreferrer'; }); // Present the guide without remote tracking images or active content.
-  $('#repository').value = routeState.repository; $('#ref').value = routeState.selectedRef; $('#scope').value = routeState.scope; $('#max-files').value = routeState.files; $('#refresh').textContent = /^[a-f0-9]{40}$/i.test(routeState.selectedRef) ? '↻ Refresh snapshot' : '↻ Check latest commit'; document.title = `${result.repository.fullName} — Git Architecture Diagram`; renderBreadcrumbs(); writeRoute(); // Keep the chosen reference distinct from the evidence commit.
-  const target = routeState.selectedPath ? { path: routeState.selectedPath, type: routeState.selectedType, line: routeState.line, endLine: routeState.endLine } : null; const initialView = routeState.view !== 'architecture' ? routeState.view : result.repository.scope && result.documented.length && !result.dependencies.length ? 'documented' : 'architecture'; selectView(initialView); if (target) inspectFile(target); // Restore shared views and exact source line selections after analysis.
-} // End report presentation.
-function buildTree() { const root = { children: new Map(), path: '' }; for (const entry of result.repository.entries) { const parts = entry.path.split('/'); let branch = root; parts.forEach((name, index) => { if (!branch.children.has(name)) branch.children.set(name, { name, path: parts.slice(0, index + 1).join('/'), children: new Map(), type: 'tree' }); branch = branch.children.get(name); if (index === parts.length - 1) branch.type = entry.type; }); } return root; } // Construct an accessible tree from actual GitHub entries.
-function fileButton(path, label = path.split('/').pop()) { const button = node('button', undefined, 'tree-file'); button.append(icon(/\.(?:[cm]?[jt]sx?|py|c|cpp|h|hpp|rs|go|java)$/.test(path) ? 'code' : 'file'), node('span', label)); button.title = path; button.dataset.path = path; button.dataset.read = String(result.files.some(file => file.path === path)); button.classList.toggle('selected', path === currentPath); button.addEventListener('click', () => inspectFile(path)); return button; } // Keep the classic tree while distinguishing source and document files.
+// Routing, analysis runs, and the three-panel workspace. Repository-derived text is always inserted with
+// textContent (never innerHTML) except the sanitized guide, and every source link is pinned to the analyzed commit.
+import { marked } from '/vendor/marked/marked.esm.js';
+import DOMPurify from '/vendor/dompurify/purify.es.mjs';
+import { renderDiagram, redrawDiagram, clearDiagram, getSource, getSVG, zoom, fit, validateSource, lightTint, decorate } from './diagram.js';
+import { startTour, stopTour, tourActive } from './tour.js';
+import { setupExtras, openDoc } from './extras.js';
+import { setupExtractView } from './extract-view.js';
+import { setupDock } from './dock.js';
+import { exportGuide, exportDiagram } from './exports.js';
+import { readAnalysisResponse } from './analysis-stream.js';
+import { PROVIDERS } from './providers.js';
+import { pinnedSourceURL } from './source-navigation.js';
+import { icon, installIcons } from './icons.js';
+import { parseRoute, workspacePath, inputToPath, lineAnchor, DEFAULT_FILES } from './route.js';
+import { setupAsk } from './ask.js';
+import { renderBrowse, renderStarters } from './browse.js';
 
-function focusScope(scope) { if (!result || !routeState) return; const next = { ...routeState, scope, selectedPath: '', selectedType: 'tree', line: null, endLine: null, view: 'architecture' }; runRoute(next, { historyMode: 'push' }); } // Drill into a verified folder at the same commit with no implicit model charge.
-function renderBreadcrumbs() { const panel = $('#breadcrumbs'); panel.replaceChildren(); const root = node('button', result.repository.repo); root.addEventListener('click', () => focusScope('')); panel.append(root); const segments = result.repository.scope.split('/').filter(Boolean); segments.forEach((part, index) => { panel.append(node('span', '/')); const button = node('button', part); button.addEventListener('click', () => focusScope(segments.slice(0, index + 1).join('/'))); panel.append(button); }); } // Make repository scope visible and reversible.
-function appendBranches(parent, branch, depth = 0) { // Populate a classic folder tree lazily while exposing folder inspection and drill-down.
-  const children = [...branch.children.values()].sort((a, b) => Number(b.type === 'tree') - Number(a.type === 'tree') || a.name.localeCompare(b.name)); children.forEach(child => { if (child.type !== 'tree') { parent.append(fileButton(child.path, child.name + (child.type === 'commit' ? ' ↗' : ''))); return; } const details = node('details'); details.dataset.path = child.path; const summary = node('summary'); summary.append(icon('folder'), node('span', child.name)); const inspect = node('button', '↗', 'folder-focus'); inspect.title = `Inspect ${child.path}`; inspect.setAttribute('aria-label', `Inspect folder ${child.path}`); inspect.addEventListener('click', event => { event.preventDefault(); event.stopPropagation(); inspectFile({ path: child.path, type: 'tree' }); }); summary.append(inspect); details.append(summary); let populated = false; const populate = () => { if (populated) return; populated = true; const nested = node('div'); appendBranches(nested, child, depth + 1); details.append(nested); }; details.addEventListener('reveal-folder', populate); details.addEventListener('toggle', () => { if (details.open) populate(); }); if (depth === 0 && ['src', 'docs', 'public'].includes(child.name)) { populate(); details.open = true; } parent.append(details); }); // Keep large inventories responsive without hiding the full listing.
-} // End folder construction.
-function renderTree() { const query = $('#tree-search').value.toLowerCase().trim(); const filter = $('#tree-filter').value; $('#tree').replaceChildren(); if (query || filter !== 'all') { const read = new Set(result.files.map(file => file.path)); const hits = result.repository.entries.filter(entry => entry.type !== 'tree' && entry.path.toLowerCase().includes(query) && (filter === 'all' || filter === 'read' && read.has(entry.path) || filter === 'unread' && !read.has(entry.path) || filter === 'docs' && /\.(md|mdx|mmd|mermaid|rst|txt)$/i.test(entry.path) || filter === 'code' && /\.(?:[cm]?[jt]sx?|py|c|cpp|h|hpp|rs|go|java|vue|svelte)$/i.test(entry.path))); $('#tree').append(node('p', `${hits.length} matches${hits.length > 150 ? ' · showing first 150' : ''}`, 'subtle'), ...hits.slice(0, 150).map(entry => fileButton(entry.path, entry.path))); return; } const root = node('div', undefined, 'tree-root'); appendBranches(root, treeModel); $('#tree').append(root); } // Filter inventory by real paths and analysis coverage.
-function revealInTree(path) { if ($('#tree-search').value || $('#tree-filter').value !== 'all') { $('#tree-search').value = ''; $('#tree-filter').value = 'all'; renderTree(); } $$('#tree summary.selected').forEach(summary => summary.classList.remove('selected')); const parts = path.split('/'); for (let index = 1; index <= parts.length; index++) { const folder = $$('#tree details').find(item => item.dataset.path === parts.slice(0, index).join('/')); if (folder) { folder.dispatchEvent(new Event('reveal-folder')); folder.open = true; folder.querySelector('summary').classList.toggle('selected', folder.dataset.path === path); } } $$('.tree-file').forEach(button => button.classList.toggle('selected', button.dataset.path === path)); } // Synchronize both folder and file selections with the graph.
-function navigateTarget(target) { inspectFile(target); if ($('#node-action').value === 'github') window.open(pinnedSourceURL(result.repository, target), '_blank', 'noopener,noreferrer'); } // Always synchronize the workspace before optionally opening GitHub.
-function displaySource(file, target) { // Render a bounded line window centered on a verified requested source location.
-  const lines = file.content.split('\n'); const validLine = Number.isInteger(target.line) && target.line >= 1 && target.line <= lines.length; const start = validLine ? Math.max(0, target.line - 31) : 0; const end = Math.min(lines.length, start + 240); const code = $('#file-code'); code.replaceChildren(); // Avoid hiding requested lines after the initial 240-line window.
-  for (let index = start; index < end; index++) { const row = node('span', undefined, 'source-line'); row.dataset.highlight = String(validLine && index + 1 >= target.line && index + 1 <= (target.endLine || target.line)); const line = node('a', String(index + 1), 'source-line-number'); line.href = pinnedSourceURL(result.repository, { ...target, line: index + 1, endLine: index + 1 }); line.addEventListener('click', event => { if (event.ctrlKey || event.metaKey) return; event.preventDefault(); inspectFile({ ...target, line: index + 1, endLine: index + 1 }); }); row.append(line, document.createTextNode(lines[index])); code.append(row); } // Construct inert source text and independently generated line links.
-  $('#file-info').textContent = `${file.size} bytes · lines ${start + 1}–${end} of ${lines.length} · blob ${file.sha.slice(0, 10)}${target.line && !validLine ? ' · requested line is outside this file' : ''}${result.files.some(item => item.path === file.path) ? '' : ' · read on demand; original analysis coverage unchanged'}`; // Report exact source coverage and distinguish subsequent browsing.
-} // End source-line rendering.
-function inspectFile(input) { // Select a verified file or folder across the tree, diagram, inspector, and share URL.
-  if (!result) return; const target = typeof input === 'string' ? { path: input, type: 'blob' } : input; const entry = result.repository.entries.find(item => item.path === target.path); const syntheticFolder = !entry && (!target.path || result.repository.entries.some(item => item.path.startsWith(`${target.path}/`))); if (!entry && !syntheticFolder) { toast('This diagram node has no verified path in the current snapshot.'); return; } target.type = entry?.type === 'tree' || syntheticFolder ? 'tree' : 'blob'; selectedTarget = target; const path = target.path; currentPath = path; const folder = target.type === 'tree'; const file = result.files.find(item => item.path === path) || sourceCache.get(path); const edges = result.dependencies.filter(edge => edge.from === path || edge.to === path); // Require actual source membership before offering navigation.
-  $('#file-inspector').hidden = false; $('#file-name').textContent = path || result.repository.fullName; $('#source-link').href = pinnedSourceURL(result.repository, target); $('#file-relationships').replaceChildren(); $('#source-read-status').textContent = ''; $('#load-source').hidden = folder || Boolean(file); $('#focus-folder').textContent = folder ? 'Analyze this folder' : 'Analyze parent folder'; // Keep source reads explicit and free of AI calls.
-  if (file && !folder) displaySource(file, target); else { $('#file-info').textContent = folder ? 'Listed folder at the analyzed commit. Select Analyze this folder to focus the diagrams.' : 'Listed but not read in this analysis. You can read this file without using AI.'; $('#file-code').textContent = folder ? result.repository.entries.filter(item => !path || item.path.startsWith(path + '/')).slice(0, 120).map(item => item.path).join('\n') : 'No source preview loaded.'; } // Never fabricate unread contents.
-  edges.slice(0, 15).forEach(edge => { const row = node('button', `${edge.from}:${edge.line} ${edge.kind === 'include' ? 'includes' : 'imports'} ${edge.to}`, 'reference-link'); row.addEventListener('click', () => inspectFile({ path: edge.from, line: edge.line, type: 'blob' })); $('#file-relationships').append(row); }); // Navigate to actual dependency evidence lines inside the workspace.
-  routeState = { ...routeState, selectedPath: path, selectedType: target.type, line: folder ? null : target.line || null, endLine: folder ? null : target.endLine || target.line || null }; writeRoute(); revealInTree(path); selectTarget(path); $('#file-inspector').scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'nearest' }); // Preserve exact source selections when sharing and switching views.
-} // End synchronized source inspection.
-async function readJSONResponse(response) { if (!(response.headers.get('Content-Type') || '').includes('json')) throw new Error(`The service returned a page instead of data (HTTP ${response.status}). Try again or check the deployment.`); let data; try { data = await response.json(); } catch { throw new Error('The service returned incomplete data. Please try again.'); } if (!response.ok) throw new Error(data.error || `The request failed (HTTP ${response.status}).`); return data; } // Protect nonstreaming endpoints from raw JSON parser failures.
-function renderGenius() { // Render evidence-backed findings and clearly separated optional inference.
-  const panel = $('#genius-content'); panel.replaceChildren(); $('#genius-mode').textContent = result.ai ? 'AI + SOURCE' : 'SOURCE MODE'; panel.append(node('h3', 'The project at a glance'), node('p', result.summary)); // Summarize measured analysis coverage.
-  if (result.technologies.length) { panel.append(node('h3', 'Technology hints')); result.technologies.forEach(item => panel.append(node('div', item, 'genius-item'))); } // Label manifest-derived stack hints.
-  panel.append(node('h3', 'Where to start')); if (!result.entrypoints.length) panel.append(node('p', 'No entrypoint filename was identified in the sampled files. Start with the README or narrow the scope.')); result.entrypoints.slice(0, 6).forEach(item => { const paragraph = node('div', undefined, 'genius-item'); const button = node('button', item.path, 'genius-file'); button.title = item.note; button.addEventListener('click', () => inspectFile(item.path)); paragraph.append(button); panel.append(paragraph); }); if (result.entrypoints.length) panel.append(node('p', 'Entrypoint candidates by filename; execution was not tested.')); // Avoid presenting filename heuristics as runtime proof.
-  panel.append(node('h3', 'Suggested reading order')); (result.readingOrder || []).forEach(item => { const button = node('button', item.path, 'genius-file'); button.addEventListener('click', () => inspectFile({ path: item.path, line: item.line, type: 'blob' })); const row = node('div', undefined, 'genius-item'); row.append(button, node('small', ' — ' + item.reason)); panel.append(row); }); panel.append(node('h3', 'Documentation inventory')); result.checks.forEach(check => { const row = node('div', undefined, 'check-row'); row.append(node('span', check.name), node('span', check.found ? '✓ Present' : 'Not found')); panel.append(row); }); // Show simple presence checks with accurate wording.
-  if (result.ai) { panel.append(node('h3', 'Genius AI interpretation'), node('p', result.ai.overview)); result.ai.components.slice(0, 8).forEach(item => { const row = node('div', undefined, 'genius-item'); const link = node('a', item.path); link.href = sourceURL(item.path); link.target = '_blank'; link.rel = 'noreferrer'; row.append(link, document.createTextNode(` — ${item.description}`)); panel.append(row); }); if (result.ai.relationships.length) { panel.append(node('h3', 'Inferred relationships')); result.ai.relationships.slice(0, 8).forEach(item => { const link = node('a', `${item.from} → ${item.to}: ${item.description}`, 'reference-link'); link.href = sourceURL(item.evidencePath, item.evidenceLine); link.target = '_blank'; link.rel = 'noreferrer'; panel.append(link); }); } panel.append(node('h3', 'Suggested improvements')); result.ai.recommendations.forEach(item => panel.append(node('p', item))); panel.append(node('p', `${result.ai.providerName || 'AI'} · ${result.ai.model}. Interpretations require source review.`)); } // Keep paid AI interpretation distinct from extracted facts.
-  const warnings = node('ul', undefined, 'warning-list'); [...result.warnings, ...(result.ai?.limitations || [])].forEach(item => warnings.append(node('li', item))); panel.append(node('h3', 'Analysis coverage'), warnings); // Make known limits visible alongside the findings.
-} // End Genius panel rendering.
-function architecture() { return $('#architecture-mode').value === 'ai' && result?.ai?.diagrams ? result.ai.diagrams : $('#architecture-mode').value === 'overview' ? result?.diagrams.overview || result?.diagrams : result?.diagrams; } // Keep model interpretation separate from extracted references.
-function sourcePaths() { return view === 'architecture' ? architecture()?.nodePaths || {} : view === 'mindmap' ? result.diagrams.mindmapPaths || {} : {}; } // Never guess links for repository-authored diagrams.
-function originalSource() { if (!result) return ''; return view === 'documented' ? result.documented[Number($('#document-select').value)]?.source || '' : view === 'architecture' ? architecture()?.architecture || '' : result.diagrams[view] || ''; } // Retrieve the original source for the selected analysis layer.
+const $ = selector => document.querySelector(selector);
+const $$ = selector => [...document.querySelectorAll(selector)];
+const state = { result: null, view: 'architecture', mode: 'overview', drill: '', controller: null, filter: 'all', current: null, edits: new Map(), cache: new Map(), displayKey: '', maxFiles: 120 };
+const CODE = /\.(m?[jc]?[jt]sx?|py|c|cc|cpp|h|hpp|ino|rs|go|java|kt|cs|rb|php|swift|vue|svelte)$/i;
+const DOC = /\.(md|mdx|mmd|rst|txt)$/i;
+const VIEWS = new Set(['system', 'architecture', 'hierarchy', 'mindmap', 'documented', 'source', 'guide', 'extract']);
+const reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-async function selectView(next) { // Switch between architecture, tree-derived mind maps, existing diagrams, and the guide.
-  view = next; if (routeState) { routeState.view = view; writeRoute(); } $$('.view-tabs button').forEach(button => { const selected = button.dataset.view === view; button.setAttribute('aria-selected', String(selected)); button.tabIndex = selected ? 0 : -1; }); // Maintain keyboard-accessible tab selection.
-  const guide = view === 'guide'; $('#guide').hidden = !guide; $('#canvas').hidden = guide; $('#source-toggle').hidden = guide; $('#document-picker').hidden = view !== 'documented' || !result.documented.length; $('#source-panel').hidden = true; // Display only the relevant reading surface.
-  const inferred = view === 'architecture' && $('#architecture-mode').value === 'ai'; $('#architecture-mode').closest('label').hidden = view !== 'architecture'; $('.diagram-options').hidden = guide; const labels = { architecture: inferred ? 'Genius interpretation · review the evidence' : $('#architecture-mode').value === 'overview' ? 'Component inventory · sampled source relationships' : 'Located imports / includes', mindmap: '● Derived from the repository tree', documented: '● Written by the repository author', guide: '● Reproducible Genius report' }; $('#diagram-basis').textContent = labels[view]; $('#diagram-caption').textContent = view === 'architecture' ? `${architecture().displayedNodes ?? architecture().displayedFiles} nodes · ${architecture().omittedNodes} omitted · ${inferred ? `AI interpretation · ${architecture().unmappedNodes || 0} concepts without source mappings` : 'source references'}` : view === 'mindmap' ? 'Folder hierarchy · bounded preview; full inventory in the tree' : view === 'documented' ? 'Author-written diagram · node paths are not independently mapped' : 'Download the complete guide with Export .genius'; // State the provenance and scope of the current view.
-  const documented = view === 'documented' ? result.documented[Number($('#document-select').value)] : null; $('#diagram-source-link').hidden = !documented; if (documented) $('#diagram-source-link').href = sourceURL(documented.path, documented.line); const legend = $('#diagram-legend'); legend.hidden = !['architecture', 'mindmap'].includes(view); legend.replaceChildren(node('span', view === 'mindmap' ? 'Folder colors · listed files' : inferred ? 'Role colors · AI interpretation' : 'Role colors · path hints', 'legend-label'), ...((view === 'mindmap' ? result.diagrams.mindmapLegend : architecture()?.legend) || []).map(item => { const entry = node('span', undefined, 'legend-item'); const swatch = node('i'); swatch.style.backgroundColor = item.stroke; entry.append(swatch, document.createTextNode(`${item.label} (${item.count})`)); return entry; })); // Explain role colors without suggesting verified program behavior.
-  if (guide) return; const source = originalSource(); $('#mermaid-source').value = source; if (!source) { clearDiagram('No Mermaid diagrams were found in the files read.\nChoose a documentation folder or increase the file budget.'); return; } await renderDiagram(source, sourcePaths(), navigateTarget); selectTarget(currentPath); // Render only actual analysis or author-provided diagrams.
-} // End view selection.
-$('#analyze-form').addEventListener('submit', event => { event.preventDefault(); analyze(); }); $('#cancel').addEventListener('click', () => controller?.abort()); $('#refresh').addEventListener('click', () => analyze(true)); // Wire repository analysis, cancellation, and explicit refresh.
-$('#try-example').addEventListener('click', () => { $('#repository').value = 'ProAmineOfficial/NanoKit-ESP32'; $('#ref').value = ''; $('#scope').value = ''; analyze(); }); // Analyze the actual inspiration repository on demand.
-$('#options-toggle').addEventListener('click', () => { $('#analysis-options').hidden = !$('#analysis-options').hidden; $('#options-toggle').setAttribute('aria-expanded', String(!$('#analysis-options').hidden)); }); // Reveal optional analysis controls without cluttering the main form.
-$('#tree-search').addEventListener('input', () => { if (result) renderTree(); }); $('#close-inspector').addEventListener('click', () => { $('#file-inspector').hidden = true; }); // Wire repository filtering and inspector dismissal.
-$$('.view-tabs button').forEach(button => { button.addEventListener('click', () => selectView(button.dataset.view)); button.addEventListener('keydown', event => { if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return; event.preventDefault(); const tabs = $$('.view-tabs button'); const index = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : (tabs.indexOf(button) + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length; tabs[index].focus(); selectView(tabs[index].dataset.view); }); }); // Support mouse and standard keyboard tab navigation.
-$('#architecture-mode').addEventListener('change', () => selectView('architecture')); // Switch between extracted and interpreted architecture explicitly.
-$('#document-select').addEventListener('change', () => selectView('documented')); $('#source-toggle').addEventListener('click', () => { $('#source-panel').hidden = !$('#source-panel').hidden; }); // Expose original Mermaid source and authored diagram choices.
-$('#render-source').addEventListener('click', () => { renderDiagram($('#mermaid-source').value); $('#diagram-caption').textContent = 'Edited preview · source mappings disabled until Reset'; }); $('#reset-source').addEventListener('click', () => { $('#mermaid-source').value = originalSource(); renderDiagram(originalSource(), sourcePaths(), navigateTarget); }); // Keep user edits separate from the original generated analysis.
-$('#zoom-in').addEventListener('click', () => zoom(1.2)); $('#zoom-out').addEventListener('click', () => zoom(1 / 1.2)); $('#fit').addEventListener('click', fit); $('#fullscreen').addEventListener('click', async () => { try { if (document.fullscreenElement) await document.exitFullscreen(); else await $('#canvas').requestFullscreen(); } catch { toast('Fullscreen is unavailable in this browser.'); } }); // Connect diagram navigation controls.
-$('#export-guide').addEventListener('click', () => { if (result) exportGuide(result); }); $('#export-format').addEventListener('change', async event => { const format = event.target.value; event.target.value = ''; if (!format || !result) return; try { await exportDiagram(format, getSource(), getSVG(), `${result.repository.repo}-${view}`); } catch (error) { toast(error.message); } }); // Export real analysis packages or the current diagram.
-$('#share').addEventListener('click', async () => { try { await navigator.clipboard.writeText(location.href); toast('Snapshot link copied. Private repositories require the recipient’s own access.'); } catch { toast('Copy the current browser address to share this snapshot.'); } }); // Share only repository identity and options, never tokens.
-$('#settings-open').addEventListener('click', () => $('#settings').showModal()); $('#clear-credentials').addEventListener('click', () => { ['github-token', 'api-key', 'instance-token'].forEach(id => { $(`#${id}`).value = ''; }); toast('Credentials cleared from this tab.'); }); // Provide explicit control over temporary credentials.
-try { document.documentElement.dataset.theme = localStorage.getItem('gad-theme') === 'light' ? 'light' : 'dark'; } catch { /* Keep the default theme when browser storage is unavailable. */ } // Store only the harmless visual preference.
-$('#theme').addEventListener('click', () => { const theme = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'; document.documentElement.dataset.theme = theme; try { localStorage.setItem('gad-theme', theme); } catch { /* Theme changes still work without storage. */ } if (result && view !== 'guide') redrawDiagram(); }); // Re-render Mermaid to match the selected palette.
-function questionPaths() { if (!result) return []; const matches = searchEvidence(result, $('#question').value); const sampled = new Set(result.files.map(file => file.path)); return [...new Set([...(sampled.has(currentPath) ? [currentPath] : []), ...matches.map(item => item.path), ...(result.readingOrder || []).map(item => item.path), ...sampled])].slice(0, 8); } // Prefer relevant sampled files and disclose the exact paid question scope.
-function updateQuestionDisclosure() { const ai = $('#question-mode').value === 'ai'; const paths = questionPaths(); $('#question-disclosure').textContent = ai ? `One paid request to ${PROVIDERS[$('#provider').value].name}. Up to ${paths.length || 8} verified files, 24,000 source characters and 3,000 output tokens. ${paths.length ? 'Files: ' + paths.join(', ') : 'Analyze a repository first.'}` : 'Find matching lines in the files read. This is keyword search and uses no AI.'; $('#ask-submit').title = ai ? 'Ask Genius · provider charges apply' : 'Search source · no AI'; } // Show the destination and bounded evidence before a paid action.
-$('#question-mode').addEventListener('change', updateQuestionDisclosure); $('#question').addEventListener('input', updateQuestionDisclosure); $('#cancel-question').addEventListener('click', () => questionController?.abort()); // Make cost choice and cancellation explicit.
-$('#ask-form').addEventListener('submit', async event => { // Keep free keyword search and paid answers as separate deliberate actions.
-  event.preventDefault(); if (!result) return; const panel = $('#search-results'); panel.replaceChildren(); const question = $('#question').value; if ($('#question-mode').value !== 'ai') { const matches = searchEvidence(result, question); if (!matches.length) panel.append(node('p', 'No matching lines in the sampled files. Try a code identifier or another folder.', 'subtle')); matches.forEach(match => { const link = node('button', `${match.path}:${match.line}`, 'search-result'); link.addEventListener('click', () => inspectFile({ path: match.path, line: match.line, type: 'blob' })); link.append(node('code', match.text)); panel.append(link); }); return; } // Label and render deterministic matching as source search.
-  const snapshot = result; const active = new AbortController(); questionController?.abort(); questionController = active; $('#ask-submit').disabled = true; $('#cancel-question').hidden = false; panel.append(node('p', 'Checking the selected source…', 'subtle')); // Track an answer independently of repository analysis.
-  try { const input = { repository: snapshot.repository.fullName, commit: snapshot.repository.sha, scope: snapshot.repository.scope, question, evidencePaths: questionPaths(), ai: true, provider: $('#provider').value, model: $('#model').value.trim(), apiKey: $('#api-key').value.trim(), githubToken: $('#github-token').value.trim() }; const response = await fetch('/api/ask', { method: 'POST', headers: headers(), signal: active.signal, body: JSON.stringify(input) }); const answer = await readQuestionResponse(response, event => { if (!active.signal.aborted) panel.textContent = `${event.stage} — ${event.detail || ''}`; }); if (active.signal.aborted || result !== snapshot) return; panel.replaceChildren(); answer.findings.forEach(finding => { panel.append(node('p', `${finding.basis === 'inference' ? 'Inference: ' : ''}${finding.text}`, 'answer-text')); finding.citations.forEach(citation => { const button = node('button', `${citation.path}:${citation.line}`, 'answer-citation'); button.title = citation.quote; button.addEventListener('click', () => inspectFile({ path: citation.path, line: citation.line, type: 'blob' })); panel.append(button); }); }); answer.limitations.forEach(text => panel.append(node('p', text, 'subtle'))); panel.append(node('p', `${answer.providerName} · ${answer.model}. ${answer.citationValidation}`, 'subtle')); (answer.suggestedQuestions || []).forEach(text => { const button = node('button', text, 'answer-citation'); button.addEventListener('click', () => { $('#question').value = text; updateQuestionDisclosure(); $('#question').focus(); }); panel.append(button); }); } catch (error) { if (result === snapshot) panel.textContent = active.signal.aborted ? 'Answer canceled.' : error.message; } finally { if (questionController === active) { questionController = null; $('#ask-submit').disabled = false; $('#cancel-question').hidden = true; } } // Display only independently validated citations and never auto-run suggested questions.
-}); // End repository question handling.
-function updateProvider(clearKey = false) { const provider = PROVIDERS[$('#provider').value]; if (clearKey) $('#api-key').value = ''; $('#provider-key-label').textContent = `${provider.name} API key`; $('#model').value = provider.models[0]; $('#model-presets').replaceChildren(...provider.models.map(value => { const option = node('option'); option.value = value; return option; })); $('#provider-docs').href = provider.docs; $('#provider-disclosure').textContent = `When Genius AI is enabled, selected source excerpts are sent to ${provider.name}. Provider charges may apply. Model availability depends on your account. Tree and source analysis work without AI.`; } // Clear provider-specific credentials before a different destination is selected.
-function exampleCard(example) { // Present genuine checked repository snapshots with transparent coverage.
-  const card = node('article', undefined, 'example-card'); const heading = node('div', undefined, 'example-card-top'); const mark = node('span', undefined, 'glass-icon small-glass'); mark.append(icon(example.diagrams ? 'network' : 'folder')); heading.append(mark, node('span', example.kind, 'card-kind')); const title = node('h3', example.title); const description = node('p', example.description); const identity = node('code', example.repository, 'example-repo'); // Build all repository strings as text nodes.
-  const stats = node('div', undefined, 'example-stats'); for (const [value, label] of [[`${example.readFiles}/${example.listedFiles}`, 'files read'], [example.relationships, 'references'], [example.diagrams, 'Mermaid blocks']]) { const item = node('span'); item.append(node('strong', String(value)), node('small', label)); stats.append(item); } // Distinguish the file inventory from actual reading coverage.
-  const query = new URLSearchParams({ ref: example.sha, files: String(example.maxFiles) }); if (example.scope) query.set('scope', example.scope); const actions = node('div', undefined, 'example-actions'); const open = node('a', 'Open analysis ↗', 'primary-link'); open.href = `/${example.repository}?${query}`; const source = node('a', 'GitHub', 'text-link'); source.href = `https://github.com/${example.repository}/tree/${example.sha}${example.scope ? '/' + example.scope.split('/').map(encodeURIComponent).join('/') : ''}`; source.target = '_blank'; source.rel = 'noreferrer'; actions.append(open, source); // Open reproducible snapshots without persisting any visitor's analysis.
-  const checked = node('div', `Analysis checked ${new Date(example.checkedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })} · ${example.sha.slice(0, 7)}`, 'example-checked'); card.append(heading, title, description, identity); if (example.preview) { const preview = node('div', undefined, 'example-preview'); const drawing = node('div', undefined, 'example-drawing'); preview.append(drawing, node('small', 'Saved inventory preview · open for live analysis')); card.append(preview); renderPreview(example.preview, drawing, ++previewId); } card.append(stats, actions, checked); return card; // Label the check as analyzer behavior, never project test success.
-} // End example card rendering.
-function renderExamples() { const query = $('#example-search').value.toLowerCase().trim(); const category = $('#example-filter').value; const examples = EXAMPLES.filter(item => `${item.title} ${item.repository} ${item.kind}`.toLowerCase().includes(query) && (category === 'all' || category === 'embedded' && /hardware|workflow/i.test(item.kind) || category === 'software' && !/hardware|workflow/i.test(item.kind))); $('#example-grid').replaceChildren(...examples.map(exampleCard)); $('#example-count').textContent = `${examples.length} verified analysis snapshots`; $('#examples-empty').hidden = Boolean(examples.length); } // Search only the published example catalog.
-function initializeWorkspace() { installIcons(); updateProvider(); $$('.site-host').forEach(element => { element.textContent = location.host; }); $('#starter-examples').replaceChildren(...EXAMPLES.map(exampleCard)); renderExamples(); const examples = location.pathname.replace(/\/$/, '') === '/examples'; $('#examples-view').hidden = !examples; $('#welcome').hidden = examples; $(examples ? '#examples-nav' : '#workspace-nav').setAttribute('aria-current', 'page'); if (examples) document.title = 'Examples — Git Architecture Diagram'; } // Initialize the requested working surface and separate catalog route.
-$('#provider').addEventListener('change', () => { updateProvider(true); updateQuestionDisclosure(); }); $('#example-search').addEventListener('input', renderExamples); // Wire explicit provider changes and example search.
-$('#copy-host').addEventListener('click', async () => { try { await navigator.clipboard.writeText(location.host); toast('Hostname copied. Replace github.com and keep the repository path.'); } catch { toast(`Use ${location.host} in place of github.com.`); } }); // Make the working hostname clear without claiming an unconfigured custom domain.
-function markNavigation(examples = false) { $('#workspace-nav').toggleAttribute('aria-current', !examples); $('#examples-nav').toggleAttribute('aria-current', examples); $(examples ? '#examples-nav' : '#workspace-nav').setAttribute('aria-current', 'page'); } // Reflect both direct navigation and browser history in the active page indicator.
-async function restoreRoute() { // Restore direct links and browser history without replaying paid AI generation.
-  try { const state = parseWorkspaceRoute(location.href, { maxFiles: Number($('#max-files').max) }); markNavigation(state.kind === 'examples'); if (state.kind === 'repository') { $('#repository').value = state.repository; $('#ref').value = state.selectedRef; $('#scope').value = state.scope; $('#max-files').value = state.files; await runRoute(state); return; } requestId++; controller?.abort(); sourceController?.abort(); questionController?.abort(); controller = null; result = null; routeState = state; setBusy(false); $('#status').hidden = true; $('#workspace').hidden = true; $('#welcome').hidden = state.kind !== 'home'; $('#examples-view').hidden = state.kind !== 'examples'; document.title = state.kind === 'examples' ? 'Examples — Git Architecture Diagram' : 'Git Architecture Diagram'; } catch (error) { status(error.message, true); } // Keep root and catalog routes independent of source analysis.
-} // End history restoration.
-async function openRepositoryRoute() { try { const health = await readJSONResponse(await fetch('/api/health')); const limit = Number(health.limits?.maxFiles) || 120; $('#max-files').max = limit; $('#max-files').value = Math.min(Number($('#max-files').value), limit); } catch { /* Analysis provides the actionable connection error if health discovery fails. */ } await restoreRoute(); } // Discover the hosted budget before a direct analysis.
-window.addEventListener('popstate', restoreRoute); window.addEventListener('hashchange', () => { if (routeState?.kind === 'repository' && result) { const state = parseWorkspaceRoute(location.href); if (state.selectedPath) inspectFile({ path: state.selectedPath, type: state.selectedType, line: state.line, endLine: state.endLine }); } }); // Restore history and line anchors without losing selected source.
-document.addEventListener('click', event => { const link = event.target.closest('a[href]'); if (!link || link.target || link.download || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button !== 0) return; const url = new URL(link.href); if (url.origin !== location.origin || link.classList.contains('source-line-number')) return; try { parseWorkspaceRoute(url.href); } catch { return; } event.preventDefault(); if (url.href !== location.href) history.pushState({}, '', url); restoreRoute(); }); // Make home, example cards, and shared repository links participate in Back/Forward.
-$('#repository').addEventListener('input', () => { $('#ref').value = ''; $('#scope').value = ''; }); $('#tree-filter').addEventListener('change', () => { if (result) renderTree(); }); $('#example-filter').addEventListener('change', renderExamples); // Clear stale scope when a new repository is pasted and wire inventory filters.
-for (const side of ['tree', 'genius']) $('#toggle-' + side).addEventListener('click', () => { const panel = $('#' + side + '-panel'); panel.hidden = !panel.hidden; $('.studio').classList.toggle(side + '-closed', panel.hidden); $('#toggle-' + side).setAttribute('aria-expanded', String(!panel.hidden)); fit(); }); // Give the diagram more space without losing either side panel's contents.
-$('#focus-folder').addEventListener('click', () => { if (selectedTarget) focusScope(selectedTarget.type === 'tree' ? selectedTarget.path : selectedTarget.path.split('/').slice(0, -1).join('/')); }); // Reuse the selected commit and branch when drilling into source.
-$('#load-source').addEventListener('click', async () => { if (!result || !selectedTarget) return; const target = { ...selectedTarget }; const sha = result.repository.sha; sourceController?.abort(); const active = new AbortController(); sourceController = active; $('#load-source').disabled = true; $('#source-read-status').textContent = 'Reading verified source…'; try { const response = await fetch('/api/source', { method: 'POST', headers: headers(), signal: active.signal, body: JSON.stringify({ repository: result.repository.fullName, commit: sha, path: target.path, githubToken: $('#github-token').value.trim() }) }); const data = await readJSONResponse(response); if (sourceController !== active || active.signal.aborted || result?.repository.sha !== sha) return; sourceCache.set(target.path, data.file); if (currentPath === target.path) inspectFile({ ...selectedTarget }); } catch (error) { if (sourceController === active && !active.signal.aborted && currentPath === target.path) $('#source-read-status').textContent = error.message; } finally { if (sourceController === active) { sourceController = null; $('#load-source').disabled = false; } } }); // Fetch only an explicitly selected immutable file, never increase analysis counts silently.
-initializeWorkspace(); openRepositoryRoute(); // Start capability discovery and optional direct-link analysis.
+/** Create an element with safe text content. */
+function el(tag, className, text) { const element = document.createElement(tag); if (className) element.className = className; if (text !== undefined) element.textContent = text; return element; }
+let toastTimer;
+function toast(text) { $('#toast').textContent = text; $('#toast').hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { $('#toast').hidden = true; }, 4200); }
+function status(text, { error = false, progress = null } = {}) { $('#status').hidden = false; $('#status').classList.toggle('error', error); $('#status-text').textContent = text; $('#status-progress').style.width = progress === null ? '0' : `${Math.round(progress * 100)}%`; $('#status').classList.toggle('has-progress', progress !== null); }
+function hideStatus() { $('#status').hidden = true; }
+const sourceURL = (path, line) => pinnedSourceURL(state.result.repository, { path, line, type: 'blob' });
 
-const modelContext = document.modelContext; const modelLifecycle = new AbortController(); // Feature-detect the page-scoped WebMCP registry without requiring browser support.
-if (modelContext?.registerTool) { // Expose only the current analysis through the same state used by the visible workspace.
-  try { Promise.resolve(modelContext.registerTool({ name: 'get_repository_analysis', title: 'Read the current repository analysis', description: 'Read the currently displayed repository summary, coverage, and source-linked dependency evidence. This does not start analysis, call AI, or change the repository.', inputSchema: { type: 'object', properties: {}, additionalProperties: false }, annotations: { readOnlyHint: true, untrustedContentHint: true }, execute(input) { if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).length) throw new Error('This tool accepts an empty object only.'); if (!result) return { status: 'not_analyzed', message: 'Analyze a repository in the workspace first.' }; return { status: 'ready', repository: result.repository.fullName, commit: result.repository.sha, scope: result.repository.scope, summary: result.summary, coverage: result.coverage, dependencies: result.dependencies.slice(0, 30), aiEnabled: Boolean(result.ai), warnings: result.warnings }; } }, { signal: modelLifecycle.signal })).catch(() => { /* Registration is optional; the visible workspace remains fully functional. */ }); } catch { /* Unsupported implementations must not prevent repository analysis. */ } // Keep registration failures isolated from the application.
-  window.addEventListener('pagehide', () => modelLifecycle.abort(), { once: true }); // Remove the page's tool when its browsing lifecycle ends.
-} // End optional read-only WebMCP registration.
+// ——— Credentials and request settings (memory only) ———
+function requestHeaders() { const token = $('#instance-token').value; return { 'Content-Type': 'application/json', ...(token ? { 'X-Instance-Token': token } : {}) }; }
+function credentials() { return { githubToken: $('#github-token').value.trim(), apiKey: $('#api-key').value.trim(), model: $('#model').value.trim(), provider: $('#provider').value }; }
+function aiConfigured() { const { apiKey, model } = credentials(); return Boolean(apiKey && model); }
+
+// ——— Pages and routing ———
+function showPage(page) {
+  const bar = $('.command-bar'); if (page === 'home') $('#hero-slot').append(bar); else if (bar.parentElement !== $('#main')) $('#main').prepend(bar); bar.classList.toggle('tucked', page === 'repo'); // Home centers the input; a repository page tucks it away.
+  $('#welcome').hidden = page !== 'home'; $('#browse-view').hidden = page !== 'browse'; $('#workspace').hidden = page !== 'repo';
+  $('#workspace-nav').toggleAttribute('aria-current', page !== 'browse'); $('#browse-nav').toggleAttribute('aria-current', page === 'browse');
+  if (page === 'browse') { document.title = 'Browse examples · Git Architecture Diagram'; renderBrowse(); }
+  if (page === 'home') document.title = 'Git Architecture Diagram';
+}
+const keyOf = (pathname = location.pathname, search = location.search) => pathname.replace(/\/+$/, '') + search;
+
+function cancelRun() { const running = state.controller; state.controller = null; if (running) { running.abort(); setBusy(false); } } // Leaving a route discards its unfinished analysis without touching history.
+async function route() {
+  const target = parseRoute(location.pathname, location.search, location.hash);
+  if (target.page === 'invalid') { cancelRun(); showPage('home'); status(target.reason, { error: true }); return; }
+  if (target.page !== 'repo') { cancelRun(); hideStatus(); showPage(target.page); return; }
+  const key = keyOf();
+  if (state.result && state.displayKey === key) { cancelRun(); hideStatus(); showPage('repo'); applyFocus(target.lines); return; } // Only the line anchor changed.
+  if (state.cache.has(key)) { cancelRun(); hideStatus(); state.result = state.cache.get(key); state.displayKey = key; showPage('repo'); showResult(); applyFocus(target.lines); return; } // Back/forward to a snapshot analyzed in this tab.
+  $('#repository').value = target.repository; $('#ref').value = target.ref; $('#scope').value = target.scope;
+  $('#max-files').value = String(Math.min(target.files || DEFAULT_FILES, state.maxFiles));
+  await analyze({ history: 'replace', lines: target.lines, view: new URLSearchParams(location.search).get('view') });
+}
+function navigate(path) { history.pushState({}, '', path); route(); }
+document.addEventListener('click', event => { // Keep internal links inside the single-page workspace.
+  const link = event.target.closest('a[data-internal]');
+  if (!link || event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
+  event.preventDefault(); navigate(link.getAttribute('href'));
+});
+window.addEventListener('popstate', route);
+
+// ——— Analysis ———
+function setBusy(busy) {
+  $('#analyze').disabled = busy; $('#cancel').hidden = !busy; $('#refresh').disabled = busy;
+  $('#analyze').textContent = busy ? 'Analyzing…' : 'Analyze';
+  $('#workspace').setAttribute('aria-busy', String(busy));
+}
+async function analyze({ refresh = false, history: mode = 'push', lines = null, view = null } = {}) {
+  if (state.controller) state.controller.abort();
+  const controller = new AbortController(); state.controller = controller; setBusy(true);
+  status('Connecting to GitHub…', { progress: 0 });
+  const input = { repository: $('#repository').value.trim(), ref: $('#ref').value.trim(), scope: $('#scope').value.trim(), maxFiles: Number($('#max-files').value) || DEFAULT_FILES, ai: $('#use-ai').checked, refresh, ...credentials() };
+  try {
+    const response = await fetch('/api/analyze', { method: 'POST', headers: requestHeaders(), body: JSON.stringify(input), signal: controller.signal });
+    const result = await readAnalysisResponse(response, event => status(`${event.stage}${event.detail ? ` — ${event.detail}` : ''}`, { progress: Number.isFinite(event.read) && event.total ? event.read / event.total : null }));
+    if (state.controller !== controller) return; // A newer run replaced this one.
+    state.result = result; state.edits.clear();
+    const path = workspacePath(result.repository, { focus: result.repository.focus, lines, files: input.maxFiles });
+    if (location.pathname + location.search + location.hash !== path) window.history[mode === 'push' ? 'pushState' : 'replaceState']({}, '', path);
+    state.displayKey = keyOf(); remember(state.displayKey, result);
+    hideStatus(); showPage('repo'); showResult(); if (VIEWS.has(view)) selectView(view); applyFocus(lines);
+  } catch (error) {
+    if (state.controller !== controller) return;
+    status(error.name === 'AbortError' ? 'Analysis cancelled.' : error.message, { error: error.name !== 'AbortError' });
+  } finally { if (state.controller === controller) { state.controller = null; setBusy(false); } }
+}
+function remember(key, result) { state.cache.set(key, result); while (state.cache.size > 4) state.cache.delete(state.cache.keys().next().value); }
+
+// ——— Result presentation ———
+function showResult() {
+  const { result } = state; const repo = result.repository; state.drill = ''; state.mode = result.diagrams.overview ? 'overview' : 'files';
+  $('#file-inspector').hidden = true; $('#search-results').replaceChildren(); state.current = null;
+  $('#repo-title').textContent = repo.fullName; $('#repo-description').textContent = repo.description || '';
+  document.title = `${repo.fullName}${repo.scope ? '/' + repo.scope : ''} · Git Architecture Diagram`;
+  $('#commit').replaceChildren(icon('branch'), document.createTextNode(` ${repo.branch === repo.sha ? repo.sha.slice(0, 7) : repo.branch} · ${repo.sha.slice(0, 7)}${repo.private ? ' · private' : ''}`));
+  $('#commit').title = `Analyzed commit ${repo.sha}${repo.committedAt ? `, committed ${new Date(repo.committedAt).toUTCString()}` : ''}. Select to change the branch, tag, or commit.`;
+  renderCrumbs(); renderMetrics();
+  $('#architecture-mode').value = state.mode; $('#architecture-mode option[value=overview]').disabled = !result.diagrams.overview;
+  $('#docs-count').textContent = result.documented.length; $('#docs-count').hidden = !result.documented.length; // Show the count only when there are diagrams.
+  $('#document-select').replaceChildren(...result.documented.map((item, index) => { const option = el('option', '', `${item.path}:${item.line}`); option.value = index; return option; }));
+  $('#tree-search').value = ''; setFilter('all', false); renderTree(); revealInTree(repo.scope, { select: false });
+  $('#tree-count').textContent = String(repo.listedEntries ?? repo.entries.length);
+  $('#tree-foot').textContent = `${result.coverage.readFiles} of ${result.coverage.listedFiles} files read. Unread files are dimmed; their contents were not analyzed.${result.coverage.treeTruncated ? ' The listing is partial.' : ''}`;
+  renderGenius(); renderGuide(); fillSourceTargets(); renderInfo(); closeMenus(); extras.reset(); extractView.reset(); $('#genius-focus').hidden = true;
+  $('[data-view=system]').dataset.ready = String(Boolean(result.ai?.graph));
+  state.defaultView = result.ai?.graph ? 'system' : repo.scope && result.documented.length && !result.dependencies.length && !result.diagrams.components?.some(item => item.read && item.kind === 'source') ? 'documented' : 'architecture';
+  selectView(result.ai?.graph ? 'system' : repo.scope && result.documented.length && !result.dependencies.length && !result.diagrams.components?.some(item => item.read && item.kind === 'source') ? 'documented' : 'architecture');
+}
+
+function renderCrumbs() {
+  const repo = state.result.repository; const nav = $('#scope-crumbs'); nav.replaceChildren();
+  const parts = repo.scope ? repo.scope.split('/') : [];
+  const link = (label, scope) => { const anchor = el('a', 'crumb', label); anchor.href = workspacePath({ ...repo, scope, focus: '' }, { files: state.result.coverage.maxFiles }); anchor.dataset.internal = ''; return anchor; };
+  nav.append(link(repo.repo, ''));
+  parts.forEach((part, index) => { nav.append(el('span', 'crumb-sep', '/')); if (index === parts.length - 1) { const current = el('span', 'crumb current', part); current.setAttribute('aria-current', 'location'); nav.append(current); } else nav.append(link(part, parts.slice(0, index + 1).join('/'))); });
+  nav.hidden = !parts.length;
+}
+
+function renderMetrics() {
+  const { coverage, dependencies, documented, diagrams, cacheHit } = state.result;
+  const items = [[coverage.listedFiles, 'files listed'], [coverage.readFiles, 'read'], [coverage.followedReferences || 0, 'reached by following references'], [dependencies.length, 'local imports located'], [documented.length, 'authored diagrams'], [diagrams.components?.filter(item => item.name !== '.').length || 0, 'top-level folders']];
+  $('#metrics').replaceChildren(...items.map(([value, label]) => { const item = el('span', 'metric'); item.append(el('strong', '', String(value)), document.createTextNode(` ${label}`)); return item; }));
+  const fresh = el('span', 'metric freshness', cacheHit ? 'Reused analysis of this commit' : 'Fresh analysis');
+  if (coverage.rateLimit?.remaining !== undefined && coverage.rateLimit?.remaining !== null) fresh.title = `GitHub requests left this hour: ${coverage.rateLimit.remaining}`;
+  $('#metrics').append(fresh);
+}
+
+// ——— Views ———
+function diagramFor(view = state.view) {
+  const { result } = state; const d = result.diagrams;
+  if (view === 'system') { const a = result.ai?.diagrams; if (!a || !result.ai.graph) return null; return { key: 'ai', label: 'System map', source: a.architecture, paths: a.nodePaths || {}, legend: (a.legend || []).map(item => ({ ...item, label: `${item.label} (${item.count})` })), edgeLegend: a.edgeLegend, legendTitle: 'Kinds', basis: result.ai.saved ? 'AI system map, saved for this commit' : 'AI system map. Check the evidence', caption: `${result.ai.providerName} · ${result.ai.model}. Solid arrows cite a line the model was shown; dotted arrows are inferences; dashed shapes have no file.`, tour: result.ai.graph.tour || [], flowEdges: result.ai.graph.flowEdges || [] }; }
+  if (view === 'mindmap' && $('#mindmap-mode').value !== 'folders' && d.conceptMindmap) return { key: 'concepts', label: 'Repository mind map', source: d.conceptMindmap, paths: d.conceptMindmapPaths || {}, legend: (d.conceptMindmapLegend || []).map(item => ({ ...item, label: `${item.label} (${item.count})` })), legendTitle: 'Concepts', basis: 'Concepts from the analysis. Select one to explore it everywhere', caption: 'Each concept maps to repository paths: selecting it explains it in Genius and can highlight it in the diagrams and hierarchy.' };
+  if (view === 'mindmap') return { key: 'mindmap', label: 'Mind map', source: d.mindmap, paths: d.mindmapPaths || {}, legend: (d.mindmapLegend || []).map(item => ({ ...item, label: `${item.label} (${item.count})` })), legendTitle: 'Folders', basis: 'Folder hierarchy from the file tree', caption: 'Bounded preview: up to 14 folders and 5 files each; the full inventory is in the file tree.' };
+  if (view === 'documented') { const item = result.documented[Number($('#document-select').value) || 0]; return item ? { key: `doc:${item.path}:${item.line}`, label: `${item.path}:${item.line}`, source: item.source, paths: {}, basis: 'Written by the repository author', caption: 'Authored intent, shown with its original styles. It is not a runtime verification.', item } : null; }
+  if (state.mode === 'ai' && result.ai?.diagrams) { const a = result.ai.diagrams; return { key: 'ai', label: 'Genius interpretation', source: a.architecture, paths: a.nodePaths || {}, legend: (a.legend || []).map(item => ({ ...item, label: `${item.label} (${item.count})` })), edgeLegend: a.edgeLegend, legendTitle: 'Kinds', basis: 'AI interpretation. Check the evidence', caption: `${result.ai.providerName} · ${result.ai.model}. Dotted arrows are inferences; dashed nodes have no verified file.` }; }
+  if (state.mode === 'files' || !d.overview) {
+    const graph = state.drill ? d.componentGraphs?.[state.drill] : d;
+    if (!graph) return null;
+    return { key: state.drill ? `files:${state.drill}` : 'files', label: state.drill ? `Files in ${state.drill}` : 'Files and imports', source: graph.architecture, paths: graph.nodePaths || {}, legend: (graph.legend || []).map(item => ({ ...item, label: `${item.label} (${item.count})` })), legendTitle: 'Role hints from file names', basis: 'Located imports and includes', caption: `${graph.displayedFiles} files shown, ${graph.omittedNodes} omitted. Colors are file-name hints, not verified behavior.` };
+  }
+  return { key: 'overview', label: 'Components', source: d.overview, paths: d.overviewPaths || {}, legend: (d.overviewLegend || []).map(item => ({ ...item, label: `${item.label} (${item.count})` })), edgeLegend: d.overviewEdges, legendTitle: 'Kinds', basis: 'Folders from the file tree; arrows from located imports', caption: `${d.components.length} components. Select one to inspect it, or switch to Files and imports for file-level detail.` };
+}
+
+async function selectView(next, { focusTab = false } = {}) {
+  state.view = next; if (tourActive()) stopTour({ refit: false }); $('#system-empty').hidden = true; $('#tour-start').hidden = true; $('#tour-action').hidden = true;
+  $$('#view-dock [role=tab]').forEach(tab => { const selected = tab.dataset.view === next; tab.setAttribute('aria-selected', String(selected)); tab.tabIndex = selected ? 0 : -1; if (selected && focusTab) tab.focus(); });
+  const isDiagram = ['system', 'architecture', 'mindmap', 'documented'].includes(next); $('#hierarchy-view').hidden = next !== 'hierarchy'; $('#extract-view').hidden = next !== 'extract'; $('#mindmap-mode-label').hidden = next !== 'mindmap';
+  $('#canvas').hidden = !isDiagram; $('#source-view').hidden = next !== 'source'; $('#guide').hidden = next !== 'guide';
+  $('.diagram-meta').hidden = !isDiagram; $('#diagram-legend').hidden = true;
+  $('#architecture-mode-label').hidden = next !== 'architecture'; $('#drill-chip').hidden = !(next === 'architecture' && state.mode === 'files' && state.drill);
+  $('#document-picker').hidden = next !== 'documented' || !state.result.documented.length;
+  $('.node-action').hidden = next === 'documented';
+  $('#diagram-source-link').hidden = true;
+  if (next === 'extract') { extractView.render(); $('#diagram-caption').textContent = 'Clone the source, export project files and diagrams, skills, prompts, plans, and AI-ready knowledge. Repository text is shown as plain text.'; return; }
+  if (next === 'hierarchy') { extras.renderHierarchyView(); $('#diagram-caption').textContent = 'How the software is organized: layers, components, and key files. Repository Tree shows where files are; this shows what they are for.'; return; }
+  if (next === 'source') { $('#diagram-caption').textContent = 'Edit any diagram source; Preview edits renders it in its own view.'; loadSourceEditor(); return; }
+  if (next === 'guide') { $('#diagram-caption').textContent = 'The same guide is in the .genius export, with every citation pinned to this commit.'; return; }
+  const diagram = diagramFor(next);
+  if (next === 'system' && !diagram) { $('#canvas').hidden = true; $('.diagram-meta').hidden = true; renderSystemEmpty(); $('#system-empty').hidden = false; $('#diagram-caption').textContent = 'The system map is optional and uses an AI model; every other view works without one.'; return; }
+  if (!diagram) { $('#diagram-basis').textContent = ''; clearDiagram(next === 'documented' ? 'No Mermaid diagrams were found in the files read.\nIncrease the file budget or open a documentation folder.' : 'Nothing to draw for this view.'); $('#diagram-caption').textContent = ''; return; }
+  const edited = state.edits.get(diagram.key);
+  $('#diagram-basis').textContent = edited ? 'Edited preview · source links removed' : diagram.basis;
+  $('#diagram-basis').dataset.basis = edited ? 'edited' : next === 'documented' ? 'documented' : next === 'system' ? 'inferred' : 'observed';
+  $('#diagram-caption').textContent = diagram.caption;
+  if (diagram.item) { $('#diagram-source-link').hidden = false; $('#diagram-source-link').href = sourceURL(diagram.item.path, diagram.item.line); }
+  if (!diagram.item) $('#drill-label').textContent = state.drill ? `Files in ${state.drill}` : '';
+  renderLegend(diagram, edited);
+  await renderDiagram(edited ?? diagram.source, edited ? {} : diagram.paths, navigateTarget, { generated: !edited && next !== 'documented' });
+  if (state.view !== next) return; queueMicrotask(() => extras.afterRender(next)); decorate({ flowEdges: edited ? [] : diagram.flowEdges || [] }); $('#tour-start').hidden = !(next === 'system' && !edited && diagram.tour?.length); $('#tour-action').hidden = $('#tour-start').hidden;
+}
+
+function renderLegend(diagram, edited) {
+  const legend = $('#diagram-legend');
+  if (edited || (!diagram.legend?.length && !diagram.edgeLegend?.length)) { legend.hidden = true; return; }
+  legend.replaceChildren(el('span', 'legend-label', diagram.legendTitle || 'Legend'));
+  for (const item of diagram.legend || []) { const entry = el('span', 'legend-item'); const swatch = el('i'); const light = document.documentElement.dataset.theme === 'light' && /^#[0-9a-f]{6}$/i.test(item.stroke || ''); const tint = light ? lightTint(item.stroke) : item; swatch.style.borderColor = tint.stroke; swatch.style.backgroundColor = tint.fill || 'transparent'; if (item.dashed) swatch.style.borderStyle = 'dashed'; entry.append(swatch, document.createTextNode(item.label)); legend.append(entry); }
+  for (const item of diagram.edgeLegend || []) { const entry = el('span', `legend-item edge-${item.basis}`); entry.append(el('b', '', ''), document.createTextNode(item.label)); legend.append(entry); }
+  legend.hidden = false;
+}
+
+// ——— Node, tree, and inspector navigation ———
+function navigateTarget(target) {
+  if (target.paths?.length) { extras.selectPaths({ paths: target.paths, label: target.concept || target.path, line: target.line }); return; } // Mind map concepts select across views.
+  if ($('#node-action').value === 'github') { window.open(pinnedSourceURL(state.result.repository, target), '_blank', 'noopener,noreferrer'); return; }
+  inspect(target);
+}
+
+function buildTree() {
+  const root = { children: new Map(), path: '', type: 'tree' };
+  for (const entry of state.result.repository.entries) {
+    const parts = entry.path.split('/'); let branch = root;
+    parts.forEach((name, index) => { if (!branch.children.has(name)) branch.children.set(name, { name, path: parts.slice(0, index + 1).join('/'), children: new Map(), type: 'tree' }); branch = branch.children.get(name); if (index === parts.length - 1) branch.type = entry.type; });
+  }
+  return root;
+}
+const readSet = () => new Set(state.result.files.map(file => file.path));
+function fileButton(path, label = path.split('/').pop(), read = readSet()) {
+  const button = el('button', 'tree-file'); button.type = 'button';
+  button.append(icon(CODE.test(path) ? 'code' : 'file'), el('span', 'name', label));
+  button.title = read.has(path) ? `${path} (read)` : `${path} (listed, not read)`;
+  button.dataset.path = path; button.dataset.read = String(read.has(path));
+  if (state.current?.path === path) button.setAttribute('aria-current', 'true');
+  button.addEventListener('click', () => inspect({ path, type: 'blob' }));
+  return button;
+}
+function appendBranches(parent, branch, read) {
+  const children = [...branch.children.values()].sort((a, b) => Number(b.type === 'tree') - Number(a.type === 'tree') || a.name.localeCompare(b.name));
+  for (const child of children) {
+    if (child.type !== 'tree') { parent.append(fileButton(child.path, child.name + (child.type === 'commit' ? ' (submodule)' : ''), read)); continue; }
+    const details = el('details'); details.dataset.path = child.path;
+    const summary = el('summary'); summary.append(icon('folder'), el('span', 'name', child.name)); details.append(summary);
+    let populated = false; const populate = () => { if (populated) return; populated = true; const nested = el('div', 'tree-children'); appendBranches(nested, child, read); details.append(nested); };
+    details.addEventListener('reveal', populate); details.addEventListener('toggle', () => { if (details.open) populate(); });
+    summary.addEventListener('dblclick', event => { event.preventDefault(); inspect({ path: child.path, type: 'tree' }); });
+    parent.append(details);
+  }
+}
+function setFilter(filter, render = true) { state.filter = filter; $$('#tree-filters .chip').forEach(chip => chip.setAttribute('aria-pressed', String(chip.dataset.filter === filter))); if (render) renderTree(); }
+function renderTree() {
+  const query = $('#tree-search').value.toLowerCase().trim(); const read = readSet(); const tree = $('#tree'); tree.replaceChildren();
+  if (query || state.filter !== 'all') {
+    const tests = { all: () => true, read: path => read.has(path), code: path => CODE.test(path), docs: path => DOC.test(path) };
+    const hits = state.result.repository.entries.filter(entry => entry.type !== 'tree' && tests[state.filter](entry.path) && (!query || entry.path.toLowerCase().includes(query)));
+    tree.append(el('p', 'subtle tree-note', `${hits.length} file${hits.length === 1 ? '' : 's'}${hits.length > 200 ? ', showing the first 200' : ''}`), ...hits.slice(0, 200).map(entry => fileButton(entry.path, entry.path, read)));
+    return;
+  }
+  const root = el('div', 'tree-root'); appendBranches(root, buildTree(), read); tree.append(root);
+}
+function revealInTree(path, { select = true } = {}) {
+  if (!path) return;
+  if ($('#tree-search').value || state.filter !== 'all') { $('#tree-search').value = ''; setFilter('all'); }
+  const parts = path.split('/');
+  for (let index = 1; index <= parts.length; index++) { const folder = $$('#tree details').find(item => item.dataset.path === parts.slice(0, index).join('/')); if (folder) { folder.dispatchEvent(new Event('reveal')); folder.open = true; } }
+  if (!select) return;
+  $$('#tree [aria-current]').forEach(item => item.removeAttribute('aria-current'));
+  const selected = $$('#tree .tree-file').find(item => item.dataset.path === path) || $$('#tree details').find(item => item.dataset.path === path)?.querySelector('summary');
+  if (selected) { selected.setAttribute('aria-current', 'true'); selected.scrollIntoView({ block: 'nearest', behavior: reduceMotion() ? 'auto' : 'smooth' }); }
+}
+
+function applyFocus(lines) { const focus = state.result?.repository.focus; if (focus) inspect({ path: focus, type: 'blob' }, { lines, scroll: false }); }
+
+function inspect(target, { lines = null, scroll = true } = {}) {
+  const { result } = state; const repo = result.repository;
+  const path = target.path; const folder = target.type === 'tree';
+  state.current = { path, type: folder ? 'tree' : 'blob', lines };
+  const file = folder ? null : result.files.find(item => item.path === path);
+  $('#file-inspector').hidden = false; $('#file-name').textContent = path || repo.fullName;
+  $('#source-link').href = pinnedSourceURL(repo, { path, type: folder ? 'tree' : 'blob' }) + (lines && !folder ? lineAnchor(lines) : '');
+  const actions = $('#inspector-actions'); actions.replaceChildren(); $('#file-relationships').replaceChildren();
+  const code = $('#file-code'); code.replaceChildren();
+  if (folder) {
+    const inside = repo.entries.filter(item => item.type !== 'tree' && (!path || item.path.startsWith(path + '/')));
+    const read = inside.filter(item => result.files.some(fileItem => fileItem.path === item.path)).length;
+    const component = result.diagrams.components?.find(item => item.folder === path);
+    $('#file-info').textContent = `Folder at commit ${repo.sha.slice(0, 7)}. ${inside.length} files listed, ${read} read${component ? `. Classified as ${component.kind} from its name and contents` : ''}.`;
+    if (result.diagrams.componentGraphs?.[path]) { const show = el('button', 'quiet-button', 'Show files and imports'); show.type = 'button'; show.addEventListener('click', () => drillInto(path)); actions.append(show); }
+    if (path !== repo.scope) { const deeper = el('a', 'quiet-button', 'Analyze this folder'); deeper.href = workspacePath({ ...repo, scope: path, focus: '' }, { files: result.coverage.maxFiles }); deeper.dataset.internal = ''; actions.append(deeper); }
+    code.textContent = inside.slice(0, 150).map(item => (path ? item.path.slice(path.length + 1) : item.path)).join('\n') + (inside.length > 150 ? `\n… ${inside.length - 150} more in the file tree` : '');
+  } else if (file) {
+    const edges = result.dependencies.filter(edge => edge.from === path || edge.to === path);
+    const all = file.content.split('\n');
+    const start = lines ? Math.max(1, lines.start - 30) : 1; const end = Math.min(all.length, start + 299);
+    $('#file-info').textContent = `${file.size.toLocaleString('en')} bytes · lines ${start}–${end} of ${all.length} · ${file.reason || 'read'} · blob ${file.sha.slice(0, 10)}`;
+    const fragment = document.createDocumentFragment();
+    for (let number = start; number <= end; number++) {
+      const row = el('span', 'code-line'); if (lines && number >= lines.start && number <= lines.end) row.classList.add('highlight');
+      const anchor = el('a', 'line-number', String(number)); anchor.href = `#L${number}`; anchor.dataset.line = String(number);
+      row.append(anchor, el('span', 'line-text', all[number - 1] + '\n')); fragment.append(row);
+    }
+    code.append(fragment);
+    edges.slice(0, 20).forEach(edge => { const row = el('a', 'reference-link', `${edge.from}:${edge.line} ${edge.kind === 'include' ? 'includes' : 'imports'} ${edge.to}`); row.href = sourceURL(edge.from, edge.line); row.target = '_blank'; row.rel = 'noreferrer'; $('#file-relationships').append(row); });
+    if (lines) requestAnimationFrame(() => code.querySelector('.highlight')?.scrollIntoView({ block: 'center', behavior: 'auto' }));
+  } else {
+    const skipped = result.coverage.skipped.find(item => item.path === path);
+    $('#file-info').textContent = skipped ? `Listed but not read: ${skipped.reason}` : 'Listed but not read, so its contents are not part of this analysis.';
+    const open = el('a', 'quiet-button', 'Analyze with this file first'); open.href = workspacePath(repo, { focus: path, files: result.coverage.maxFiles }); open.dataset.internal = ''; actions.append(open);
+    code.textContent = 'Source preview is available for files that were read.';
+  }
+  revealInTree(path);
+  if (scroll) $('#file-inspector').scrollIntoView({ behavior: reduceMotion() ? 'auto' : 'smooth', block: 'nearest' });
+}
+$('#file-code').addEventListener('click', event => { // Line numbers set a shareable GitHub-style anchor.
+  const anchor = event.target.closest('.line-number'); if (!anchor || !state.current) return; event.preventDefault();
+  const line = Number(anchor.dataset.line); const lines = event.shiftKey && state.current.lines ? { start: Math.min(state.current.lines.start, line), end: Math.max(state.current.lines.start, line) } : { start: line, end: line };
+  state.current.lines = lines; $$('#file-code .highlight').forEach(row => row.classList.remove('highlight'));
+  $$('#file-code .line-number').forEach(item => { const number = Number(item.dataset.line); if (number >= lines.start && number <= lines.end) item.parentElement.classList.add('highlight'); });
+  $('#source-link').href = sourceURL(state.current.path) + lineAnchor(lines);
+  if (state.result.repository.focus === state.current.path) history.replaceState({}, '', location.pathname + location.search + lineAnchor(lines));
+});
+function drillInto(folder) { state.mode = 'files'; state.drill = folder; $('#architecture-mode').value = 'files'; selectView('architecture'); $('#canvas').scrollIntoView({ block: 'nearest', behavior: reduceMotion() ? 'auto' : 'smooth' }); }
+
+// ——— Action bar: info, export, drawers, layout ———
+function renderInfo() {
+  const { result } = state; const body = $('#info-body'); body.replaceChildren();
+  const add = (title, ...children) => { const block = el('section', 'info-section'); block.append(el('h3', '', title), ...children); body.append(block); };
+  const chips = items => { const row = el('div', 'chip-row'); items.forEach(item => row.append(el('span', 'info-chip', item))); return row; };
+  const readme = result.files.find(file => /(^|\/)readme(\.md)?$/i.test(file.path))?.content.split('\n').find(line => line.trim().length > 40 && !/^[#!<[|>]/.test(line.trim()));
+  add('What this project does', el('p', '', result.ai?.overview || readme?.trim().slice(0, 400) || result.summary), ...(result.ai?.overview ? [el('p', 'fineprint', 'Genius interpretation.')] : readme ? [el('p', 'fineprint', 'From the README.')] : []));
+  const type = result.hierarchy?.source.type; add('Architecture style', el('p', '', `${{ embedded: 'Embedded / firmware project', application: 'Application', library: 'Library or toolkit' }[type] || 'Repository'} organized as ${result.hierarchy?.source.root.children.map(layer => layer.label.toLowerCase()).join(', ') || 'a flat set of files'}.`));
+  const stack = result.skills?.observed.filter(item => ['Languages', 'Frontend', 'Backend', 'Embedded', 'Database', 'AI / ML'].includes(item.category)).slice(0, 8).map(item => item.name) || []; if (stack.length) add('Primary stack', chips(stack));
+  const core = (result.diagrams.components || []).filter(item => item.name !== '.' && item.read).slice(0, 6); if (core.length) add('Core components', chips(core.map(item => `${item.name} · ${item.kind}`)));
+  if (result.entrypoints.length) add('Likely entry points', chips(result.entrypoints.slice(0, 4).map(item => item.path.split('/').pop())));
+  if (result.externalModules?.length) add('Key dependencies', chips(result.externalModules.slice(0, 8)));
+  if (result.readingOrder?.length) { const list = el('ol', 'reading-order compact'); result.readingOrder.slice(0, 5).forEach(item => { const row = el('li'); const button = el('button', 'genius-file', item.path.split('/').pop()); button.type = 'button'; button.title = item.path; button.addEventListener('click', () => { closeMenus(); inspect({ path: item.path, type: 'blob' }); }); row.append(button, el('span', 'why', item.why)); list.append(row); }); add('Where to start reading', list); }
+  const inbound = new Map(); result.dependencies.forEach(edge => inbound.set(edge.to, (inbound.get(edge.to) || 0) + 1)); const hubs = [...inbound].sort((a, b) => b[1] - a[1]).slice(0, 4);
+  if (hubs.length) add('Important files', chips(hubs.map(([path, count]) => `${path.split('/').pop()} · imported ${count}×`)));
+  add('Analysis coverage', el('p', '', `${result.coverage.readFiles} of ${result.coverage.listedFiles} files read (${result.coverage.followedReferences || 0} reached by following references). ${result.coverage.treeTruncated ? 'The file listing is partial. ' : ''}${result.warnings.length ? `${result.warnings.length} note${result.warnings.length > 1 ? 's' : ''} in Genius.` : ''}`));
+  const fanIn = hubs[0]?.[1] || 0; add('Complexity hints', el('p', '', `${(result.diagrams.components || []).filter(item => item.name !== '.').length} top-level folders, ${result.dependencies.length} located imports, ${result.externalModules?.length || 0} external modules, highest fan-in ${fanIn}.`));
+  const more = el('div', 'info-actions'); [['Open Genius', () => setDrawer('genius', true)], ['Build with Genius', () => { setDrawer('genius', true); $('#build-genius').scrollIntoView({ block: 'start' }); }], ['Export options', () => toggleMenu('#export-toggle', '#export-menu')]].forEach(([text, handler]) => { const button = el('button', 'glass-pill', text); button.type = 'button'; button.addEventListener('click', event => { event.stopPropagation(); closeMenus(); handler(); }); more.append(button); }); body.append(more);
+}
+function closeMenus(except = null) { if (except !== '#export-menu') { homeExportMenu(); $('#dock-export')?.setAttribute('aria-expanded', 'false'); } for (const [toggle, panel] of [['#info-toggle', '#info-panel'], ['#export-toggle', '#export-menu'], ['#hl-toggle', '#hl-menu']]) { if (panel === except) continue; $(panel).hidden = true; $(toggle).setAttribute('aria-expanded', 'false'); } }
+function toggleMenu(toggle, panel) { const open = $(panel).hidden; closeMenus(panel); $(panel).hidden = !open; $(toggle).setAttribute('aria-expanded', String(open)); if (open) $(panel).querySelector('button, a')?.focus({ preventScroll: true }); }
+$('#info-toggle').addEventListener('click', event => { event.stopPropagation(); toggleMenu('#info-toggle', '#info-panel'); });
+$('#export-toggle').addEventListener('click', event => { event.stopPropagation(); homeExportMenu(); toggleMenu('#export-toggle', '#export-menu'); });
+const exportHome = $('#export-menu').parentElement; // One export menu, shown from the command bar or the dock.
+function homeExportMenu() { const menu = $('#export-menu'); menu.removeAttribute('style'); delete menu.dataset.anchor; if (menu.parentElement !== exportHome) exportHome.append(menu); }
+function openExportFromDock(button) {
+  const menu = $('#export-menu'); const wasOpen = !menu.hidden && menu.dataset.anchor === 'dock'; closeMenus(); if (wasOpen) return;
+  document.body.append(menu); menu.dataset.anchor = 'dock'; menu.hidden = false; const rect = button.getBoundingClientRect(); const width = menu.offsetWidth; // Leave the glass bar: backdrop-filter would trap position:fixed.
+  Object.assign(menu.style, { position: 'fixed', top: `${Math.round(rect.bottom + 12)}px`, left: `${Math.round(Math.max(12, Math.min(innerWidth - width - 12, rect.left + rect.width / 2 - width / 2)))}px`, right: 'auto' });
+  button.setAttribute('aria-expanded', 'true'); menu.querySelector('[role=menuitem]:not([hidden])')?.focus({ preventScroll: true });
+}
+$('#dock-export').addEventListener('click', event => { event.stopPropagation(); openExportFromDock(event.currentTarget); });
+$('#dock-build').addEventListener('click', () => { setDrawer('genius', true); setTimeout(() => $('#build-genius').scrollIntoView({ block: 'start', behavior: reduceMotion() ? 'auto' : 'smooth' }), 80); });
+$('#zoom-toggle').addEventListener('click', () => { const on = $('#canvas').dataset.wheel !== 'on'; $('#canvas').dataset.wheel = on ? 'on' : 'off'; $('#zoom-toggle').setAttribute('aria-pressed', String(on)); toast(on ? 'Scrolling over the diagram now zooms.' : 'Scrolling scrolls the page again; click the diagram to zoom.'); });
+setupDock($('#view-dock'));
+$('#hl-toggle').addEventListener('click', event => { event.stopPropagation(); toggleMenu('#hl-toggle', '#hl-menu'); });
+$('#mindmap-mode').addEventListener('change', () => selectView('mindmap'));
+document.addEventListener('click', event => { if (!event.target.closest('.menu, .popover')) closeMenus(); });
+$$('#export-menu [data-export]').forEach(item => item.addEventListener('click', async () => { closeMenus(); if (!state.result) return; const format = item.dataset.export; if (format === 'copy') { try { await navigator.clipboard.writeText(getSource()); toast('Mermaid source copied.'); } catch { toast('Copying is blocked here; use Mermaid source (.mmd).'); } return; } try { await exportDiagram(format, getSource(), getSVG(), `${state.result.repository.repo}-${diagramFor()?.key.replace(/[^a-z0-9]+/gi, '-') || state.view}`); } catch (error) { toast(error.message); } }));
+$('#fullscreen-action').addEventListener('click', () => $('#fullscreen').click());
+$('#tour-action').addEventListener('click', () => $('#tour-start').click());
+$('#change-repo').addEventListener('click', () => { const bar = $('.command-bar'); bar.classList.toggle('tucked'); if (!bar.classList.contains('tucked')) { $('#repository').select(); $('#repository').focus(); } });
+function focusLayout() { return $('#studio').dataset.layout === 'focus'; }
+function placeDrawers() { if ($('#workspace').hidden) return; const top = Math.max($('.action-bar').getBoundingClientRect().bottom, $('.topbar').getBoundingClientRect().bottom) + 8; $('#studio').style.setProperty('--drawer-top', `${Math.round(top)}px`); } // Drawers start below the action bar so its toggles stay reachable.
+addEventListener('scroll', placeDrawers, { passive: true }); addEventListener('resize', placeDrawers);
+function syncDrawers() { placeDrawers(); for (const pane of ['tree', 'genius']) { const open = $('#studio').dataset[pane] === 'open'; $(`[data-drawer=${pane}]`).setAttribute('aria-pressed', String(open)); const collapse = $(`[data-collapse=${pane}]`); collapse.setAttribute('aria-expanded', String(open)); } $('#layout-toggle').setAttribute('aria-pressed', String(!focusLayout())); }
+function setDrawer(pane, open) { $('#studio').dataset[pane] = open ? 'open' : 'closed'; syncDrawers(); if (!focusLayout()) try { localStorage.setItem(`gad-${pane}`, open ? 'open' : 'closed'); } catch { /* optional */ } }
+$$('[data-drawer]').forEach(button => button.addEventListener('click', () => setDrawer(button.dataset.drawer, $('#studio').dataset[button.dataset.drawer] !== 'open')));
+function setLayout(layout, save = true) { const studio = $('#studio'); studio.dataset.layout = layout; const open = layout === 'studio'; studio.dataset.tree = open ? 'open' : 'closed'; studio.dataset.genius = open ? 'open' : 'closed'; $('#layout-toggle').setAttribute('aria-label', open ? 'Diagram-first layout' : 'Show panels side by side'); $('#layout-toggle').title = $('#layout-toggle').getAttribute('aria-label'); syncDrawers(); if (save) try { localStorage.setItem('gad-layout', layout); } catch { /* optional */ } }
+$('#layout-toggle').addEventListener('click', () => setLayout(focusLayout() ? 'studio' : 'focus'));
+
+// ——— Genius panel ———
+function renderGenius() {
+  const { result } = state; const panel = $('#genius-content'); panel.replaceChildren();
+  $('#genius-mode').textContent = result.ai ? 'AI + source' : 'Source mode';
+  const section = (title, ...children) => { const block = el('section', 'genius-section'); block.append(el('h3', '', title), ...children); panel.append(block); };
+  section('At a glance', el('p', '', result.summary));
+  if (result.structure) section('Structure', el('p', '', result.structure));
+  if (result.readingOrder?.length) {
+    const list = el('ol', 'reading-order');
+    const scopePrefix = result.repository.scope ? result.repository.scope + '/' : ''; result.readingOrder.forEach(item => { const entry = el('li'); const button = el('button', 'genius-file', item.path.startsWith(scopePrefix) ? item.path.slice(scopePrefix.length) : item.path); button.title = item.path; button.type = 'button'; button.addEventListener('click', () => inspect({ path: item.path, type: 'blob' })); entry.append(button, el('span', 'why', item.why)); list.append(entry); });
+    section('Suggested reading order', list, el('p', 'fineprint', 'Ordered from files the analyzer read: the README, manifests, declared entry points, then the most-imported modules.'));
+  }
+  if (result.technologies.length) section('Stack hints', el('p', '', `${result.technologies.join(', ')}, from manifest file names.`));
+  const checks = el('div', 'checks'); result.checks.forEach(check => { const row = el('div', 'check-row'); row.append(el('span', '', check.name), el('span', check.found ? 'found' : 'missing', check.found ? 'Present' : 'Not found')); checks.append(row); });
+  section('Documentation', checks);
+  if (result.ai) {
+    const block = [el('p', '', result.ai.overview)];
+    result.ai.components.slice(0, 8).forEach(item => { const row = el('p', 'genius-item'); const link = el('a', '', item.path); link.href = sourceURL(item.path); link.target = '_blank'; link.rel = 'noreferrer'; row.append(link, document.createTextNode(` — ${item.description}`)); block.push(row); });
+    if (result.ai.recommendations.length) { const list = el('ul', 'suggestions'); result.ai.recommendations.forEach(item => list.append(el('li', '', item))); block.push(el('h4', '', 'Suggestions (not findings)'), list); }
+    if (result.ai.graphNotes?.length) block.push(el('p', 'fineprint', `Validation removed or downgraded ${result.ai.graphNotes.length} graph item${result.ai.graphNotes.length > 1 ? 's' : ''}: ${result.ai.graphNotes.slice(0, 2).join(' ')}`));
+    const usage = result.ai.usage ? ` · ${result.ai.usage.input_tokens ?? result.ai.usage.prompt_tokens ?? result.ai.usage.promptTokenCount ?? '?'} input / ${result.ai.usage.output_tokens ?? result.ai.usage.completion_tokens ?? result.ai.usage.candidatesTokenCount ?? '?'} output tokens` : '';
+    block.push(el('p', 'fineprint', `${result.ai.providerName} · ${result.ai.model}${usage}. An interpretation of ${result.ai.includedPaths.length} excerpts; review the cited source.`));
+    section('Genius AI interpretation', ...block);
+  }
+  const warnings = el('ul', 'warning-list'); [...result.warnings, ...(result.ai?.limitations || [])].forEach(item => warnings.append(el('li', '', item)));
+  section('Coverage and limits', warnings);
+}
+function renderGuide() {
+  $('#guide').innerHTML = DOMPurify.sanitize(marked.parse(state.result.guide), { FORBID_TAGS: ['img', 'iframe', 'video', 'audio', 'form', 'style', 'input'], FORBID_ATTR: ['style'] });
+  $('#guide').querySelectorAll('a').forEach(anchor => { if (!anchor.href.startsWith('https://github.com/')) anchor.removeAttribute('href'); anchor.target = '_blank'; anchor.rel = 'noreferrer'; });
+}
+
+// ——— Mermaid source editor ———
+function sourceTargets() {
+  const { result } = state; const d = result.diagrams; const targets = [];
+  if (d.overview) targets.push({ key: 'overview', label: 'Architecture: components', view: 'architecture', mode: 'overview', source: d.overview });
+  targets.push({ key: 'files', label: 'Architecture: files and imports', view: 'architecture', mode: 'files', source: d.architecture });
+  if (result.ai?.diagrams) targets.push({ key: 'ai', label: 'System map (AI)', view: 'system', source: result.ai.diagrams.architecture });
+  targets.push({ key: 'mindmap', label: 'Mind map', view: 'mindmap', source: d.mindmap });
+  result.documented.forEach((item, index) => targets.push({ key: `doc:${item.path}:${item.line}`, label: `Authored: ${item.path}:${item.line}`, view: 'documented', index, source: item.source }));
+  return targets;
+}
+function fillSourceTargets() { $('#source-target').replaceChildren(...sourceTargets().map(target => { const option = el('option', '', target.label); option.value = target.key; return option; })); }
+function currentTarget() { return sourceTargets().find(target => target.key === $('#source-target').value) || sourceTargets()[0]; }
+function loadSourceEditor() {
+  const last = diagramFor(state.lastDiagramView || 'architecture'); if (last && sourceTargets().some(target => target.key === last.key)) $('#source-target').value = last.key;
+  const target = currentTarget(); $('#mermaid-source').value = state.edits.get(target.key) ?? target.source; $('#source-status').textContent = state.edits.has(target.key) ? 'Showing your edits.' : 'Original analysis output.'; $('#source-status').dataset.state = '';
+}
+$('#source-target').addEventListener('change', () => { const target = currentTarget(); $('#mermaid-source').value = state.edits.get(target.key) ?? target.source; $('#source-status').textContent = ''; });
+$('#validate-source').addEventListener('click', async () => { const check = await validateSource($('#mermaid-source').value); $('#source-status').textContent = check.message; $('#source-status').dataset.state = check.ok ? 'ok' : 'error'; });
+$('#render-source').addEventListener('click', async () => {
+  const target = currentTarget(); const text = $('#mermaid-source').value; const check = await validateSource(text);
+  if (!check.ok) { $('#source-status').textContent = check.message; $('#source-status').dataset.state = 'error'; return; }
+  if (text === target.source) state.edits.delete(target.key); else state.edits.set(target.key, text);
+  if (target.mode) { state.mode = target.mode; state.drill = ''; $('#architecture-mode').value = target.mode; }
+  if (target.index !== undefined) $('#document-select').value = String(target.index);
+  selectView(target.view);
+});
+$('#reset-source').addEventListener('click', () => { const target = currentTarget(); state.edits.delete(target.key); $('#mermaid-source').value = target.source; $('#source-status').textContent = 'Reset to the original analysis output.'; $('#source-status').dataset.state = 'ok'; });
+$('#copy-source').addEventListener('click', async () => { try { await navigator.clipboard.writeText($('#mermaid-source').value); toast('Mermaid source copied.'); } catch { toast('Select the text and copy it manually.'); } });
+
+// ——— Controls ———
+$('#analyze-form').addEventListener('submit', event => {
+  event.preventDefault();
+  const custom = $('#ref').value.trim() || $('#scope').value.trim();
+  const path = inputToPath($('#repository').value, location.host);
+  if (path && !custom) { const url = new URL(path, location.origin); const files = Number($('#max-files').value); if (files && files !== DEFAULT_FILES && !url.searchParams.has('files')) url.searchParams.set('files', String(files)); navigate(url.pathname + url.search + url.hash); return; }
+  analyze({ history: 'push' });
+});
+$('#cancel').addEventListener('click', () => state.controller?.abort());
+$('#refresh').addEventListener('click', () => { if (!state.result) return; const repo = state.result.repository; $('#repository').value = `https://github.com/${repo.fullName}`; $('#ref').value = repo.refKind === 'default' ? '' : repo.branch; $('#scope').value = repo.focus || repo.scope; analyze({ refresh: true, history: 'replace', lines: state.current?.lines }); });
+$('#commit').addEventListener('click', () => { $('#analysis-options').hidden = false; $('#options-toggle').setAttribute('aria-expanded', 'true'); $('#ref').value = state.result?.repository.branch || ''; $('#scope').value = state.result?.repository.scope || ''; $('#ref').focus(); $('#ref').select(); });
+$('#options-toggle').addEventListener('click', () => { const open = $('#analysis-options').hidden; $('#analysis-options').hidden = !open; $('#options-toggle').setAttribute('aria-expanded', String(open)); });
+$('#use-ai').addEventListener('change', updateCostNote);
+$('#tree-search').addEventListener('input', () => state.result && renderTree());
+$$('#tree-filters .chip').forEach(chip => chip.addEventListener('click', () => state.result && setFilter(chip.dataset.filter)));
+$('#close-inspector').addEventListener('click', () => { $('#file-inspector').hidden = true; state.current = null; });
+$$('#view-dock [role=tab]').forEach(tab => {
+  tab.addEventListener('click', () => { if (['system', 'architecture', 'mindmap', 'documented'].includes(state.view)) state.lastDiagramView = state.view; selectView(tab.dataset.view); });
+});
+$('#architecture-mode').addEventListener('change', event => { state.mode = event.target.value; if (state.mode !== 'files') state.drill = ''; selectView('architecture'); });
+$('#drill-clear').addEventListener('click', () => { state.drill = ''; state.mode = state.result.diagrams.overview ? 'overview' : 'files'; $('#architecture-mode').value = state.mode; selectView('architecture'); });
+$('#document-select').addEventListener('change', () => selectView('documented'));
+$('#zoom-in').addEventListener('click', () => zoom(1.2)); $('#zoom-out').addEventListener('click', () => zoom(1 / 1.2)); $('#fit').addEventListener('click', fit);
+$('#fullscreen').addEventListener('click', async () => { try { if (document.fullscreenElement) await document.exitFullscreen(); else await $('#canvas').requestFullscreen(); } catch { toast('Fullscreen is not available in this browser.'); } });
+$('#export-guide').addEventListener('click', () => { if (state.result) exportGuide(state.result); });
+$('#export-format').addEventListener('change', async event => { const format = event.target.value; event.target.value = ''; if (!format || !state.result) return; try { await exportDiagram(format, getSource(), getSVG(), `${state.result.repository.repo}-${diagramFor()?.key.replace(/[^a-z0-9]+/gi, '-') || state.view}`); } catch (error) { toast(error.message); } });
+$('#share').addEventListener('click', async () => {
+  if (!state.result) return; const repo = state.result.repository; const current = state.current?.type === 'blob' ? state.current : null;
+  const url = new URL(location.origin + workspacePath(repo, { pinned: true, focus: current?.path || repo.focus, lines: current?.lines, files: state.result.coverage.maxFiles })); if (VIEWS.has(state.view) && state.view !== state.defaultView) url.searchParams.set('view', state.view); const link = url.href; // Safe state only: repository, commit, path, lines, view.
+  try { await navigator.clipboard.writeText(link); toast(`Permalink to commit ${repo.sha.slice(0, 7)} copied.${repo.private ? ' Recipients need their own access to this private repository.' : ''}`); } catch { toast(link); }
+});
+$$('[data-collapse]').forEach(button => button.addEventListener('click', () => setDrawer(button.dataset.collapse, $('#studio').dataset[button.dataset.collapse] !== 'open'))); // In focus layout these close the drawers.
+$$('.mobile-switch [role=tab]').forEach(tab => tab.addEventListener('click', () => { $('#studio').dataset.pane = tab.dataset.pane; $$('.mobile-switch [role=tab]').forEach(item => item.setAttribute('aria-selected', String(item === tab))); }));
+document.addEventListener('keydown', event => { // "/" finds a file; Escape closes the inspector.
+  if (event.key === '/' && !event.target.closest('input, textarea, select') && state.result && !$('#workspace').hidden) { event.preventDefault(); setDrawer('tree', true); $('#tree-search').focus(); }
+  if (event.key === 'Escape' && !event.target.closest('dialog')) { if (!$('#info-panel').hidden || !$('#export-menu').hidden || !$('#hl-menu').hidden) closeMenus(); else if (focusLayout() && ($('#studio').dataset.tree === 'open' || $('#studio').dataset.genius === 'open') && !tourActive()) { setDrawer('tree', false); setDrawer('genius', false); } else if (!$('#file-inspector').hidden) $('#file-inspector').hidden = true; }
+});
+document.addEventListener('diagram-error', () => { if (state.view !== 'source') $('#diagram-caption').textContent = 'This diagram has a syntax problem. Open the Mermaid source tab to fix it or reset it.'; });
+
+// ——— Settings and theme ———
+function updateProvider(clearKey = false) {
+  const provider = PROVIDERS[$('#provider').value]; if (clearKey) $('#api-key').value = '';
+  $('#provider-key-label').textContent = `${provider.name} API key`; $('#model').value = provider.models[0];
+  $('#model-presets').replaceChildren(...provider.models.map(value => { const option = el('option'); option.value = value; return option; }));
+  $('#provider-docs').href = provider.docs; $('#preset-note').textContent = provider.name === 'Claude' ? 'Presets checked 28 Sep 2026' : 'Presets recorded 27 Sep 2026';
+  $('#provider-disclosure').textContent = `AI features send selected source excerpts to ${provider.name} and bill your ${provider.name} account. Nothing is sent until you choose an AI action.`;
+  updateCostNote(); askControls.refresh();
+}
+function renderSystemEmpty() {
+  const provider = PROVIDERS[$('#provider').value]; const failure = state.result?.warnings.find(item => /AI|model|provider|system maps|HTTP/.test(item) && !/lexical/.test(item));
+  const button = $('#system-generate'); button.hidden = false;
+  if (aiConfigured()) { $('#system-empty-text').textContent = 'Genius reads the files already analyzed and draws the people, components, and main flow of this repository, with a guided tour. Every link is checked against this commit.'; button.textContent = `Generate with ${provider.name}`; $('#system-cost').textContent = `Uses your key: up to 110,000 characters in, at most 12,000 output tokens, model ${$('#model').value.trim()}.`; }
+  else if (state.publicAI?.remainingToday) { $('#system-empty-text').textContent = 'Genius reads the files already analyzed and draws the people, components, and main flow of this repository, with a guided tour. Every link is checked against this commit.'; button.textContent = 'Generate system map'; $('#system-cost').textContent = `Free on this site (${state.publicAI.remainingToday} left today). The result is saved, so everyone who opens this commit sees it without another model call.`; }
+  else { $('#system-empty-text').textContent = 'A system map needs an AI model. Add a provider key and model in API settings to generate one for this repository.'; button.textContent = 'Open API settings'; $('#system-cost').textContent = state.publicAI ? 'Today\'s free system maps on this site are used up.' : 'The site operator can also enable free, cached system maps for public repositories.'; }
+  if (failure) $('#system-cost').textContent = `Last attempt: ${failure}`;
+}
+$('#system-generate').addEventListener('click', () => { if (!aiConfigured() && !state.publicAI?.remainingToday) { $('#settings').showModal(); return; } $('#use-ai').checked = true; analyze({ history: 'replace' }); });
+$('#tour-start').addEventListener('click', () => startTour(diagramFor('system')?.tour));
+function updateCostNote() { const provider = PROVIDERS[$('#provider').value]; $('#ai-cost').textContent = $('#use-ai').checked ? (!aiConfigured() && state.publicAI?.remainingToday ? `Draws a system map with this site's ${state.publicAI.provider} model (${state.publicAI.remainingToday} free today). Saved maps are reused at no cost.` : aiConfigured() ? `Sends up to 110,000 characters of the files read (about 28,000 tokens) to ${provider.name}, model ${$('#model').value.trim()}, with at most 12,000 output tokens. Billed to your key.` : `Add a ${provider.name} key and model in API settings; without them you get the structural analysis only.`) : 'Structure, tree, and source links need no AI key.'; }
+$('#provider').addEventListener('change', () => updateProvider(true));
+['#api-key', '#model'].forEach(id => $(id).addEventListener('input', () => { updateCostNote(); askControls.refresh(); }));
+$('#settings-open').addEventListener('click', () => $('#settings').showModal());
+$('#clear-credentials').addEventListener('click', () => { ['github-token', 'api-key', 'instance-token'].forEach(id => { $(`#${id}`).value = ''; }); state.cache.clear(); updateCostNote(); askControls.refresh(); toast('Keys removed from this tab, and cached analyses cleared.'); });
+function applyTheme(theme) { document.documentElement.dataset.theme = theme; $('#theme').setAttribute('aria-label', `Switch to ${theme === 'light' ? 'dark' : 'light'} theme`); }
+try { applyTheme(localStorage.getItem('gad-theme') === 'light' ? 'light' : 'dark'); } catch { applyTheme('dark'); }
+$('#theme').addEventListener('click', () => { const theme = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'; applyTheme(theme); try { localStorage.setItem('gad-theme', theme); } catch { /* Theme still applies without storage. */ } if (state.result && ['system', 'architecture', 'mindmap', 'documented'].includes(state.view)) selectView(state.view); });
+try { setLayout(localStorage.getItem('gad-layout') === 'studio' ? 'studio' : 'focus', false); if (!focusLayout()) for (const pane of ['tree', 'genius']) if (localStorage.getItem(`gad-${pane}`) === 'closed') setDrawer(pane, false); } catch { setLayout('focus', false); }
+$('#copy-host').addEventListener('click', async () => { try { await navigator.clipboard.writeText(location.host); toast('Hostname copied. Paste it in place of github.com.'); } catch { toast(`Use ${location.host} in place of github.com.`); } });
+
+function exportView(format, name) { return exportDiagram(format, getSource(), getSVG(), name); }
+const askControls = setupAsk({ getResult: () => state.result, credentials, headers: requestHeaders, aiConfigured, onInspect: (path, line) => inspect({ path, type: 'blob' }, { lines: line ? { start: line, end: line } : null }) });
+const extras = setupExtras({ state, selectView, diagramFor, inspect, revealInTree, setDrawer, closeMenus, toast, aiConfigured, exportView });
+async function copyText(text, message = 'Copied.') { try { await navigator.clipboard.writeText(text); toast(message); } catch { toast('Copying is blocked here; use Download.'); } }
+function downloadText(name, data, type) { const url = URL.createObjectURL(new Blob([data], { type })); const anchor = el('a'); anchor.href = url; anchor.download = name; document.body.append(anchor); anchor.click(); anchor.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
+const extractView = setupExtractView({ state, headers: requestHeaders, credentials, copy: copyText, download: downloadText, openDoc });
+
+// ——— Startup ———
+async function start() {
+  installIcons(); $$('.site-host').forEach(element => { element.textContent = location.host; });
+  updateProvider(); renderStarters($('#starter-examples'));
+  try { const response = await fetch('/api/health'); const type = response.headers.get('Content-Type') || ''; if (response.ok && type.includes('json')) { const health = await response.json(); state.maxFiles = Number(health.limits?.maxFiles) || 120; state.limits = health.limits || {}; state.publicAI = health.publicAI?.enabled ? health.publicAI : null; if (state.publicAI?.remainingToday) $('#use-ai').checked = true; updateCostNote(); $('#max-files').max = String(state.maxFiles); if (Number($('#max-files').value) > state.maxFiles) $('#max-files').value = String(state.maxFiles); } } catch { /* The analysis request reports connection problems itself. */ }
+  await route();
+}
+start();
+
+// Optional, feature-detected WebMCP tool: read-only access to the analysis already on screen.
+const modelContext = document.modelContext; const modelLifecycle = new AbortController();
+if (modelContext?.registerTool) {
+  try { Promise.resolve(modelContext.registerTool({ name: 'get_repository_analysis', title: 'Read the current repository analysis', description: 'Read the displayed repository summary, structure, reading order, coverage, and located dependency evidence. This does not start analysis, call AI, or change the repository.', inputSchema: { type: 'object', properties: {}, additionalProperties: false }, annotations: { readOnlyHint: true, untrustedContentHint: true }, execute(input) { if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).length) throw new Error('This tool accepts an empty object only.'); const result = state.result; if (!result) return { status: 'not_analyzed', message: 'Analyze a repository in the workspace first.' }; return { status: 'ready', repository: result.repository.fullName, commit: result.repository.sha, scope: result.repository.scope, summary: result.summary, structure: result.structure, readingOrder: result.readingOrder, coverage: result.coverage, dependencies: result.dependencies.slice(0, 30), aiEnabled: Boolean(result.ai), warnings: result.warnings }; } }, { signal: modelLifecycle.signal })).catch(() => {}); } catch { /* Optional integration. */ }
+  window.addEventListener('pagehide', () => modelLifecycle.abort(), { once: true });
+}

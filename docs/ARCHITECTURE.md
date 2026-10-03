@@ -1,68 +1,63 @@
 # Application architecture
 
-The browser, HTTP API, and CLI share one source of analysis truth. Repository code is read as data and is never executed.
+The browser, the HTTP API (Node server or hosted Worker), and the CLI share one analysis engine. Repository content is read as data and never executed.
 
 ```mermaid
 flowchart TD
-  Browser[Browser workspace] --> HTTP[Node HTTP server]
-  CLI[Local CLI] --> Service[Analysis service]
+  Browser["Browser workspace"] -->|"POST /api/analyze · NDJSON"| HTTP["Node server / Worker"]
+  Browser -->|"POST /api/ask · opt-in"| HTTP
+  CLI["Local CLI"] --> Service["Analysis service"]
   HTTP --> Service
-  Service --> Reader[GitHub reader]
-  Reader --> GitHub[GitHub REST API]
-  Reader --> Snapshot[Verified commit and blobs]
-  Snapshot --> Genius[Genius source analyzer]
-  Genius --> Report[Evidence and Mermaid report]
-  Genius -. Explicit AI opt-in .-> Model[Selected text provider]
-  Model -. Labeled interpretation .-> Report
+  Service --> Reader["GitHub reader"]
+  Reader -->|"refs, commit, tree, blobs"| GitHub[("GitHub REST API")]
+  Reader --> Ingest["Evidence-following ingestion"]
+  Ingest --> Genius["Genius: imports, overview, reading order"]
+  Genius --> Graph["Graph validator and Mermaid compiler"]
+  Service -.->|"explicit AI only"| Model["Selected provider"]
+  Model -.->|"component graph"| Graph
+  Graph --> Report["Report and guide"]
   Report --> Browser
   Report --> CLI
+  classDef ext fill:#1b212b,stroke:#8a96a8,stroke-dasharray:5 4,color:#f3f7ff
+  class GitHub,Model ext
 ```
 
 | Module | Responsibility |
 | --- | --- |
-| `src/github.mjs` | Validate fixed-host repository inputs; resolve refs; read immutable trees and blobs; verify Git SHA-1 object identities; enforce file and byte budgets |
-| `src/genius.mjs` | Resolve common local dependencies; preserve source locations; build Mermaid and documentation; search sampled evidence |
-| `src/ai.mjs` | Build bounded excerpts and request optional architecture interpretation through a selected provider |
-| `src/graph.mjs` | Validate grouped graph nodes, exact evidence quotes and verified paths; compile safe Mermaid |
-| `src/question.mjs` | Recheck source access and answer one explicitly paid question using independently verified citations |
-| `public/route-state.js` | Separate the selected branch, pinned commit, folder scope, view, file selection, and line anchors |
-| `src/service.mjs` | Orchestrate the pipeline; isolate credentials; cache public commit snapshots; retain short-lived analysis sessions |
-| `worker.mjs` | Hosted Fetch API adapter, asset routing, bounded streamed analysis, and no retained report sessions |
-| `src/evidence.mjs` | Shared keyword evidence search; the browser searches its existing report locally |
-| `scripts/build.mjs` | Bundle the browser and a Workers-compatible ESM server with local assets |
-| `server.mjs` | Stream NDJSON progress; serve allowlisted local modules; apply origin, input size, concurrency, and access checks |
-| `cli.mjs` | Write actual `.genius` artifacts from the same service |
-| `public/app.js` | Display coverage, trees, reports, source inspection, and evidence search |
-| `public/diagram.js` | Render sanitized Mermaid; manage pan/zoom and mapped node selection |
-| `public/exports.js` | Produce local Mermaid, SVG, PNG, and ZIP downloads |
+| `src/github.mjs` | Validate inputs; resolve tree/blob refs through `git/matching-refs` (slash branches, tags, SHAs); pin one commit; read the tree and SHA-verified blobs; rate-limit, permission, HTML, and transient-failure handling; evidence-following ingestion |
+| `src/overview.mjs` | Reference discovery (imports, manifest entry points), component overview, reading order |
+| `src/graph.mjs` | Validate a structured graph against the commit's paths and excerpt lines; compile it to Mermaid with one shape and color per kind and one line style per evidence basis |
+| `src/genius.mjs` | Lexical import/include extraction, file-level graph, mind map, authored-diagram discovery (`.md`, `.mmd`), guide |
+| `src/ai.mjs` | Bounded excerpts, the architecture interpretation schema, reference and graph validation |
+| `src/ask.mjs` | Grounded single-question answers from client-supplied excerpts, with citation validation |
+| `src/providers.mjs` | Fixed-endpoint adapters for OpenAI Responses, Claude Messages, Gemini generateContent, and Kimi Chat Completions |
+| `src/service.mjs` | Orchestration, credential isolation, public cache (Node only), sessions (Node only) |
+| `server.mjs` / `worker.mjs` | HTTP routing, origin/access/rate checks, NDJSON streaming, SPA fallback for every `/owner/repo/...` path |
+| `public/route.js` | Pure mapping between GitHub-shaped paths and analysis requests; permalinks |
+| `public/app.js` | Workspace state, history, views, tree, inspector, Genius panel |
+| `public/diagram.js` | Mermaid rendering (strict security, sanitized SVG), pan/zoom, syntax checks, light-theme tints for generated diagrams |
+| `public/ask.js`, `public/browse.js`, `public/exports.js` | Questions, the example catalog, and local downloads |
+| `tests/support/github-emulator.mjs` | Test transport that serves real Git repositories through the GitHub REST routes above |
 
 ## Analysis contract
 
-1. Resolve metadata, visibility, a ref, and a scope to a specific commit.
-2. Read that commit's recursive tree. Disclose truncation and retained-entry limits.
-3. Score eligible text files using README, entrypoint, manifest, and architecture-document hints, with a directory-diversity penalty.
-4. Fetch selected immutable Git blobs and verify their object identities. Preserve failures and skipped reads in coverage.
-5. Extract lexical references in supported languages. Match them to real listed paths. Keep external or ambiguous imports unresolved.
-6. Produce Mermaid, source citations, documentation-presence checks, and the guide. Invisible Mermaid links arrange disconnected components only; they do not represent code relationships.
-7. If explicitly requested, send bounded excerpts to the selected provider. Keep this interpretation separate from extracted facts; discard invalid file/line references.
-8. Return progress and the result. Exporting does not modify any remote repository.
-
-The default component overview groups the actual inventory into at most 14 nodes and summarizes observed cross-group references. It does not invent relationships for disconnected groups. The file-reference view contains at most 18 file nodes. AI graphs retain up to 96 nodes and 192 relationships, with a 24-node preview and explicit omitted/unmapped counts. Mind maps contain at most 14 groups and 5 named files per group. The source inspector shows a bounded 240-line window around a selected line, or the first 240 lines when no valid line is selected. These display limits do not redefine analysis coverage.
+1. Parse the address. For tree/blob URLs, list matching branch and tag names and choose the longest that prefixes the path; a hexadecimal first segment is tried as a commit. The remainder is the folder or file.
+2. Resolve one commit and read its recursive tree. A blob URL analyzes the file's nearest folder containing a project manifest, with the file read first.
+3. Rank candidate files by path hints (scope README and manifests first; examples and tests demoted when core code exists). Read files one at a time; after each read, raise the priority of files it imports and entry points it declares. Record why each file was read.
+4. Verify every blob against its Git SHA. Report skipped and unread files.
+5. Extract located imports/includes; build the component overview, per-component file graphs, the mind map, the reading order, and the guide. Invisible Mermaid links only arrange unconnected nodes and are marked as such in the source.
+6. Only on request, send bounded excerpts to the chosen provider. Validate its graph against the commit before compiling Mermaid; keep interpretation separate from extracted facts.
 
 ## HTTP API
 
-`POST /api/analyze` accepts JSON: `repository`, optional `ref`, `scope`, `maxFiles`, `githubToken`, `refresh`, `ai`, `apiKey`, `provider`, and `model`. An optional deployment password belongs in the `X-Instance-Token` header. The response is `application/x-ndjson`, with `progress`, `result`, and `error` events. Errors after streaming starts remain HTTP 200 but carry an error event and status; clients must read the full stream.
+`POST /api/analyze` — JSON `repository`, optional `ref`, `scope`, `maxFiles`, `githubToken`, `refresh`, `ai`, `provider`, `apiKey`, `model`. Returns `application/x-ndjson` with `progress`, `result`, and `error` events. After streaming starts, errors arrive as an `error` event with HTTP 200; clients must read to the end. The browser checks the content type before parsing and names HTML gateway pages as such.
 
-The browser searches evidence locally, so hosted requests do not depend on server affinity. `POST /api/ask` with `ai: true` accepts `repository`, immutable `commit`, `scope`, `question`, up to eight `evidencePaths`, and optional provider/caller credentials. It sends `progress`, `answer`, or `error` NDJSON events. The `answer` contains source-linked findings, limitations, suggestions, and disclosed source coverage. No answer session is retained. Without explicit AI consent, the hosted question service rejects the request before outbound work. The local server additionally preserves the legacy `id`/`question` evidence-search contract.
+`POST /api/ask` — JSON `ai: true`, `question` (≤600 characters), `excerpts` (≤12, each `path`, `startLine`, `text` ≤4,000 characters, ≤32,000 total), `repository`, `commit`, `provider`, `apiKey`, `model`. Returns `answer`, `findings` (each with `path` and `line` inside a sent excerpt), `suggestions`, `answered`, `discardedCitations`, `usage`. Requests without `ai: true` get evidence search on the Node server (session-based) and HTTP 400 on the Worker, where keyword search runs in the browser.
 
-`POST /api/source` accepts `repository`, immutable `commit`, `path`, and an optional caller GitHub token. Each call freshly checks metadata/access, tree membership, file eligibility, and the blob hash before returning bounded JSON. Reading an unread file does not silently increase the original analysis coverage.
+`GET /api/health` — version, runtime limits, whether a server AI key is usable, whether an access password is required.
 
-`GET /api/health` returns availability information without keys. Static application and local vendor modules are served from fixed roots only.
+Both runtimes allow 20 API requests per client address per minute; the Node server runs up to 3 analyses at once, the Worker 2 per isolate with 48 GitHub requests per run. Request bodies are capped at 20 KB (64 KB for `/api/ask`).
 
-The server permits up to 3 concurrent analyses and 20 API requests per direct client address per minute. The direct-IP limiter is deliberately simple; production hosts should also apply their own gateway limits.
+## Hosted build
 
-## Hosted runtime
-
-The production Worker uses the same GitHub/Genius engine. It accepts up to 40 files and 48 GitHub requests per run, two active analyses per isolate, and 20 API requests per observed client address per minute. Results are streamed to the browser. Only anonymous public structural reports use a ten-minute, twelve-entry isolate cache keyed by analyzer version, commit, scope, and file budget. Credential-specific and private results, paid responses, and hosted sessions are not retained in that shared cache. Source reads have a 45-second deadline; question provider calls have a 60-second deadline. Gateway protections remain the hosting operator's responsibility.
-
-Build with `npm run build`. The output is `dist/client` plus `dist/server/index.js`, whose default export has a callable `fetch(request, env, ctx)` handler. `dist/server/wrangler.json` declares the assets binding and Node compatibility.
+`npm run build` writes `dist/client` (bundled browser code, styles, fonts) and `dist/server/index.js` with `wrangler.json` declaring the assets binding and Node compatibility.

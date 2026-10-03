@@ -1,50 +1,117 @@
-// Project: Git Architecture Diagram | Component: Validated AI graph | Author: Amine Saoud ibn al-Bashir.
-import { AppError, encodePath } from './github.mjs'; // Build immutable source links from verified repository metadata.
-import { ROLE_PALETTE, fileRole } from './genius.mjs'; // Reuse the existing semantic colors and filename-role fallback.
-const textSchema = { type: 'string' }; const nullableText = { type: ['string', 'null'] }; const nullableLine = { type: ['integer', 'null'] }; // Keep provider schemas within their common supported subset.
-const ROLES = Object.keys(ROLE_PALETTE); const SHAPES = ['box', 'round', 'decision', 'database', 'subroutine']; const ID = /^[A-Za-z][A-Za-z0-9_-]{0,47}$/; // Constrain model identifiers, roles, and shapes before compilation.
-const CITATION_SCHEMA = { type: 'object', additionalProperties: false, properties: { path: textSchema, line: { type: 'integer' }, quote: textSchema }, required: ['path', 'line', 'quote'] }; // Keep relation evidence independent from either endpoint's navigation target.
-export const GRAPH_SCHEMA = { type: 'object', additionalProperties: false, properties: { groups: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { id: textSchema, label: textSchema }, required: ['id', 'label'] } }, nodes: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { id: textSchema, label: textSchema, description: textSchema, groupId: nullableText, role: { type: 'string', enum: ROLES }, shape: { type: 'string', enum: SHAPES }, path: nullableText, line: nullableLine }, required: ['id', 'label', 'description', 'groupId', 'role', 'shape', 'path', 'line'] } }, edges: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { from: textSchema, to: textSchema, label: textSchema, evidence: CITATION_SCHEMA }, required: ['from', 'to', 'label', 'evidence'] } } }, required: ['groups', 'nodes', 'edges'] }; // Represent conceptual nodes with null paths rather than invented files.
-export const INTERPRETATION_SCHEMA = { type: 'object', additionalProperties: false, properties: { overview: textSchema, graph: GRAPH_SCHEMA, recommendations: { type: 'array', items: textSchema }, limitations: { type: 'array', items: textSchema } }, required: ['overview', 'graph', 'recommendations', 'limitations'] }; // Let the server derive legacy arrays from validated graph data.
-export const GRAPH_INSTRUCTIONS = 'Return a small source-grounded graph, preferably 12 to 24 nodes, at most 96 nodes, 192 edges, and 12 flat groups. Use unique short alphanumeric IDs. Choose labels, role colors, and shapes to explain responsibilities; these are AI interpretations, not verified runtime behavior. Use exact repository paths for navigable nodes, or null for conceptual nodes. A line number is allowed only when that exact path and line were supplied. Use null for a folder line or an unknown line. Every edge needs an independently located evidence path and original line number from a supplied excerpt, plus the complete verbatim line with surrounding whitespace removed. Omit uncertain edges. Disconnected nodes and empty edge lists are valid. Never manufacture runtime calls, hardware wiring, execution, or tests. Do not return Mermaid, HTML, URLs, click commands, styles, or configuration directives.'; // Add a bounded graph contract to the existing untrusted-source instructions.
-const object = value => value !== null && typeof value === 'object' && !Array.isArray(value); // Distinguish structured objects from malformed model values.
-const clean = (value, limit) => typeof value === 'string' ? value.replace(/[\x00-\x1f\x7f\u2028\u2029\u202a-\u202e\u2066-\u2069]/g, ' ').trim().slice(0, limit) : ''; // Bound labels while removing invisible direction and line-breaking controls.
-const compare = (a, b) => a < b ? -1 : a > b ? 1 : 0; // Avoid locale-sensitive compiler ordering.
-export function escapeGraphLabel(value, limit = 96) { return clean(value, limit).replace(/[&<>"'\[\]{}()|`#;\\]/g, character => `#${character.codePointAt(0)};`); } // Encode all Mermaid delimiters in one pass, including user-supplied entity prefixes.
-function inventory(result) { const entries = result?.repository?.entries; if (!Array.isArray(entries) || !/^[a-f0-9]{40}$/i.test(result.repository.sha || '') || !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(result.repository.fullName || '')) throw new AppError(502, 'The AI graph needs a verified repository snapshot.'); return new Map(entries.filter(entry => ['blob', 'tree'].includes(entry.type)).map(entry => [entry.path, entry])); } // Prevent graph mappings from selecting external destinations or submodules.
-function evidenceIndex(result, lineLimits) { if (!(lineLimits instanceof Map)) throw new AppError(502, 'The AI graph is missing its source excerpt limits.'); const index = new Map(); for (const file of result.files || []) { const count = lineLimits.get(file.path); if (!Number.isInteger(count) || count < 1) continue; file.content.split('\n').slice(0, count).forEach((line, offset) => index.set(`${file.path}\0${offset + 1}`, line.trim())); } return index; } // Validate only model-visible line ranges, not every line in the downloaded files.
-function locateCitation(value, lines, result, requireQuote) { if (!object(value) || typeof value.path !== 'string' || !Number.isInteger(value.line) || value.line < 1) return null; const quote = lines.get(`${value.path}\0${value.line}`); if (!quote || (requireQuote && (typeof value.quote !== 'string' || value.quote.trim() !== quote))) return null; return { path: value.path, line: value.line, quote: quote.slice(0, 2000), url: `https://github.com/${result.repository.fullName}/blob/${result.repository.sha}/${encodePath(value.path)}#L${value.line}` }; } // Verify new exact quotes and locate legacy citations without trusting model URLs.
-function legacyGraph(raw) { // Adapt saved path-based reports without claiming their descriptions are observed facts.
-  const groups = new Map(); const nodes = new Map(); const components = Array.isArray(raw.components) ? raw.components : []; const relationships = Array.isArray(raw.relationships) ? raw.relationships : []; // Bound compatibility to the old documented data shape.
-  const add = (path, description = '') => { if (typeof path !== 'string' || nodes.has(path) || nodes.size >= 96) return; const folder = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : ''; if (folder && !groups.has(folder) && groups.size < 12) groups.set(folder, { id: `legacyGroup${groups.size}`, label: folder }); const role = fileRole(path); nodes.set(path, { id: `legacyNode${nodes.size}`, label: path.split('/').at(-1), description: clean(description, 1200), groupId: groups.get(folder)?.id || null, role, shape: role === 'entry' ? 'round' : 'box', path, line: null }); }; // Leave path rejection to the shared validator so invalid legacy components are counted.
-  for (const item of components.slice(0, 96)) if (object(item)) add(item.path, item.description); for (const edge of relationships.slice(0, 192)) if (object(edge)) { add(edge.from); add(edge.to); } const edges = relationships.slice(0, 192).map(edge => ({ from: nodes.get(edge?.from)?.id, to: nodes.get(edge?.to)?.id, label: edge?.description || 'AI interpretation', evidence: { path: edge?.evidencePath, line: edge?.evidenceLine } })); // Preserve legacy endpoints even if their components array omitted them.
-  return { groups: [...groups.values()], nodes: [...nodes.values()], edges }; // Return the same internal shape as richer provider responses.
-} // End legacy conversion.
-export function validateAIGraph(raw, result, lineLimits) { // Normalize only approved fields and independently check every source mapping.
-  if (!object(raw) || (Object.hasOwn(raw, 'graph') && !object(raw.graph))) throw new AppError(502, 'Genius returned an invalid graph.'); const paths = inventory(result); const lines = evidenceIndex(result, lineLimits); const rich = object(raw.graph) ? raw.graph : Array.isArray(raw.nodes) ? raw : null; if (!rich && (!Array.isArray(raw.components) || !Array.isArray(raw.relationships))) throw new AppError(502, 'Genius returned an invalid legacy graph structure.'); const candidate = rich || legacyGraph(raw); if (!Array.isArray(candidate.groups) || !Array.isArray(candidate.nodes) || !Array.isArray(candidate.edges)) throw new AppError(502, 'Genius returned an invalid graph structure.'); // Accept both versioned data shapes while rejecting malformed arrays.
-  const stats = { discardedGroups: 0, discardedNodes: 0, discardedEdges: 0, discardedMappings: 0, truncatedGroups: Math.max(0, candidate.groups.length - 12), truncatedNodes: Math.max(0, candidate.nodes.length - 96), truncatedEdges: Math.max(0, candidate.edges.length - 192) }; const groups = []; const groupIDs = new Set(); // Bound retained graph data independently of prompt compliance.
-  for (const item of candidate.groups.slice(0, 12)) { if (!object(item) || !ID.test(item.id || '') || !clean(item.label, 80)) { stats.discardedGroups++; continue; } if (groupIDs.has(item.id)) throw new AppError(502, 'Genius returned duplicate graph group IDs. The structural report remains available.'); groupIDs.add(item.id); groups.push({ id: item.id, label: clean(item.label, 80), basis: 'ai' }); } // Use flat groups only, eliminating nested group cycles and external group references.
-  const nodes = []; const nodeIDs = new Set(); // Keep model IDs for data identity while compiler IDs remain server-generated.
-  for (const item of candidate.nodes.slice(0, 96)) { // Validate conceptual and source-linked components using distinct mapping rules.
-    if (!object(item) || !ID.test(item.id || '') || !clean(item.label, 96)) { stats.discardedNodes++; continue; } if (nodeIDs.has(item.id)) throw new AppError(502, 'Genius returned duplicate graph node IDs. The structural report remains available.'); nodeIDs.add(item.id); const entry = typeof item.path === 'string' ? paths.get(item.path) : null; const conceptual = item.path === null; if (!conceptual && !entry) { stats.discardedNodes++; continue; } // Reject invented paths instead of silently turning them into conceptual nodes.
-    let line = null; if (item.line !== null && item.line !== undefined) { if (entry?.type === 'blob' && Number.isInteger(item.line) && lines.has(`${item.path}\0${item.line}`)) line = item.line; else stats.discardedMappings++; } const groupId = typeof item.groupId === 'string' && groupIDs.has(item.groupId) ? item.groupId : null; if (item.groupId && !groupId) stats.discardedMappings++; const role = ROLES.includes(item.role) ? item.role : entry ? fileRole(item.path) : 'source'; const shape = SHAPES.includes(item.shape) ? item.shape : 'box'; // Drop unverifiable line/group specificity while preserving a legitimate file target.
-    nodes.push({ id: item.id, label: clean(item.label, 96), description: clean(item.description, 1200), groupId, role, shape, path: entry ? item.path : null, type: entry?.type || null, line, basis: 'ai', mapping: entry ? 'repository-path' : 'conceptual' }); // Retain no raw styles, URLs, HTML, or unknown model properties.
-  } // End node validation.
-  const validIDs = new Set(nodes.map(node => node.id)); const edges = []; const seen = new Set(); // Ensure every relation terminates at a retained component.
-  for (const item of candidate.edges.slice(0, 192)) { if (!object(item) || !validIDs.has(item.from) || !validIDs.has(item.to) || item.from === item.to || !clean(item.label, 80)) { stats.discardedEdges++; continue; } const evidence = locateCitation(item.evidence, lines, result, Boolean(rich)); if (!evidence) { stats.discardedEdges++; continue; } const key = `${item.from}\0${item.to}\0${evidence.path}\0${evidence.line}`; if (seen.has(key)) { stats.discardedEdges++; continue; } seen.add(key); edges.push({ from: item.from, to: item.to, label: clean(item.label, 80), evidence, basis: 'ai' }); } // Check independent located evidence without certifying the relationship's semantics.
-  const used = new Set(nodes.map(node => node.groupId).filter(Boolean)); return { version: 1, basis: 'ai', groups: groups.filter(group => used.has(group.id)).sort((a, b) => compare(a.id, b.id)), nodes: nodes.sort((a, b) => compare(a.id, b.id)), edges: edges.sort((a, b) => compare(`${a.from}\0${a.to}\0${a.evidence.path}\0${a.evidence.line}`, `${b.from}\0${b.to}\0${b.evidence.path}\0${b.evidence.line}`)), stats, citationValidation: rich ? 'Paths, excerpt line numbers, and verbatim edge quotations were checked; relationships remain AI interpretations.' : 'Legacy paths and excerpt line numbers were checked; relationships remain AI interpretations.' }; // Return a deterministic bounded graph with honest provenance.
-} // End model graph normalization.
-export function legacyInterpretationArrays(graph) { // Preserve current Genius and Markdown exporters while richer graph rendering is integrated.
-  const nodes = new Map(graph.nodes.map(node => [node.id, node])); const unique = new Map(); for (const node of graph.nodes) if (node.path && !unique.has(node.path)) unique.set(node.path, { path: node.path, description: node.description || node.label, basis: 'ai' }); const relationships = graph.edges.flatMap(edge => { const from = nodes.get(edge.from)?.path; const to = nodes.get(edge.to)?.path; return from && to ? [{ from, to, description: edge.label, evidencePath: edge.evidence.path, evidenceLine: edge.evidence.line, basis: 'ai' }] : []; }); return { components: [...unique.values()], relationships }; // Exclude conceptual endpoints from file-only compatibility exports.
-} // End compatibility projection.
-export function compileAIGraph(graph, { maxNodes = 24 } = {}) { // Compile validated graph data to a separately labeled, readable Mermaid preview.
-  if (!Number.isInteger(maxNodes) || maxNodes < 1 || maxNodes > 48) throw new AppError(400, 'Choose an AI graph preview limit between 1 and 48 nodes.'); if (!object(graph) || graph.basis !== 'ai' || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges) || !Array.isArray(graph.groups)) throw new AppError(502, 'The AI graph must be validated before compilation.'); // Keep display bounds explicit and reject arbitrary raw model data.
-  const degree = new Map(graph.nodes.map(node => [node.id, 0])); graph.edges.forEach(edge => { degree.set(edge.from, (degree.get(edge.from) || 0) + 1); degree.set(edge.to, (degree.get(edge.to) || 0) + 1); }); const ranked = [...graph.nodes].sort((a, b) => (degree.get(b.id) || 0) - (degree.get(a.id) || 0) || compare(a.id, b.id)); const buckets = new Map(); ranked.forEach(node => { const key = node.groupId || ''; if (!buckets.has(key)) buckets.set(key, []); buckets.get(key).push(node); }); const selected = []; // Prefer useful connections while retaining representation across groups.
-  while (selected.length < Math.min(maxNodes, ranked.length)) for (const bucket of buckets.values()) { if (selected.length >= maxNodes) break; if (bucket.length) selected.push(bucket.shift()); } selected.sort((a, b) => compare(a.id, b.id)); const ids = new Map(selected.map((node, index) => [node.id, `agn${index}`])); const groupIDs = new Map(graph.groups.map((group, index) => [group.id, `agg${index}`])); const nodePaths = {}; const nodeDetails = {}; const source = ['flowchart TD', '%% AI-proposed responsibilities and relationships; quoted source locations are checked, runtime behavior is not verified.', '%% Invisible layout links, if present, arrange disconnected groups only.']; // Generate syntax identifiers ourselves, never from model text.
-  const nodeLine = node => { const id = ids.get(node.id); const label = escapeGraphLabel(node.label + (node.path === null ? ' · Concept' : '')); const shapes = { box: `["${label}"]`, round: `(["${label}"])`, decision: `{"${label}"}`, database: `[("${label}")]`, subroutine: `[["${label}"]]` }; const role = ROLES.includes(node.role) ? node.role : 'source'; if (node.path !== null) nodePaths[id] = { path: node.path, type: node.type, ...(node.line ? { line: node.line } : {}) }; nodeDetails[id] = { id: node.id, label: node.label, description: node.description, mapping: node.mapping, basis: 'ai' }; return `${id}${shapes[node.shape] || shapes.box}:::${role}`; }; // Keep source navigation outside Mermaid directives and mark concepts visibly.
-  const displayedGroups = graph.groups.filter(group => selected.some(node => node.groupId === group.id)); for (const group of displayedGroups) { source.push(`subgraph ${groupIDs.get(group.id)}["${escapeGraphLabel(group.label, 80)}"]`, 'direction TB', ...selected.filter(node => node.groupId === group.id).map(nodeLine), 'end'); } source.push(...selected.filter(node => !node.groupId).map(nodeLine)); // Preserve model-proposed flat grouping without implying folder or runtime boundaries.
-  const displayedEdges = graph.edges.filter(edge => ids.has(edge.from) && ids.has(edge.to)); displayedEdges.forEach(edge => source.push(`${ids.get(edge.from)} -.->|"${escapeGraphLabel(edge.label, 80)}"| ${ids.get(edge.to)}`)); // Use dotted relations to distinguish AI interpretation from observed import edges.
-  const neighbors = new Map(selected.map(node => [node.id, new Set()])); displayedEdges.forEach(edge => { neighbors.get(edge.from).add(edge.to); neighbors.get(edge.to).add(edge.from); }); const visited = new Set(); const representatives = []; for (const node of selected) { if (visited.has(node.id)) continue; representatives.push(node.id); const pending = [node.id]; while (pending.length) { const next = pending.pop(); if (visited.has(next)) continue; visited.add(next); pending.push(...neighbors.get(next)); } } representatives.forEach((id, index) => { if (index >= 4) source.push(`${ids.get(representatives[index - 4])} ~~~ ${ids.get(id)}`); }); // Stack disconnected components in four layout lanes without inventing code relationships.
-  if (!selected.length) source.push('agnempty["No source-grounded AI graph was available"]'); const legend = Object.entries(ROLE_PALETTE).map(([role, colors]) => ({ role, ...colors, count: selected.filter(node => node.role === role).length })).filter(item => item.count); Object.entries(ROLE_PALETTE).forEach(([role, colors]) => source.push(`classDef ${role} fill:${colors.fill},stroke:${colors.stroke},stroke-width:1.6px,color:#f3f7ff`)); // Share high-contrast role colors with the existing structural view.
-  return { architecture: source.join('\n'), nodePaths, nodeDetails, legend, displayedNodes: selected.length, displayedFiles: selected.filter(node => node.path !== null).length, omittedNodes: Math.max(0, graph.nodes.length - selected.length), omittedEdges: Math.max(0, graph.edges.length - displayedEdges.length), unmappedNodes: selected.filter(node => node.path === null).length, roleBasis: 'AI-proposed responsibilities; source mappings are verified, runtime behavior is not.', basis: 'ai', stats: graph.stats, citationValidation: graph.citationValidation, edgeEvidence: displayedEdges.map(edge => ({ from: ids.get(edge.from), to: ids.get(edge.to), label: edge.label, ...edge.evidence, basis: 'ai' })) }; // Keep omitted display data separate from discarded invalid model output.
-} // End deterministic AI graph compilation.
+// Project: Git Architecture Diagram | Component: Structured graph compiler | Author: Amine Saoud ibn al-Bashir.
+// Description: Validate a component graph against the repository inventory, then compile it into Mermaid.
+// Both the deterministic overview and optional AI output use this path, so every rendered node is either
+// mapped to a verified repository path or explicitly marked as a concept with no source location.
+
+// Semantic kinds: one shape and one color each, so the legend can explain every node on screen.
+export const KINDS = {
+  entry: { label: 'Entry point', shape: ['([', '])'], fill: '#12334c', stroke: '#66d4ff' },
+  source: { label: 'Source module', shape: ['[', ']'], fill: '#123638', stroke: '#55d6ca' },
+  ui: { label: 'User interface', shape: ['(', ')'], fill: '#3c2349', stroke: '#e3a0ed' },
+  hardware: { label: 'Hardware / firmware', shape: ['[/', '\\]'], fill: '#173d2c', stroke: '#79d99b' },
+  service: { label: 'Service / API', shape: ['[[', ']]'], fill: '#1c2f4d', stroke: '#8fb3ff' },
+  data: { label: 'Data / storage', shape: ['[(', ')]'], fill: '#2a2f3d', stroke: '#9fb0c8' },
+  config: { label: 'Configuration / build', shape: ['[/', '/]'], fill: '#44341b', stroke: '#f2c66d' },
+  docs: { label: 'Documentation', shape: ['>', ']'], fill: '#2d2550', stroke: '#b9a4ff' },
+  tests: { label: 'Tests', shape: ['{{', '}}'], fill: '#2f3a17', stroke: '#c3e36b' },
+  examples: { label: 'Examples / projects', shape: ['[[', ']]'], fill: '#1d3340', stroke: '#6fc3df' },
+  automation: { label: 'Automation / CI', shape: ['[\\', '\\]'], fill: '#45281c', stroke: '#ff9f68' },
+  assets: { label: 'Assets / binaries', shape: ['[(', ')]'], fill: '#26303b', stroke: '#8aa0b6' },
+  actor: { label: 'Person or device', shape: ['((', '))'], fill: '#2a2146', stroke: '#c9a7ff' },
+  external: { label: 'External system or dependency', shape: ['[', ']'], fill: '#1b212b', stroke: '#8a96a8', dashed: true },
+  concept: { label: 'Concept (no source mapping)', shape: ['(', ')'], fill: '#1f2430', stroke: '#b0b8c6', dashed: true },
+};
+
+// Edge provenance is shown by line style: evidence type must stay visible after rendering.
+export const BASES = {
+  observed: { label: 'Observed in source (import / include)', arrow: '-->' },
+  documented: { label: 'Stated in repository documentation', arrow: '==>' },
+  inferred: { label: 'AI interpretation — review the evidence', arrow: '-.->' },
+};
+
+const ID = /^[A-Za-z][A-Za-z0-9_-]{0,47}$/; // Model-supplied identifiers are validated before use.
+
+/** Escape untrusted text for a quoted Mermaid label; structural characters are removed. */
+export function labelText(value, limit = 60) {
+  return String(value ?? '').replace(/[\x00-\x1f]/g, ' ').replace(/[[\]{}()|`"<>#;]/g, ' ').replace(/&/g, 'and').replace(/\s+/g, ' ').trim().slice(0, limit);
+}
+
+/**
+ * Validate a structured graph against the repository inventory.
+ * @param {object} raw untrusted graph (from a model or a builder)
+ * @param {{paths: Set<string>, folders: Set<string>, lineLimits?: Map<string, number>}} inventory
+ * @returns {{graph: object, discarded: string[]}} a safe graph plus human-readable reasons for removed items
+ */
+export function validateGraph(raw, { paths, folders, lineLimits = new Map() }) {
+  const discarded = [];
+  if (!raw || typeof raw !== 'object' || !Array.isArray(raw.nodes) || !Array.isArray(raw.edges)) return { graph: { groups: [], nodes: [], edges: [] }, discarded: ['The graph was missing its node or edge list.'] };
+  const groups = (Array.isArray(raw.groups) ? raw.groups : []).filter(group => group && ID.test(group.id) && typeof group.label === 'string').slice(0, 16).map(group => ({ id: group.id, label: labelText(group.label, 48) }));
+  const groupIds = new Set(groups.map(group => group.id));
+  const nodes = [];
+  for (const item of raw.nodes.slice(0, 60)) {
+    if (!item || !ID.test(item.id) || typeof item.label !== 'string' || nodes.some(node => node.id === item.id)) { discarded.push(`Node "${String(item?.id ?? '?').slice(0, 40)}" had an invalid or duplicate identifier.`); continue; }
+    const path = typeof item.path === 'string' ? item.path.replace(/^\/+|\/+$/g, '') : '';
+    const isFile = path && paths.has(path); const isFolder = path === '' ? false : folders.has(path);
+    const mapped = isFile || isFolder;
+    if (path && !mapped) discarded.push(`"${item.label.slice(0, 40)}" cited ${path.slice(0, 80)}, which is not in this commit; it is shown as an unmapped concept.`);
+    const standalone = item.kind === 'external' || item.kind === 'actor'; // People, devices, and outside systems legitimately have no repository path.
+    const kind = mapped || standalone ? (Object.hasOwn(KINDS, item.kind) && item.kind !== 'concept' ? item.kind : 'source') : 'concept';
+    nodes.push({ id: item.id, label: labelText(item.label, 48), detail: labelText(item.detail || '', 64), kind, group: groupIds.has(item.group) ? item.group : '', path: mapped ? path : '', pathType: isFile ? 'blob' : isFolder ? 'tree' : '', basis: ['observed', 'documented', 'inferred'].includes(item.basis) ? item.basis : 'inferred' });
+  }
+  const nodeIds = new Set(nodes.map(node => node.id));
+  const edges = [];
+  for (const item of raw.edges.slice(0, 120)) {
+    if (!item || !nodeIds.has(item.from) || !nodeIds.has(item.to) || item.from === item.to) { discarded.push('A relationship referred to a missing node.'); continue; }
+    const basis = Object.hasOwn(BASES, item.basis) ? item.basis : 'inferred';
+    const evidencePath = typeof item.evidencePath === 'string' ? item.evidencePath : ''; const line = Number(item.evidenceLine);
+    const hasEvidence = evidencePath && paths.has(evidencePath) && Number.isInteger(line) && line >= 1 && (!lineLimits.size || line <= (lineLimits.get(evidencePath) || 0));
+    if ((basis === 'observed' || basis === 'documented') && !hasEvidence && !item.count) { discarded.push(`A relationship labeled "${basis}" had no verifiable path and line; it is shown as inferred.`); }
+    edges.push({ from: item.from, to: item.to, label: labelText(item.label || '', 40), basis: basis !== 'inferred' && !hasEvidence && !item.count ? 'inferred' : basis, count: Number.isInteger(item.count) ? item.count : null, evidence: hasEvidence ? { path: evidencePath, line } : null });
+  }
+  const tour = [];
+  for (const step of (Array.isArray(raw.tour) ? raw.tour : []).slice(0, 8)) { // A guided walk through the main flow, validated like everything else.
+    if (!step || !nodeIds.has(step.node) || typeof step.text !== 'string' || !step.text.trim() || tour.at(-1)?.node === step.node) { if (step) discarded.push('A tour step referred to a missing node or had no text.'); continue; }
+    tour.push({ node: step.node, text: step.text.replace(/[\x00-\x1f]/g, ' ').trim().slice(0, 280) });
+  }
+  const steps = new Set(tour.slice(1).map((step, index) => `${tour[index].node}>${step.node}`));
+  edges.forEach(edge => { edge.flow = steps.has(`${edge.from}>${edge.to}`) || steps.has(`${edge.to}>${edge.from}`); }); // Edges along the tour carry the animated flow.
+  return { graph: { direction: raw.direction === 'LR' ? 'LR' : 'TD', groups, nodes, edges, tour }, discarded };
+}
+
+/**
+ * Compile a validated graph to Mermaid with stable node identifiers and a source map.
+ * @returns {{mermaid: string, nodePaths: object, legend: object[], edgeLegend: object[], nodes: object[], edges: object[]}}
+ */
+export function compileGraph(graph, { title = '' } = {}) {
+  const lines = [`flowchart ${graph.direction || 'TD'}`];
+  if (title) lines.push(`%% ${labelText(title, 120)}`);
+  const ids = new Map(graph.nodes.map((node, index) => [node.id, `n${index}`])); // Never reuse external identifiers inside Mermaid.
+  const nodePaths = {};
+  const declare = node => {
+    const [open, close] = KINDS[node.kind].shape;
+    const label = node.detail ? `${node.label}<br/>${node.detail}` : node.label; // Mermaid renders <br/> as a line break in both label modes.
+    if (node.path || node.pathType) nodePaths[ids.get(node.id)] = { path: node.path, type: node.pathType || 'tree' };
+    return `${ids.get(node.id)}${open}"${label}"${close}:::${node.kind}`;
+  };
+  const grouped = new Map(graph.groups.map(group => [group.id, []]));
+  const loose = [];
+  graph.nodes.forEach(node => (node.group && grouped.has(node.group) ? grouped.get(node.group) : loose).push(node));
+  graph.groups.forEach((group, index) => { const members = grouped.get(group.id); if (!members.length) return; lines.push(`subgraph g${index}["${group.label}"]`, ...members.map(node => `  ${declare(node)}`), 'end'); });
+  loose.forEach(node => lines.push(declare(node)));
+  graph.edges.forEach(edge => {
+    const text = [edge.label, edge.count > 1 ? `×${edge.count}` : ''].filter(Boolean).join(' ');
+    lines.push(`${ids.get(edge.from)} ${BASES[edge.basis].arrow}${text ? `|${text}|` : ''} ${ids.get(edge.to)}`);
+  });
+  const connected = new Set(graph.edges.flatMap(edge => [edge.from, edge.to])); // Unconnected nodes would otherwise form one long row.
+  const isolated = loose.filter(node => !connected.has(node.id));
+  const columns = Math.max(3, Math.ceil(Math.sqrt(isolated.length * 1.5)));
+  if (isolated.length > columns) { lines.push('%% Invisible links arrange unconnected nodes in a grid; they are not relationships.'); for (let index = 0; index + columns < isolated.length; index++) lines.push(`${ids.get(isolated[index].id)} ~~~ ${ids.get(isolated[index + columns].id)}`); }
+  if (!graph.nodes.length) lines.push('empty["Nothing to show in this scope"]');
+  Object.entries(KINDS).forEach(([kind, style]) => lines.push(`classDef ${kind} fill:${style.fill},stroke:${style.stroke},stroke-width:1.6px,color:#f3f7ff${style.dashed ? ',stroke-dasharray:5 4' : ''}`));
+  const used = new Set(graph.nodes.map(node => node.kind));
+  const legend = Object.entries(KINDS).filter(([kind]) => used.has(kind)).map(([kind, style]) => ({ role: kind, label: style.label, fill: style.fill, stroke: style.stroke, count: graph.nodes.filter(node => node.kind === kind).length, dashed: Boolean(style.dashed) }));
+  const edgeLegend = Object.entries(BASES).filter(([basis]) => graph.edges.some(edge => edge.basis === basis)).map(([basis, style]) => ({ basis, label: style.label, arrow: style.arrow, count: graph.edges.filter(edge => edge.basis === basis).length }));
+  const tour = (graph.tour || []).map(step => ({ id: ids.get(step.node), label: graph.nodes.find(node => node.id === step.node)?.label || '', text: step.text }));
+  const flowEdges = graph.edges.filter(edge => edge.flow).map(edge => [ids.get(edge.from), ids.get(edge.to)]);
+  return { mermaid: lines.join('\n'), nodePaths, legend, edgeLegend, nodes: graph.nodes, edges: graph.edges, groups: graph.groups, tour, flowEdges };
+}

@@ -13,15 +13,28 @@ npm run build
 
 The build creates `dist/server/index.js` and `dist/client`, with an `ASSETS` binding and Node compatibility declared in `dist/server/wrangler.json`. The existing Site must be published from the same reviewed GitHub source commit. Future changes must update this repository and republish that Site; an arbitrary GitHub push alone does not trigger a Sites deployment.
 
-The hosted Worker accepts up to 40 files per run. Anonymous public structural results can be reused from a ten-minute, twelve-entry cache in the current isolate. Private and credential-specific analyses bypass that cache; hosted sessions and paid answers are not retained. Evidence search runs in the browser using already-read files. Optional AI remains disabled unless requested with an authorized key and model. No provider API key is bundled into browser assets.
+The hosted Worker accepts up to 40 files per run and does not retain report/session caches. Evidence search runs in the browser using already-read files. Optional AI remains disabled unless requested with an authorized key and model. No provider API key is bundled into browser assets.
 
 When a Worker serves both the generated address and a custom domain, set `PUBLIC_ORIGINS` to a comma-separated list of their exact HTTPS origins. Keep `PUBLIC_ORIGIN` as the primary origin. Without `PUBLIC_ORIGINS`, the Worker uses `PUBLIC_ORIGIN` as before. The local Node server continues to use its single `PUBLIC_ORIGIN`.
 
 ## Custom domain
 
-`gitarchitecturediagram.com` was attached to the existing Site on September 29, 2026 and is pending DNS and HTTPS validation. See [Domain setup](DOMAIN_SETUP.md) for the actual required records. It is separate from the GitHub repository and generated hosting address. A browser `DNS_PROBE_FINISHED_NXDOMAIN` error means that address could not be resolved. To use it, first confirm ownership or register the domain, then attach it through the hosting provider and set the required DNS records. Domain purchase and DNS ownership are not implied by publishing this code. Use the configured website address until the custom domain is verified.
+Status checked from the development sandbox on **2026-09-28/29 UTC**; re-check before announcing any address.
 
-`diagram.proamine.tech` has been attached to the existing Site and is **pending DNS validation**, not yet a working public address. The original `proamine.tech` website and DNS have not been changed. A custom hostname alone does not fix application-level GitHub transport or response-format errors.
+| Address | DNS observed | Meaning |
+| --- | --- | --- |
+| `git-architecture-diagram.pro-amine.chatgpt.site` | Resolves; serves the application | The working public address |
+| `diagram.proamine.tech` | **No DNS record** (the name does not resolve) | The hosting side lists it as attached and pending validation, but the record it waits for was never created at the DNS host |
+| `gitarchitecturediagram.com` | Resolves to `2.57.91.91` and refuses automated access | Registered, but **not** in the `proamine.tech` owner's Hostinger domain portfolio; ownership is unconfirmed |
+
+To finish `diagram.proamine.tech`:
+
+1. Open the Site's custom-domain panel and copy the exact record it asks for (type, name, target). Do not guess the target; it is specific to the hosting account.
+2. In Hostinger, open **Domains → proamine.tech → DNS / Nameservers** and add that record for the name `diagram`. Leave the existing `proamine.tech` records unchanged.
+3. Wait for the hosting panel to report the domain as verified and HTTPS as issued. Then check `https://diagram.proamine.tech/api/health` and a deep link such as `/ProAmineOfficial/NanoKit-ESP32/tree/main/examples_on_platformio/ultrasonic_distance`.
+4. Set `PUBLIC_ORIGINS=https://git-architecture-diagram.pro-amine.chatgpt.site,https://diagram.proamine.tech` so API requests from both origins are accepted.
+
+For `gitarchitecturediagram.com`, first confirm who owns it (WHOIS or the registrar's search). If it is not yours, choose another name; a GitHub repository name does not create or reserve a domain. Every `/owner/repo/...` path, including GitHub pull-request or issue paths, is served the workspace by both runtimes, so any domain you attach supports the hostname-replacement journey without extra rewrite rules.
 
 ## Node hosting
 

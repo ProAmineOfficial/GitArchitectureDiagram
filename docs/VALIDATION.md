@@ -1,6 +1,187 @@
 # Release validation
 
-Latest validation: **2026-09-29**. Earlier release checks are retained below. These observations describe the tested revision and environment, not a guarantee for every repository or hosting provider.
+## Version 0.9.0: view dock and Export Project
+
+Validation date: **2026-10-03**, sandbox, Chromium 141.
+
+- `npm run check`: 34 modules. `npm run build`: succeeded.
+- `npm test`: **67 passing**, with 3 new tests:
+  - the magnification curve at the dock's item pitch, which is symmetric and decreasing;
+  - the rise in proportion to scale;
+  - the developer and knowledge packs, including their *verified source* and *Genius inference* labels.
+- `npm run test:browser`: **26 passing**, with 7 new checks:
+  - ten distinct dock icons, the AI badge, the count badge shown only with diagrams, two separators, and the amber active state with its moving dot;
+  - proximity magnification on neighbors, and the reset when the pointer leaves;
+  - arrow-key focus and Enter;
+  - the dock's Export opening the shared menu under the dock button without changing the view, then returning to the command bar;
+  - Export Project cards, the exact clone command, SVG, PNG, and Mermaid downloads for non-current views, the Developer Pack ZIP contents, and plan modes;
+  - permalinks carrying and restoring the view;
+  - reduced motion and narrow layouts with no magnification.
+- **Measured magnification** across six icons with the pointer on Software Hierarchy: 1.062, 1.220, 1.480, 1.235, 1.063, 1.008.
+- **No horizontal overflow** at 820 px or 390 px, and no page errors.
+
+Found and fixed during validation:
+
+- **Dock calibration:** the curve was first calibrated for a 58 px item pitch, but the real pitch is about 67 px.
+- **Narrow windows:** narrow windows with a mouse magnified icons inside a scroll container that clips them.
+- **Count badge:** it showed 0.
+- **Icon shadow:** the magnified icon's shadow covered its label.
+
+
+## Version 0.8.0: Project extract
+
+Validation date: **2026-10-03**, sandbox.
+
+- `npm test`: **64 passing**, with 5 new tests:
+  - pattern semantics;
+  - one API request plus one codeload download, with the token sent only to `api.github.com`;
+  - credentials never read, binaries and oversized files excluded, default excludes;
+  - scope, include/exclude, and size limits on the server;
+  - an unexpected redirect host refused without contact, and malformed input refused before any request;
+  - rate-limit, compressed, unpacked, and content-budget limits;
+  - the Worker NDJSON stream.
+- `npm run test:browser`: **19 passing**, with 2 new flows:
+  - the five sections, per-section Copy, Copy all, and Markdown download;
+  - the entire repository through the server with include/exclude filters.
+- **Real large repository:** an archive built from `inngest/inngest` (80 MB, 13,143 files) and fed to the extractor.
+  - Node with default filters: 3,024 files, 13.9 MB, 2.3 s.
+  - Node with `*.go`: 1,155 files, 2.1 s.
+  - Worker limits: refused in 0.1 s by Content-Length, before download.
+  - This exercises the parser and the limits on real data; it was not a live GitHub download.
+- Fixed during validation: server-locale-dependent ordering is now code-point ordering, and token counts are labeled by what they measure.
+
+Not verified: a live codeload download from GitHub (the sandbox's GitHub allowance was unavailable), and the hosting platform's real CPU limits for large archives.
+
+
+## Version 0.7.0: Highlights, Software hierarchy, Repository mind map, Build with Genius, verified answers
+
+Validation date: **2026-10-03**, sandbox.
+
+- `npm run check`: 30 modules. `npm run build`: succeeded.
+- `npm test`: **59 passing**, with 13 new tests:
+  - highlight modes and basis labels;
+  - the hierarchy layers and badges;
+  - mind map concepts that map to paths, and README features;
+  - observed versus recommended skills, and no invented skills;
+  - every required prompt section;
+  - the clone command without credentials, the README badge and picture Markdown, extract limits, and the reconstruction pack contents;
+  - server-side citation verification against a real Git repository, including a planted quote that must stay unverified.
+- `npm run test:browser`: **17 passing**, in-repository, with Playwright Chromium 141. A temporary Git repository is served by the GitHub emulator, and model calls are answered by a deterministic mock in the OpenAI Responses shape. Covered:
+  - the system map opening first, and its animated flow edges;
+  - Highlights: data flow, keyword, and clear;
+  - grouped Export tabs, the README badge, and the README picture PNG download;
+  - development prompt modes and download, the skills JSON export, and skills for your app;
+  - verified and inferred answers through the UI;
+  - hierarchy collapse and Explain;
+  - mind map to Genius to Architecture cross-view selection;
+  - drawers and Escape, light theme, the mobile bottom sheet with no overflow, and no page errors.
+
+Found and fixed during validation:
+
+- **Mermaid render-id prefix:** this Mermaid version prefixes edge ids with the render id, which silently disabled edge highlighting.
+- **Data-flow entry points:** a heuristic treated `App.jsx` as an entry point.
+- **Mind map labels:** labels contained parentheses that the label sanitizer removes.
+
+Not verified: real provider calls; a live GitHub run of this release; Safari and Firefox; very large repositories such as `inngest/inngest`.
+
+
+## Version 0.6.0: diagram-first workspace
+
+Validation date: **2026-09-30**, sandbox, Chromium 141. `npm test`: **52 passing**; check and build succeeded.
+
+Browser checks, all passing:
+
+- **14 new layout checks:**
+  - the home page centers the input, and the repository page tucks it away behind the action bar;
+  - the diagram spans more than 1,200 px at a 1,440 px viewport;
+  - page scrolling is not captured by the diagram until it is clicked;
+  - Info summary, Files and Genius drawers, Escape closing them, SVG export from the menu, Tour starting from the bar, and pinning panels side by side;
+  - at 390 px there is no horizontal overflow and the Genius drawer opens;
+  - no page errors.
+- **The 40 earlier journeys and 13 system-map checks still pass.** Three journey steps now use the new controls: the search button reveals the input, the Files drawer toggle, and the Export menu.
+
+The system map in these checks still comes from a **mocked provider response**; no real model request was made.
+
+
+## Version 0.5.0: System map, guided tour, liquid glass
+
+Validation date: **2026-09-29**, sandbox. `npm test`: **52 passing**, with 4 new tests covering actor/external kinds, tour validation and flow edges, one model call per saved public map, the daily limit, private repositories never using the site key, and visitor-paid maps not being shared. `npm run check` and `npm run build` succeeded.
+
+Browser, Chromium 141: the **40 earlier journey checks still pass**. **13 system-map checks pass** against the Driver-NanoKit repository (real clone) with a **mocked OpenAI response** (a hand-written graph using real paths and README lines). Covered:
+
+- the System map opening first, and actors, outside systems, and groups being drawn;
+- 4 animated flow edges, with dotted styles restored after the entrance animation;
+- the legend;
+- tour steps that focus nodes and light the incoming edge;
+- Escape ending the tour, and a mapped node opening `silabser.inf`;
+- a reload serving the saved map with **one model call across four page loads**;
+- the empty state without a key, reduced motion, and no page errors.
+
+This validates rendering, validation, caching, and motion. **It does not measure the quality of a real model's map.** No real provider request has been made.
+
+
+## Version 0.4.0: routes, component overview, grounded answers
+
+Validation date: **2026-09-29**, in a development sandbox. Each check type below is reported separately, because they prove different things.
+
+### Unit and integration tests (Node, no network)
+
+`npm test`: **48 passing, 0 failing**. `npm run check`: 25 modules. `npm run build`: succeeded. New tests cover:
+
+- ref resolution for slash branches, tags, and commit SHAs in at most 5 GitHub requests, against a real temporary Git repository;
+- blob URLs scoping to the nearest project folder, with the file read first;
+- rate-limit reset messages, HTML interstitials, and a single retry for 5xx only;
+- evidence-following ingestion (a manifest's `main`, then imports) ahead of examples;
+- the component overview drawing only observed edges and skipping standard libraries;
+- graph validation (invented paths become unmapped concepts; out-of-excerpt evidence is downgraded);
+- grounded answers (citation filtering, input limits enforced before any provider call, Claude thinking blocks ignored, provider HTML errors);
+- the Worker's `/api/ask` (an anonymous visitor cannot use the server key) and workspace fallback for GitHub pull-request and commit paths.
+
+### Browser journeys (Chromium 141, sandbox)
+
+A harness ran the real Node server with GitHub traffic served by `tests/support/github-emulator.mjs` from **real Git clones** of `ProAmineOfficial/NanoKit-ESP32` (17834db), `ProAmineOfficial/Driver-NanoKit-ESP32-of-T.U.M-Pro_Amine-IC` (4fddb89), and `expressjs/express` (98bd4cd). This proves application behavior on real repository content. It does not prove live GitHub availability. The harness script is not part of this repository.
+
+**40 of 40 journey checks passed**:
+
+- Deep links and history:
+  - root, tree, and blob deep links;
+  - `#L20-L24` highlighting that survives a refresh, and line-number anchors;
+  - Back and Forward without re-analysis;
+  - Back during a running analysis, which cancels it without rewriting history.
+- Navigation and diagrams:
+  - permalinks pinned to the SHA;
+  - component click → folder inspector → file drill-down → source inspector, with the tree selection in sync;
+  - docs scopes opening the author's diagram with its colors.
+- Editing and exports:
+  - Mermaid syntax errors caught before rendering, edited previews labeled, and reset restoring source links;
+  - SVG, PNG, and `.genius` ZIP downloads, with the ZIP's members checked.
+- Controls:
+  - arrow keys between tabs, `+` to zoom the canvas, `/` to focus file search;
+  - panel collapse.
+- Error messages: rate limit, HTML gateway, GitHub pull-request URL, and unknown branch.
+- Browse: six cards with previews, type filter, search, and opening a live analysis at the pinned commit.
+- No uncaught page errors.
+
+The sandbox screenshots also covered light theme and a 390-pixel mobile layout; the mobile layout had no horizontal overflow and a working panel switcher.
+
+### Live external calls
+
+- **GitHub:** the sandbox's shared unauthenticated allowance (60 requests per hour) was exhausted throughout this session, so no full live analysis ran. One live request confirmed the new rate-limit handling end to end: HTTP 429 with *"It resets in about 38 minutes (19:18 UTC)"* taken from GitHub's headers.
+- **AI providers:** none. No credentials were available. Architecture graphs and answers are verified only against mocked responses in each provider's documented shape.
+
+### Not yet verified
+
+- A complete live GitHub analysis of this release, and the production Worker running 0.4.0. It must be deployed first.
+- Any real OpenAI, Claude, Gemini, or Kimi request, including structured-output acceptance of the new graph schema by each provider.
+- Private repositories with a real fine-grained token.
+- Safari and Firefox, and screen readers beyond keyboard operation.
+- `diagram.proamine.tech` and `gitarchitecturediagram.com`. See [Deployment](DEPLOYMENT.md#custom-domain) for the observed DNS state.
+
+### Deferred
+
+Narrated video tours, like GitDiagram's `/video` pages, are **not implemented**. They need script generation, speech synthesis, rendering, storage, and a cost model, and should be scoped separately with real assets.
+
+Validation date: **2026-09-26**. These observations describe the tested revision and environment, not a guarantee for every repository or hosting provider.
 
 ## Version 0.2.1: reported production failures
 
@@ -87,36 +268,3 @@ Mermaid syntax is also checked with the installed real parser against generated 
 Final local release checks: **31 tests passed**, **19 shipped modules passed syntax checks**, the production Worker/browser build completed, all eight generated/authored Mermaid samples parsed, and both DOM interaction scenarios passed. Paid provider responses and browser layout remain outside this validation.
 
 Post-publication check: v0.3.0 was published successfully and GitHub CI passed for `96e97511a9ddfa4ea920d0dbbda317f2f8c900ae`. The final anonymous production analysis attempt returned GitHub's access/rate-limit error before a report completed. Earlier real v0.2.2 requests succeeded as listed above; the later request is not counted as a successful analysis. A caller-supplied GitHub read token in API settings provides authenticated allowance; no real token or paid AI key was available for this final check. The custom hostname `diagram.proamine.tech` remains pending DNS validation because Hostinger blocked cloud-browser access.
-
-
-## v0.4.0 — connected workspace and source-grounded Genius
-
-Validated on **September 29, 2026**:
-
-- **65 automated tests passed**, including the actual application in a DOM harness, four mocked provider contracts, graph validation with the real Mermaid parser, and the bundled Worker running in workerd.
-- **22 application/build modules passed syntax checks.** The production browser and Worker build completed.
-- The native runtime test exercises ingestion, verified source browsing, optional interpretation, paid-question streaming, credential separation, and exact answer citations. Its external GitHub and provider responses are fixtures; no paid API call was made.
-- DOM integration tests exercise direct blob routes, line ranges beyond the first 240 lines, tree/diagram/inspector selection, keyboard activation, source edits and theme changes, sidebar controls, Back navigation, refresh without paid replay, on-demand file reads, deliberate AI questions, stale-response cancellation, visible input errors, and the actual Mermaid/ZIP export bytes. The Mermaid SVG renderer is stubbed in these DOM tests, so they do **not** establish layout or visual correctness.
-- Adversarial graph labels and all supported generated shapes pass the installed real Mermaid parser. Eight generated/authored Mermaid sources from the fresh live reports below also parse successfully.
-- Independent read-only review covered navigation, private-source access, cache isolation, graph provenance, and cancellation. The branch/scope resolver, selection restoration, stale source selection, and form-validation findings were fixed before publication.
-
-### Fresh live GitHub checks through the compiled Worker
-
-These requests ran against the actual GitHub API through the built `dist/server/index.js`, with no GitHub token or AI key. They were **local compiled-Worker checks**, not browser tests of the production website.
-
-| Repository / scope | Commit | Read / listed files | Authored diagrams | Located references |
-| --- | --- | ---: | ---: | ---: |
-| NanoKit-ESP32 / examples_on_platformio/ultrasonic_distance | `17834db850daec9b450239069c4aa2e758bf0644` | 12 / 13 | 2 | 0 |
-| expressjs/express / repository root | `7ef98448f8b38099ab1ded55e458538ad47a51e7` | 8 / 214 | 0 | 2 |
-
-NanoKit was supplied as the full `/tree/main/examples_on_platformio/ultrasonic_distance` GitHub URL, confirming reference/scope resolution in the compiled service. Express was supplied as an unrelated library. Its 168 eligible unread files are disclosed; this is a bounded source sample, not complete runtime analysis. The Examples page stores these actual checks and their inventory previews.
-
-### Explicit validation limits
-
-- The required managed browser-control capability was unavailable. No fresh desktop/mobile layout inspection, browser screenshot, browser PNG/SVG download, fullscreen interaction, or visual comparison is claimed for v0.4.0. `docs/images/workspace.png` is a historical image, not evidence for this release.
-- All four providers have request/response fixture coverage; real paid model generation and a user's private repository remain untested because no authorized credentials were available.
-- The custom domain is attached but pending DNS/SSL validation. See [Domain setup](DOMAIN_SETUP.md). Hostinger DNS was not changed.
-- Repository code is never executed. A successful analyzer request does not mean that repository's tests/build pass.
-- Narrated video tours are deferred; no generated video, playback, or video-generation cost is represented as implemented.
-
-The deployment provider's final status is reported separately at publication time. These source checks do not claim that a pending DNS hostname is live.
