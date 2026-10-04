@@ -60,4 +60,11 @@ export function createAppServer({ fetchImpl = fetch } = {}) { // Export the actu
     } catch (error) { if (!response.headersSent) json(response, error.status || 500, { error: error instanceof AppError ? error.message : 'The request could not be completed.' }); else response.end(); } // Avoid exposing stack traces or credentials.
   }); // Return the configured server instance.
 } // End application server construction.
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) { const port = Number(process.env.PORT || 3000); const host = process.env.HOST || '127.0.0.1'; createAppServer().listen(port, host, () => console.log(`Git Architecture Diagram is running at http://${host}:${port}`)); } // Start directly while keeping imports side-effect free for tests.
+let started = null; // Listen at most once per process, however the entry file is loaded.
+export function startServer(env = process.env) { // Start the HTTP listener from HOST and PORT.
+  if (started) return started; const host = env.HOST || '127.0.0.1'; const port = /^\d+$/.test(String(env.PORT ?? '').trim()) ? Number(env.PORT) : (env.PORT || 3000); // Accept a numeric port or a socket/pipe path supplied by a hosting runner.
+  started = createAppServer(); const ready = () => console.log(`Git Architecture Diagram is running at ${typeof port === 'number' ? `http://${host}:${port}` : port}`); // Report the address the application requested.
+  if (typeof port === 'number') started.listen(port, host, ready); else started.listen(port, ready); return started; // A runner such as LiteSpeed lsnode or Passenger may still rebind listen() to its own socket.
+} // End listener startup.
+// Hosting runners (Hostinger Node.js Web Apps via LiteSpeed lsnode, Passenger, PM2) load this entry file with require() or import() from their own script, so process.argv[1] is not this file. Start on load; tests opt out with GIT_ARCHITECTURE_DIAGRAM_AUTOSTART=0.
+if (process.env.GIT_ARCHITECTURE_DIAGRAM_AUTOSTART !== '0') startServer();

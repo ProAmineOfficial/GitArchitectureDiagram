@@ -25,7 +25,7 @@ Status checked from the development sandbox on **2026-09-28/29 UTC**; re-check b
 | --- | --- | --- |
 | `git-architecture-diagram.pro-amine.chatgpt.site` | Resolves; serves the application | The working public address |
 | `diagram.proamine.tech` | **No DNS record** (the name does not resolve) | The hosting side lists it as attached and pending validation, but the record it waits for was never created at the DNS host |
-| `gitarchitecturediagram.com` | Resolves to `2.57.91.91` and refuses automated access | Registered, but **not** in the `proamine.tech` owner's Hostinger domain portfolio; ownership is unconfirmed |
+| `gitarchitecturediagram.com` | Resolves to `2.57.91.91` and refuses automated access | Registered, but **not** in the `proamine.tech` owner's Hostinger domain portfolio; ownership is unconfirmed (since attached to a Hostinger Node.js Web App by the owner; see [Hostinger Node.js Web App](#hostinger-nodejs-web-app)) |
 
 To finish `diagram.proamine.tech`:
 
@@ -49,6 +49,46 @@ Configure the host's port and reverse proxy as required by your provider. Keep t
 
 Forward all routes to the Node service, including `/OWNER/REPO` and `/OWNER/REPO/tree/REF/PATH`. Preserve streamed NDJSON and allow requests to run for up to 180 seconds. A proxy that buffers output can delay the progress UI. A serverless function with a shorter timeout may terminate large analyses.
 
+`server.mjs` starts listening as soon as it is loaded, whether it is run with `node server.mjs` / `npm start` or loaded with `require()` / `import()` by a hosting runner such as LiteSpeed `lsnode`, Passenger, or PM2. Set `GIT_ARCHITECTURE_DIAGRAM_AUTOSTART=0` only when importing `createAppServer` from tests or tools.
+
+## Hostinger Node.js Web App
+
+Production: `https://gitarchitecturediagram.com`, deployed from `ProAmineOfficial/GitArchitectureDiagram`, branch `main`.
+
+| hPanel setting | Value |
+| --- | --- |
+| Framework preset | Other |
+| Branch | `main` |
+| Node version | 22.x (must be 22.12 or newer; `package.json` requires `>=22.12.0`) |
+| Root directory | `./` |
+| Package manager | npm (dependencies are installed automatically on deploy) |
+| Build command | None required. `npm run build` only produces the Cloudflare Worker bundle in `dist/`, which the Node server does not use. |
+| Output directory | Leave at the repository root. Do **not** set `dist`: the Node server needs `server.mjs`, `src/`, `public/`, and `node_modules/`. |
+| Entry file | `server.mjs` |
+| Environment | `HOST=0.0.0.0`, `PORT=3000`, `PUBLIC_ORIGIN=https://gitarchitecturediagram.com` (no trailing slash), plus optional keys from the table below |
+
+Hostinger does not run `node server.mjs` directly. Its runner loads the entry file from its own wrapper script; LiteSpeed-style runners also rebind the application's `listen()` call to the socket their web server proxies to, in which case the `PORT` value is ignored. Up to release 0.9.0, `server.mjs` only listened when `process.argv[1]` was `server.mjs` itself. Under the runner, `argv[1]` is the wrapper, so the module loaded without errors, the build reported success, but nothing listened and every request returned **503 Service Unavailable**. `tests/hosting.test.mjs` reproduces both runner styles (`require()` and `import()`) and guards against regressions.
+
+Deploying: GitHub `main` is the only source. Push to `main`, then confirm in hPanel that a new deployment ran for the pushed commit; if automatic deployment is not enabled for the website, start a redeploy from its Node.js deployment page. Never patch files on the server; Hostinger places each build in `/home/{username}/domains/gitarchitecturediagram.com/hbuilds/current/nodejs` and replaces it on the next deployment.
+
+Troubleshooting:
+
+- **503 after a successful build:** open the deployment's runtime logs. A healthy start prints `Git Architecture Diagram is running at …`. `ERR_REQUIRE_ESM` means a Node version below 22.12 was selected. `Cannot find module` usually means the output directory was set to `dist`.
+- **"Registered at Hostinger" parking page:** the domain is not yet pointing at the web app. In **Domains → gitarchitecturediagram.com → DNS**, check that the apex `A` record (and `www`) targets the website's hosting server shown in hPanel, not the parking address. Allow time for DNS propagation.
+- **403 "same-origin requests only" when analyzing:** `PUBLIC_ORIGIN` does not exactly match the address in the browser (scheme, host, no trailing slash). Visitors on `www.` need a redirect to the apex domain.
+
+Verify after each deployment:
+
+```text
+https://gitarchitecturediagram.com/api/health                      → 200 JSON with "ok": true
+https://gitarchitecturediagram.com/                                → workspace
+https://gitarchitecturediagram.com/ProAmineOfficial/Driver-NanoKit-ESP32-of-T.U.M-Pro_Amine-IC
+https://gitarchitecturediagram.com/ProAmineOfficial/NanoKit-ESP32/tree/main/examples_on_platformio/ultrasonic_distance
+https://gitarchitecturediagram.com/ProAmineOfficial/NanoKit-ESP32/blob/main/README.md
+```
+
+Each repository link must open the workspace and start analysis automatically.
+
 ## Docker
 
 ```bash
@@ -68,7 +108,8 @@ Remove `HOST=127.0.0.1` from a copied `.env` or change it to `HOST=0.0.0.0` when
 | `GENIUS_MODEL` | Explicit provider model ID; no default model or price is assumed. |
 | `GENIUS_ACCESS_TOKEN` | Shared instance password. When set, every analysis/search request needs it. Required before web requests can use the server-side AI key. |
 | `PUBLIC_ORIGIN` | Canonical externally visible origin used for browser request validation. |
-| `HOST`, `PORT` | Listening interface and port; local defaults are `127.0.0.1:3000`. |
+| `HOST`, `PORT` | Listening interface and port; local defaults are `127.0.0.1:3000`. `PORT` may also be a socket or pipe path supplied by a hosting runner. |
+| `GIT_ARCHITECTURE_DIAGRAM_AUTOSTART` | Set to `0` only to import `server.mjs` without opening a listener (tests). Leave unset in production. |
 
 Users can instead provide their own GitHub/provider keys in Settings. Keys pass through your server, so offer this only from a deployment whose operator they trust. Private repositories always require a request-specific GitHub token. Never publish an unrestricted proxy to a paid model key.
 

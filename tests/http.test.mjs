@@ -1,5 +1,6 @@
 // Project: Git Architecture Diagram | Real HTTP routing and browser-boundary integration checks.
 import test from 'node:test'; import assert from 'node:assert/strict'; // Use Node's built-in integration test facilities.
+import './support/no-autostart.mjs'; // Keep the imported server from opening its production listener.
 import { createAppServer } from '../server.mjs'; // Start the actual application server on an ephemeral port.
 test('HTTP serves deep links and local modules while protecting API and filesystem boundaries', async t => { // Exercise the public deployment contract without a live GitHub call.
   const server = createAppServer(); await new Promise(resolve => server.listen(0, '127.0.0.1', resolve)); t.after(() => new Promise(resolve => server.close(resolve))); const base = `http://127.0.0.1:${server.address().port}`; // Isolate the test from the developer's running server.

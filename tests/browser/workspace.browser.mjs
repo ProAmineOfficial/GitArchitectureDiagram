@@ -6,6 +6,7 @@ import test from 'node:test'; import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from 'node:fs'; import { tmpdir } from 'node:os'; import { join, dirname } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { chromium } from 'playwright';
+import '../support/no-autostart.mjs'; // Keep the imported server from opening its production listener.
 import { createAppServer } from '../../server.mjs';
 import { createGitHubFetch } from '../support/github-emulator.mjs';
 
