@@ -14,6 +14,7 @@ import { setupDock } from './dock.js';
 import { exportGuide, exportDiagram } from './exports.js';
 import { readAnalysisResponse } from './analysis-stream.js';
 import { PROVIDERS, MODEL_ROLES, ROLE_LABELS, CATALOG_CHECKED, roleOf, checkKeyFormat } from './providers.js';
+import { setupSocialDock } from './social-dock.js'; // Glass social dock with proximity magnification.
 import { redactSecrets } from './secret-scan.js'; // Copied and downloaded text never carries credential-shaped values.
 import { setupDeepGenius, errorTitle } from './deep-genius.js';
 import { pinnedSourceURL } from './source-navigation.js';
@@ -555,7 +556,7 @@ const deep = setupDeepGenius({ state, credentials, headers: requestHeaders, aiCo
 
 // ——— Startup ———
 async function start() {
-  installIcons(); setupKeyField(); setupBrand(); $$('.site-host').forEach(element => { element.textContent = location.host; });
+  installIcons(); setupKeyField(); setupBrand(); setupSocialDock(); $$('.site-host').forEach(element => { element.textContent = location.host; });
   updateProvider(); renderStarters($('#starter-examples'));
   try { const response = await fetch('/api/health'); const type = response.headers.get('Content-Type') || ''; if (response.ok && type.includes('json')) { const health = await response.json(); state.maxFiles = Number(health.limits?.maxFiles) || 120; state.limits = health.limits || {}; state.publicAI = health.publicAI?.enabled ? health.publicAI : null; if (state.publicAI?.remainingToday) setMode('genius'); updateCostNote(); $('#max-files').max = String(state.maxFiles); if (Number($('#max-files').value) > state.maxFiles) $('#max-files').value = String(state.maxFiles); } } catch { /* The analysis request reports connection problems itself. */ }
   await route();

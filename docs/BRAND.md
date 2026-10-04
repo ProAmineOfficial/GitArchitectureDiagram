@@ -70,8 +70,31 @@ Every link is listed once in `public/index.html` and checked by `tests/browser/g
 | Store | <https://proamine.tech/shop/> | The store page is indexed at `/shop/` (titled "Store") |
 | NanoKit Integrated ESP32 | <https://proamine.tech/product/nanokit-integrated-esp32-board-development-2/> | Public product page |
 | UMT Platform | <https://proamine.tech/what-is-the-umt-platform/> | Public page "What is the UMT Platform?" |
-| Telegram, TikTok, YouTube, Facebook, Instagram, X | As listed on the public site by the owner | The GitHub organization profile lists TikTok `@pro_amine.llc` and YouTube `/c/AMINESAOUD`; confirm which handles are current |
+| Telegram | <https://t.me/+tPVAK6lS7eZmODg0> | As provided by the owner |
+| TikTok | <https://www.tiktok.com/@pro_amine.llc> | As provided by the owner |
+| YouTube | <https://www.youtube.com/c/AMINESAOUD> | As provided by the owner |
+| Facebook | <https://www.facebook.com/AmineSAOUD0> | As provided by the owner |
+| Instagram | <https://instagram.com/pro_amine.llc> | As provided by the owner |
 | GitHub | <https://github.com/ProAmineOfficial> | Official organization |
+| X | <https://x.com/pro_amine_tech> | As provided by the owner |
 | LinkedIn | <https://www.linkedin.com/company/pro-amine-llc/> | Listed on the official GitHub organization profile |
 
-Social buttons use generic line icons (paper plane, note, video, people, camera, code, X, briefcase) with accessible labels such as "Pro_Amine on GitHub", rather than reproductions of each network's logo.
+## Social dock
+
+The eight social links sit under the ecosystem navigation as a dock labeled "Follow Pro_Amine", in this order: Telegram, TikTok, YouTube, Facebook, Instagram, GitHub, X, LinkedIn. Each is an ordinary link (`target="_blank"`, `rel="noopener noreferrer"`, `aria-label="Pro_Amine LLC on <network>"`) that the application router never intercepts.
+
+- **Glass buttons:** circular, 44 × 44 px (46 px from 1536 px wide, 40 px on phones), `backdrop-filter: blur(18px) saturate(150%)`, a 1 px `rgba(255,255,255,.12)` border, and an inner highlight. Dark theme: graphite glass (`linear-gradient(145deg, rgba(255,255,255,.10), rgba(255,255,255,.035))`, shadow `0 8px 24px rgba(0,0,0,.28)`) with silver glyphs. Light theme: frosted white (`rgba(255,255,255,.55)`, border `rgba(255,255,255,.72)`) with dark graphite glyphs.
+- **Magnification** (`public/social-dock.js`, fine pointer only): 1.28 for the button under the pointer, lifted 6 px; 1.12 for its neighbors, lifted 2 px; 1.04 for the next ones; 1.0 beyond. Transitions take 220 ms with `cubic-bezier(.22,1,.36,1)`. Hover brightens the glass and adds a small glow. Keyboard focus gets the same emphasis plus a `2px solid rgba(135,170,255,.8)` outline at a 3 px offset. Reduced motion turns magnification off.
+- **Tooltips:** a glass pill above the button with the network's name (fades in from 4 px below).
+- **Widths:** one row when it fits. In a narrow three-column card (1181–1440 px windows), the dock wraps into a centered 4 × 2 grid (container query). On a tablet, it spans the ecosystem card. On a phone, it becomes a horizontal snap row with a hidden scrollbar. No width causes page overflow.
+
+### Platform glyphs
+
+Each button has a slot for that network's official glyph. This project does not draw the networks' logos itself. Each network publishes its icon in its brand resources (for example GitHub's at <https://github.com/logos> and LinkedIn's at <https://brand.linkedin.com/>). Until a glyph is provided, the button shows a neutral typographic monogram (Tg, Tk, Yt, Fb, Ig, Gh, X, Li), and the tooltip and accessible name still give the full network name.
+
+To add the official glyphs:
+
+1. Download each network's official monochrome icon as SVG from its brand resources, and follow that network's usage guidelines.
+2. Save the files as `public/assets/brand/social/<network>.svg` (`telegram`, `tiktok`, `youtube`, `facebook`, `instagram`, `github`, `x`, `linkedin`).
+3. Run `npm run brand:social`. The script rejects scripts, event handlers, external references, embedded images, and files over 24 KB, then writes `glyphs.json`.
+4. Commit the SVG files and `glyphs.json`. The dock renders each glyph locally as a CSS mask, tinted silver in the dark theme and graphite in the light theme. Nothing is loaded from a CDN, and `tests/social-dock.test.mjs` validates every listed file.

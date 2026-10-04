@@ -18,7 +18,8 @@
     "build": "node scripts/build.mjs",
     "test:browser": "node --test tests/browser/*.browser.mjs",
     "scan:secrets": "node scripts/secret-scan.mjs",
-    "provenance": "node scripts/provenance.mjs"
+    "provenance": "node scripts/provenance.mjs",
+    "brand:social": "node scripts/social-glyphs.mjs"
   },
   "dependencies": {
     "dompurify": "^3.4.16",
