@@ -70,7 +70,7 @@ export async function extractRepository(input, { fetchImpl = fetch, signal, prog
   progress({ stage: 'Asking GitHub for the archive', detail: `${request.owner}/${request.repo} at ${request.commit.slice(0, 7)}` });
   let first; try { first = await fetchImpl(`https://api.github.com/repos/${request.owner}/${request.repo}/tarball/${request.commit}`, { headers, redirect: 'manual', signal }); } catch { if (signal?.aborted) throw new AppError(408, 'The extract was cancelled.'); throw new AppError(502, 'Cannot reach GitHub.'); }
   await first.body?.cancel().catch(() => {});
-  if (first.status === 404) throw new AppError(404, 'Repository or commit not found. Private repositories need a read token.');
+  if (first.status === 404) throw new AppError(404, 'Repository or commit not found. Only public repositories can be extracted on this site.');
   if (first.status === 401) throw new AppError(401, 'GitHub rejected the read token.');
   const rate = rateLimitInfo(first.headers); if (first.status === 429 || (first.status === 403 && rate?.remaining === 0)) throw new AppError(429, rateLimitMessage(rate, first.headers.get('retry-after'), Boolean(request.token)));
   if (first.status === 403) throw new AppError(403, 'GitHub denied access to the archive (HTTP 403).');

@@ -36,10 +36,9 @@ function hideStatus() { $('#status').hidden = true; }
 const sourceURL = (path, line) => pinnedSourceURL(state.result.repository, { path, line, type: 'blob' });
 
 // ——— Credentials and request settings (memory only) ———
-function requestHeaders() { const token = $('#instance-token').value; return { 'Content-Type': 'application/json', ...(token ? { 'X-Instance-Token': token } : {}) }; }
-function credentials() { return { githubToken: $('#github-token').value.trim(), apiKey: $('#api-key').value.trim(), model: $('#model').value.trim(), provider: $('#provider').value }; }
+function requestHeaders() { return { 'Content-Type': 'application/json' }; } // No instance password and no GitHub token: the public site needs neither.
+function credentials() { return { apiKey: $('#api-key').value.trim(), model: $('#model').value.trim(), provider: $('#provider').value }; } // The provider key entered in this tab, for the AI request being made.
 function aiConfigured() { const { apiKey, model } = credentials(); return Boolean(apiKey && model); }
-function serverAI() { return Boolean(state.aiAvailable && $('#instance-token').value && $('#model').value); } // The operator's key, for protected instances only.
 function analysisMode() { return document.querySelector('[name=analysis-mode]:checked')?.value || 'quick'; }
 function setMode(mode) { const input = document.querySelector(`[name=analysis-mode][value=${mode}]`); if (input) input.checked = true; $('#use-ai').checked = mode === 'genius'; updateCostNote(); }
 
@@ -83,7 +82,7 @@ async function analyze({ refresh = false, history: mode = 'push', lines = null, 
   if (state.controller) state.controller.abort();
   const controller = new AbortController(); state.controller = controller; setBusy(true);
   status('Connecting to GitHub…', { progress: 0 });
-  const deepAfter = analysisMode() === 'deep'; const input = { repository: $('#repository').value.trim(), ref: $('#ref').value.trim(), scope: $('#scope').value.trim(), maxFiles: Number($('#max-files').value) || DEFAULT_FILES, ai: $('#use-ai').checked, refresh, ...credentials() };
+  const deepAfter = analysisMode() === 'deep'; const input = { repository: $('#repository').value.trim(), ref: $('#ref').value.trim(), scope: $('#scope').value.trim(), maxFiles: Number($('#max-files').value) || DEFAULT_FILES, ai: $('#use-ai').checked, refresh, ...($('#use-ai').checked ? credentials() : {}) }; // The provider key travels only with an AI request.
   try {
     const response = await fetch('/api/analyze', { method: 'POST', headers: requestHeaders(), body: JSON.stringify(input), signal: controller.signal });
     const result = await readAnalysisResponse(response, event => status(`${event.stage}${event.detail ? ` — ${event.detail}` : ''}`, { progress: Number.isFinite(event.read) && event.total ? event.read / event.total : null }));
@@ -469,9 +468,9 @@ function renderModelOptions() {
     label.append(input, card); return label;
   }));
 }
-async function discoverModels() { // Refresh the two recommended models for the pasted key; never shows raw model lists.
-  const provider = $('#provider').value; const apiKey = $('#api-key').value.trim(); if (!checkKeyFormat(provider, apiKey).ok) return;
-  try { const response = await fetch('/api/models', { method: 'POST', headers: requestHeaders(), body: JSON.stringify({ provider, apiKey }) }); const data = await response.json(); if (!response.ok || provider !== $('#provider').value) return; state.pairs[provider] = data.pair; renderModelOptions(); syncModel(); $('#preset-note').textContent = data.source === 'bundled' ? `Recommended models checked against ${PROVIDERS[provider].name}'s documentation on ${CATALOG_CHECKED}.${data.warning ? ` ${data.warning}` : ''}` : `Availability checked for your key ${data.source === 'cached' ? '(cached)' : 'just now'}; recommendations come only from verified models.`; } catch { /* The bundled pair stays in use. */ }
+async function discoverModels(connected = false) { // Refresh the two recommended models for the pasted key; never shows raw model lists.
+  connected = connected === true; const provider = $('#provider').value; const apiKey = $('#api-key').value.trim(); if (!checkKeyFormat(provider, apiKey).ok) return;
+  try { const response = await fetch('/api/models', { method: 'POST', headers: requestHeaders(), body: JSON.stringify({ provider, apiKey }) }); const data = await response.json(); if (!response.ok || provider !== $('#provider').value) return; state.pairs[provider] = data.pair; renderModelOptions(); syncModel(); $('#preset-note').textContent = data.source === 'bundled' ? `Recommended models checked against ${PROVIDERS[provider].name}'s documentation on ${CATALOG_CHECKED}.${data.warning ? ` ${connected && data.kind !== 'auth' ? 'Connected, but live model discovery is unavailable. Using bundled verified recommendations.' : data.warning}` : ''}` : `Availability checked for your key ${data.source === 'cached' ? '(cached)' : 'just now'}; recommendations come only from verified models.`; } catch { /* The bundled pair stays in use. */ }
 }
 function updateProvider(clearKey = false) {
   const provider = PROVIDERS[$('#provider').value]; if (clearKey) { $('#api-key').value = ''; $('#model-custom').value = ''; }
@@ -481,17 +480,31 @@ function updateProvider(clearKey = false) {
   $('#provider-disclosure').textContent = `AI features send selected source excerpts to ${provider.name} and bill your ${provider.name} account. Nothing is sent until you choose an AI action.`;
   updateCostNote(); askControls?.refresh();
 }
+const CHECK_ICONS = { ok: 'check', warn: 'info', fail: 'warning', skip: 'info' };
+function diagnosticsList(info) { // Safe facts only: never the key, never a header.
+  const rows = [['Provider', `${PROVIDERS[info.provider]?.name || info.provider} · ${info.model || 'no model'}`], ['Key received by the server', info.apiKeyPresent ? `yes, ${info.keyLength} characters${info.keyPrefixMatches === false ? `, does not start with ${PROVIDERS[info.provider].keyPrefix}` : ''}` : 'no'], ['Endpoint', info.endpointHost], ['Model list', info.modelList ? `HTTP ${info.modelList.httpStatus ?? '—'} · ${info.modelList.classification}` : 'not checked'], ['Tiny inference', info.inference ? `HTTP ${info.inference.httpStatus ?? '—'} · ${info.inference.classification}` : 'not checked'], ['Result', `${info.classification} in ${info.durationMs} ms`]];
+  const list = el('dl', 'connection-diagnostics'); rows.forEach(([term, value]) => list.append(el('dt', '', term), el('dd', '', value))); return list;
+}
 async function testConnection() {
   const box = $('#connection-status'); const provider = $('#provider').value; const apiKey = $('#api-key').value.trim(); const model = $('#model').value.trim();
-  box.hidden = false; box.dataset.state = 'pending'; box.replaceChildren(el('strong', '', 'Testing…'));
+  box.hidden = false; box.dataset.state = 'pending'; box.replaceChildren(el('strong', '', 'Testing…'), el('span', 'subtle', `Model list, then one tiny request to ${PROVIDERS[provider].name}.`));
   try {
-    const response = await fetch('/api/provider/test', { method: 'POST', headers: requestHeaders(), body: JSON.stringify({ provider, apiKey, model }) }); const data = await response.json();
-    if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+    const response = await fetch('/api/provider/test', { method: 'POST', headers: requestHeaders(), body: JSON.stringify({ provider, apiKey, model }) }); const data = await response.json().catch(() => ({}));
+    if (!response.ok || !Array.isArray(data.checks)) throw new Error(data.error || `The Git Architecture Diagram server answered HTTP ${response.status}.`);
+    if (provider !== $('#provider').value) return; // The person switched provider meanwhile.
     box.dataset.state = data.ok ? 'ok' : 'error'; const list = el('ul', 'connection-checks');
-    data.checks.forEach(check => { const row = el('li', `check-${check.status}`); row.append(icon(check.status === 'ok' ? 'check' : check.status === 'warn' ? 'info' : 'warning'), document.createTextNode(check.label)); list.append(row); });
-    box.replaceChildren(el('strong', '', data.status), ...(data.ok ? [el('span', 'subtle', `${data.providerName} · ${data.model}`)] : []), list, ...(data.suggestion ? [el('p', 'fineprint', data.suggestion)] : []));
-    if (data.ok) discoverModels();
-  } catch (error) { box.dataset.state = 'error'; box.replaceChildren(el('strong', '', 'Provider temporarily unavailable'), el('p', 'fineprint', error.message)); }
+    data.checks.forEach(check => { const row = el('li', `check-${check.status}`); const text = el('span', 'check-text'); text.append(el('strong', '', check.label), el('span', '', check.detail)); row.append(icon(CHECK_ICONS[check.status] || 'info'), text); list.append(row); });
+    const details = el('details', 'connection-more'); details.append(el('summary', '', 'Diagnostics'), diagnosticsList(data.diagnostics));
+    box.replaceChildren(el('strong', '', data.status), el('p', 'connection-message', data.message || ''), list, ...(data.keyNote ? [el('p', 'connection-key-note', data.keyNote)] : []), ...(data.suggestion ? [el('p', 'fineprint', data.suggestion)] : []), details);
+    if (data.ok) discoverModels(true);
+  } catch (error) { box.dataset.state = 'error'; box.replaceChildren(el('strong', '', 'Connection test failed'), el('p', 'fineprint', error.message)); }
+}
+function setupKeyField() { // A masked text field: password managers do not autofill or save it, unlike type="password" (which ignores autocomplete="off").
+  const input = $('#api-key'); const button = $('#key-reveal');
+  if (!globalThis.CSS?.supports?.('-webkit-text-security', 'disc')) { input.type = 'password'; input.autocomplete = 'new-password'; } // Older browsers: fall back to a password field that is not filled with saved passwords.
+  const show = visible => { input.classList.toggle('revealed', visible); if (input.type === 'password' || input.dataset.fallback) { input.type = visible ? 'text' : 'password'; input.dataset.fallback = '1'; } button.setAttribute('aria-pressed', String(visible)); button.setAttribute('aria-label', visible ? 'Hide key' : 'Show key'); button.replaceChildren(icon(visible ? 'eye-off' : 'eye')); };
+  button.addEventListener('click', () => show(button.getAttribute('aria-pressed') !== 'true'));
+  $('#settings').addEventListener('close', () => show(false)); // Never leave a key visible after the dialog closes.
 }
 function renderSystemEmpty() {
   const provider = PROVIDERS[$('#provider').value]; const failure = state.result?.aiError; const warning = !failure && state.result?.warnings.find(item => /AI|model|provider|system maps|HTTP/.test(item) && !/lexical/.test(item));
@@ -521,7 +534,7 @@ $('#model-custom').addEventListener('input', syncModel);
 $('#test-connection').addEventListener('click', testConnection);
 document.querySelectorAll('[name=analysis-mode]').forEach(input => input.addEventListener('change', () => setMode(analysisMode())));
 $('#settings-open').addEventListener('click', () => $('#settings').showModal());
-$('#clear-credentials').addEventListener('click', () => { ['github-token', 'api-key', 'instance-token', 'model-custom'].forEach(id => { $(`#${id}`).value = ''; }); state.cache.clear(); state.pairs = {}; renderModelOptions(); syncModel(); $('#connection-status').hidden = true; updateCostNote(); askControls.refresh(); toast('Keys removed from this tab, and cached analyses cleared.'); });
+$('#clear-credentials').addEventListener('click', () => { ['api-key', 'model-custom'].forEach(id => { $(`#${id}`).value = ''; }); state.cache.clear(); state.pairs = {}; renderModelOptions(); syncModel(); $('#connection-status').hidden = true; updateCostNote(); askControls.refresh(); toast('Key removed from this tab, and cached analyses cleared.'); });
 function applyTheme(theme) { document.documentElement.dataset.theme = theme; $('#theme').setAttribute('aria-label', `Switch to ${theme === 'light' ? 'dark' : 'light'} theme`); }
 try { applyTheme(localStorage.getItem('gad-theme') === 'light' ? 'light' : 'dark'); } catch { applyTheme('dark'); }
 $('#theme').addEventListener('click', () => { const theme = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'; applyTheme(theme); try { localStorage.setItem('gad-theme', theme); } catch { /* Theme still applies without storage. */ } if (state.result && ['system', 'architecture', 'mindmap', 'documented'].includes(state.view)) selectView(state.view); });
@@ -534,13 +547,13 @@ const extras = setupExtras({ state, selectView, diagramFor, inspect, revealInTre
 async function copyText(text, message = 'Copied.') { try { await navigator.clipboard.writeText(text); toast(message); } catch { toast('Copying is blocked here; use Download.'); } }
 function downloadText(name, data, type) { const url = URL.createObjectURL(new Blob([data], { type })); const anchor = el('a'); anchor.href = url; anchor.download = name; document.body.append(anchor); anchor.click(); anchor.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
 const extractView = setupExtractView({ state, headers: requestHeaders, credentials, copy: copyText, download: downloadText, openDoc });
-const deep = setupDeepGenius({ state, credentials, headers: requestHeaders, aiConfigured, serverAI, toast, selectView: view => selectView(view), inspect: (path, line) => inspect({ path, type: 'blob' }, { lines: line ? { start: line, end: line } : null }), openSettings: role => { if (role) { state.role = role; $('#model-custom').value = ''; renderModelOptions(); syncModel(); } $('#settings').showModal(); }, runAction: action => runAction(action), onComplete: () => { $('#genius-mode').textContent = 'Deep Genius + source'; extractView.reset(); if (state.view === 'extract') extractView.render(); } });
+const deep = setupDeepGenius({ state, credentials, headers: requestHeaders, aiConfigured, toast, selectView: view => selectView(view), inspect: (path, line) => inspect({ path, type: 'blob' }, { lines: line ? { start: line, end: line } : null }), openSettings: role => { if (role) { state.role = role; $('#model-custom').value = ''; renderModelOptions(); syncModel(); } $('#settings').showModal(); }, runAction: action => runAction(action), onComplete: () => { $('#genius-mode').textContent = 'Deep Genius + source'; extractView.reset(); if (state.view === 'extract') extractView.render(); } });
 
 // ——— Startup ———
 async function start() {
-  installIcons(); setupBrand(); $$('.site-host').forEach(element => { element.textContent = location.host; });
+  installIcons(); setupKeyField(); setupBrand(); $$('.site-host').forEach(element => { element.textContent = location.host; });
   updateProvider(); renderStarters($('#starter-examples'));
-  try { const response = await fetch('/api/health'); const type = response.headers.get('Content-Type') || ''; if (response.ok && type.includes('json')) { const health = await response.json(); state.maxFiles = Number(health.limits?.maxFiles) || 120; state.limits = health.limits || {}; state.publicAI = health.publicAI?.enabled ? health.publicAI : null; state.aiAvailable = Boolean(health.aiAvailable); if (state.publicAI?.remainingToday) setMode('genius'); updateCostNote(); $('#max-files').max = String(state.maxFiles); if (Number($('#max-files').value) > state.maxFiles) $('#max-files').value = String(state.maxFiles); } } catch { /* The analysis request reports connection problems itself. */ }
+  try { const response = await fetch('/api/health'); const type = response.headers.get('Content-Type') || ''; if (response.ok && type.includes('json')) { const health = await response.json(); state.maxFiles = Number(health.limits?.maxFiles) || 120; state.limits = health.limits || {}; state.publicAI = health.publicAI?.enabled ? health.publicAI : null; if (state.publicAI?.remainingToday) setMode('genius'); updateCostNote(); $('#max-files').max = String(state.maxFiles); if (Number($('#max-files').value) > state.maxFiles) $('#max-files').value = String(state.maxFiles); } } catch { /* The analysis request reports connection problems itself. */ }
   await route();
 }
 start();

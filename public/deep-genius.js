@@ -13,7 +13,7 @@ const STATE_LABELS = { queued: 'Queued', reading: 'Reading evidence', analyzing:
 const STATE_ICONS = { completed: 'check', approved: 'shield', failed: 'warning', 'needs-revision': 'loop', skipped: 'minus' };
 const STAGE_LABELS = { idle: 'Not started', starting: 'Starting', team1: 'Team 1 — Audit', team2: 'Team 2 — Solutions', validation: 'Validation', revision: 'Revision loop', team3: 'Team 3 — Documentation & extraction', synthesis: 'Genius Core synthesis', complete: 'Complete' };
 const TEAM_TITLES = { 1: 'Team 1 — Audit & critique', 2: 'Team 2 — Solutions & innovation', 3: 'Team 3 — Documentation, comparison & extraction' };
-const KIND_TITLES = { rate_limited: 'Provider busy (rate limited)', quota_exhausted: 'Provider quota exhausted', auth: 'Authentication failed', permission: 'Access denied', model_unavailable: 'Model unavailable', provider_unavailable: 'Provider temporarily unavailable', timeout: 'Provider did not answer in time', network: 'Provider unreachable', invalid_request: 'Request not supported by this model', malformed: 'Unexpected provider response', truncated: 'Incomplete provider response', refused: 'Provider refused the request', cancelled: 'Cancelled' };
+const KIND_TITLES = { rate_limited: 'Provider busy (rate limited)', quota_exhausted: 'Provider quota exhausted', auth: 'Authentication failed', permission: 'Access denied', model_unavailable: 'Model unavailable', provider_unavailable: 'Provider temporarily unavailable', timeout: 'Provider did not respond in time', network: 'Provider unreachable', workspace_required: 'Workspace API key required', invalid_request: 'Request not supported by this model', malformed: 'Unexpected provider response', truncated: 'Incomplete provider response', refused: 'Provider refused the request', cancelled: 'Cancelled' };
 export const errorTitle = kind => KIND_TITLES[kind] || 'Something went wrong';
 
 let api; let run = null; let scheduled = false;
@@ -39,7 +39,7 @@ function schedule() { if (scheduled) return; scheduled = true; requestAnimationF
 /** Open the confirmation dialog with the planned scope and cost warning. */
 function confirm() {
   const { result } = api.state; if (!result) return;
-  if (!api.aiConfigured() && !api.serverAI()) { api.toast('Add a provider key in API settings to run Deep Genius.'); api.openSettings(); return; }
+  if (!api.aiConfigured()) { api.toast('Add a provider key in API settings to run Deep Genius.'); api.openSettings(); return; }
   const { provider, model } = api.credentials(); const plan = planDeepGenius(result); const role = roleOf(provider, model);
   const rows = [['Provider', PROVIDERS[provider].name], ['Model', `${model}${role !== 'custom' ? ` (${ROLE_LABELS[role]})` : ' (custom)'}`], ['Maximum planned calls', `${plan.maxCalls} (usually about ${plan.minCalls}), at most ${plan.concurrency} at a time`], ['Validation', `One validation pass, then at most ${plan.revisionLoops} revise-and-revalidate loops`], ['Approximate input scope', `Up to ${plan.perCallCharacters.toLocaleString('en')} characters (about ${plan.perCallTokens.toLocaleString('en')} tokens) per call, drawn from the ${plan.filesRead} files read of ${plan.filesListed} listed`]];
   $('#deep-plan').replaceChildren(...rows.flatMap(([term, value]) => [el('dt', '', term), el('dd', '', value)]));

@@ -28,7 +28,7 @@ export const PROVIDERS = { // Public labels, model choices, and documentation; n
     candidates: { fast: ['claude-haiku-4-5-20251001'], advanced: ['claude-opus-5-5', 'claude-sonnet-5-5'] },
   },
   gemini: {
-    name: 'Gemini', keyEnv: 'GEMINI_API_KEY', keyPrefix: 'AIza', keyHint: 'AIza…',
+    name: 'Gemini', keyEnv: 'GEMINI_API_KEY', keyPrefix: null, keyHint: 'from Google AI Studio', // Keys created since 2026-05-28 are auth keys that no longer start with AIza.
     docs: 'https://ai.google.dev/gemini-api/docs/models',
     recommended: {
       fast: { id: 'gemini-3.5-flash-lite', note: 'Gemini 3.5 Flash-Lite: the most economical stable Gemini text model.' },
@@ -37,11 +37,11 @@ export const PROVIDERS = { // Public labels, model choices, and documentation; n
     candidates: { fast: ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'], advanced: ['gemini-3.8-flash', 'gemini-3.7-flash'] },
   },
   kimi: {
-    name: 'Kimi', keyEnv: 'MOONSHOT_API_KEY', keyPrefix: 'sk-', keyHint: 'sk-…',
+    name: 'Kimi', keyEnv: 'MOONSHOT_API_KEY', keyPrefix: null, keyHint: 'from platform.kimi.ai', // Moonshot does not document a key prefix.
     docs: 'https://platform.kimi.ai/docs/pricing/chat',
     recommended: {
-      fast: { id: 'kimi-k2.6', note: 'Kimi K2.6: Moonshot\'s economical general model (JSON mode).' },
-      advanced: { id: 'kimi-k3', note: 'Kimi K3: Moonshot\'s most capable model (strict JSON schema).' },
+      fast: { id: 'kimi-k2.6', note: 'Kimi K2.6: the lowest-priced Kimi general model, used in JSON mode without thinking.' },
+      advanced: { id: 'kimi-k3', note: 'Kimi K3: Moonshot\'s most capable model (strict JSON schema, low reasoning effort).' },
     },
     candidates: { fast: ['kimi-k2.6'], advanced: ['kimi-k3'] },
   },

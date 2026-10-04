@@ -18,16 +18,17 @@ export class ProviderError extends AppError {
 }
 
 const nameOf = provider => PROVIDERS[provider]?.name || 'The AI provider';
-const MESSAGES = {
+const MESSAGES = { // The wording people see; it never includes a key, a raw provider payload, or an internal address.
   invalid_request: (p, s) => `${nameOf(p)} rejected the request (HTTP ${s}). The model may not support structured output for this request.`,
-  auth: (p, s) => `${nameOf(p)} rejected the API key (HTTP ${s}). Check the key in API settings.`,
-  permission: (p, s) => `Your ${nameOf(p)} key has no access to this model or feature (HTTP ${s}).`,
-  model_unavailable: (p, s, m) => `${nameOf(p)} could not find the model${m ? ` "${m}"` : ''} (HTTP ${s}). It may be retired or not enabled for this key.`,
-  timeout: p => `${nameOf(p)} did not answer in time.`,
-  rate_limited: p => `${nameOf(p)} is busy and is rate limiting requests.`,
-  quota_exhausted: p => `Your ${nameOf(p)} quota is exhausted. Check the provider account or use another model or provider.`,
-  provider_unavailable: (p, s) => `${nameOf(p)} is temporarily unavailable${s ? ` (HTTP ${s})` : ''}.`,
-  network: p => `${nameOf(p)} could not be reached.`,
+  workspace_required: p => `This ${nameOf(p)} API key is not scoped to a workspace. Create a workspace API key in the Claude Console and paste it here.`,
+  auth: p => `API key rejected by ${nameOf(p)}. Check or create a new provider API key.`,
+  permission: () => 'The API key is valid but does not have access to this resource/model.',
+  model_unavailable: () => 'The selected model is not available for this account.',
+  timeout: () => 'Provider did not respond in time.',
+  rate_limited: () => 'Rate limit reached. Wait and retry.',
+  quota_exhausted: () => 'Provider quota/credits are exhausted.',
+  provider_unavailable: p => `${nameOf(p)} is temporarily unavailable.`,
+  network: p => `The Git Architecture Diagram server could not reach ${nameOf(p)}.`,
   malformed: p => `${nameOf(p)} returned an unreadable response.`,
   redirect: (p, s) => `${nameOf(p)} answered with an unexpected redirect (HTTP ${s}); credentials are never forwarded to another address.`,
   cancelled: () => 'The request was cancelled.',
@@ -40,7 +41,9 @@ const SUGGESTIONS = { // What the person can do next. The application never swit
   rate_limited: 'Wait a minute and try again, or choose the Fast model.',
   provider_unavailable: 'Try again shortly.',
   invalid_request: 'Choose a recommended model; custom models may not support structured output.',
+  workspace_required: 'Workspace keys are created under Settings → API keys in the Claude Console.',
   timeout: 'Try again, choose the Fast model, or narrow the folder scope.',
+  network: 'Try again shortly. If it persists, the hosting server may be blocking outbound HTTPS to this provider.',
 };
 
 /** Retry delay requested by the provider, in milliseconds: Retry-After (seconds or HTTP date) or Gemini RetryInfo. */
@@ -73,6 +76,7 @@ export function classifyStatus(provider, status, body, headers, model = '') {
   let kind;
   if (status >= 300 && status < 400) kind = 'redirect';
   else if (status === 402 || (status === 429 && isQuotaExhausted(status, body)) || (status === 400 && isQuotaExhausted(status, body))) kind = 'quota_exhausted';
+  else if (status === 400 && /anthropic-workspace-id/i.test(String(body?.error?.message || ''))) kind = 'workspace_required'; // Claude identity-linked keys need a workspace header; the message is inspected, never shown.
   else if (status === 400 || status === 413 || status === 422) kind = 'invalid_request';
   else if (status === 401) kind = 'auth';
   else if (status === 403) kind = 'permission';
@@ -121,7 +125,7 @@ export async function sendProviderRequest(provider, request, { fetchImpl = fetch
       response = await fetchImpl(request.url, { method: request.method || (request.body ? 'POST' : 'GET'), redirect: 'manual', signal: combined, headers: request.headers, ...(request.body ? { body: JSON.stringify(request.body) } : {}) });
     } catch {
       if (signal?.aborted) throw new ProviderError(499, MESSAGES.cancelled(), { kind: 'cancelled', provider, model, attempts: attempt });
-      last = timeout.aborted ? new ProviderError(504, MESSAGES.timeout(provider), { kind: 'timeout', provider, model, retryable: true, suggestion: SUGGESTIONS.timeout }) : new ProviderError(502, MESSAGES.network(provider), { kind: 'network', provider, model });
+      last = timeout.aborted ? new ProviderError(504, MESSAGES.timeout(provider), { kind: 'timeout', provider, model, retryable: true, suggestion: SUGGESTIONS.timeout }) : new ProviderError(502, MESSAGES.network(provider), { kind: 'network', provider, model, suggestion: SUGGESTIONS.network });
       if (!last.retryable || attempt === maxAttempts) { last.attempts = attempt; throw last; }
       const wait = backoffDelay(attempt, null, random); onRetry({ attempt, waitMs: wait, kind: last.kind, message: last.message });
       try { await sleep(wait, signal); } catch { throw new ProviderError(499, MESSAGES.cancelled(), { kind: 'cancelled', provider, model, attempts: attempt }); }
@@ -133,7 +137,6 @@ export async function sendProviderRequest(provider, request, { fetchImpl = fetch
     const body = response.status >= 300 && response.status < 400 ? (await response.body?.cancel().catch(() => {}), null) : await readErrorBody(response);
     last = classifyStatus(provider, response.status, body, response.headers, model); last.attempts = attempt;
     if (!last.retryable || attempt === maxAttempts) {
-      if (last.kind === 'rate_limited' && attempt > 1) last.message = `${nameOf(provider)} is still rate limiting requests after ${attempt} attempts. Wait a minute, or choose the Fast model.`;
       throw last;
     }
     if (last.retryAfterMs !== null && last.retryAfterMs > RETRY.maxRetryAfterMs) { last.message = `${last.message} The provider asked to wait ${Math.ceil(last.retryAfterMs / 1000)} seconds; try again later.`; throw last; }

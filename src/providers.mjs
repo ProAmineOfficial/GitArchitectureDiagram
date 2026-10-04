@@ -13,6 +13,7 @@ const ENDPOINTS = { // Official HTTPS endpoints only.
   kimi: 'https://api.moonshot.ai/v1/chat/completions',
   deepseek: 'https://api.deepseek.com/chat/completions',
 };
+const THINKING_HEADROOM = 16000; // Extra output budget for models that always reason before answering; only used tokens are billed.
 const MODEL_LISTS = { // Official model-list endpoints used by the model registry and Test connection.
   openai: 'https://api.openai.com/v1/models',
   anthropic: 'https://api.anthropic.com/v1/models?limit=1000',
@@ -51,10 +52,10 @@ export function providerRequest(provider, { apiKey, model, instructions, payload
   const mode = structuredMode(provider, model); const system = mode === 'json_object' ? instructions + jsonModeInstructions(schema) : instructions; // JSON mode carries the schema in the instructions.
   if (provider === 'openai') return { url: ENDPOINTS.openai, headers, body: { model, store: false, instructions, input, max_output_tokens: maxTokens, ...(/^gpt-6/.test(model) ? { reasoning: { effort: 'low' } } : {}), text: { format: { type: 'json_schema', name, strict: true, schema } } } }; // Strict JSON, no stored response, bounded reasoning that shares the output budget.
   if (provider === 'anthropic') return { url: ENDPOINTS.anthropic, headers, body: { model, max_tokens: Math.max(maxTokens, 8000), system: instructions, messages: [{ role: 'user', content: input }], output_config: { format: { type: 'json_schema', schema } } } }; // The current non-beta structured output field.
-  if (provider === 'gemini') return { url: ENDPOINTS.gemini(model), headers, body: { systemInstruction: { parts: [{ text: instructions }] }, contents: [{ role: 'user', parts: [{ text: input }] }], generationConfig: { maxOutputTokens: maxTokens, responseFormat: { text: { mimeType: 'APPLICATION_JSON', schema } } } } }; // The current response-format contract.
-  if (provider === 'kimi') return { url: ENDPOINTS.kimi, headers, body: { model, messages: [{ role: 'system', content: system }, { role: 'user', content: input }], max_tokens: maxTokens, ...(mode === 'json_schema' ? { reasoning_effort: 'low', response_format: { type: 'json_schema', json_schema: { name, strict: true, schema } } } : { response_format: { type: 'json_object' } }) } }; // K3 gets strict schemas with bounded reasoning; other models use JSON mode.
+  if (provider === 'gemini') return { url: ENDPOINTS.gemini(model), headers, body: { systemInstruction: { parts: [{ text: instructions }] }, contents: [{ role: 'user', parts: [{ text: input }] }], generationConfig: { maxOutputTokens: maxTokens, responseFormat: { text: { mimeType: 'application/json', schema } } } } }; // The documented generateContent structured-output contract (lowercase MIME type).
+  if (provider === 'kimi') return { url: ENDPOINTS.kimi, headers, body: { model, messages: [{ role: 'system', content: system }, { role: 'user', content: input }], ...(mode === 'json_schema' ? { max_completion_tokens: maxTokens + THINKING_HEADROOM, reasoning_effort: 'low', response_format: { type: 'json_schema', json_schema: { name, strict: true, schema } } } : { max_completion_tokens: maxTokens, ...(/^kimi-k2/.test(model) ? { thinking: { type: 'disabled' } } : {}), response_format: { type: 'json_object' } }) } }; // K3 always thinks: strict schema, low effort, and headroom. K2 models think by default, so the economy role turns it off. max_tokens is deprecated.
   const thinking = model !== 'deepseek-flash'; // Flash is the economy role: no thinking. Pro keeps DeepSeek's default thinking with extra token headroom.
-  return { url: ENDPOINTS.deepseek, headers, body: { model, messages: [{ role: 'system', content: system }, { role: 'user', content: input }], max_tokens: thinking ? maxTokens + 16000 : maxTokens, stream: false, thinking: { type: thinking ? 'enabled' : 'disabled' }, response_format: { type: 'json_object' } } };
+  return { url: ENDPOINTS.deepseek, headers, body: { model, messages: [{ role: 'system', content: system }, { role: 'user', content: input }], max_tokens: thinking ? maxTokens + THINKING_HEADROOM : maxTokens, stream: false, thinking: { type: thinking ? 'enabled' : 'disabled' }, response_format: { type: 'json_object' } } };
 }
 
 /** Normalize final text while rejecting refusals and truncated output. Reasoning and thinking content is never returned. */
@@ -65,6 +66,13 @@ export function providerOutput(provider, data) {
   if (provider === 'gemini') { const candidate = data.candidates?.[0]; if (data.promptFeedback?.blockReason || candidate?.finishReason === 'SAFETY' || candidate?.finishReason === 'PROHIBITED_CONTENT') incomplete('refused'); if (!candidate || candidate.finishReason !== 'STOP') incomplete(); return { text: (candidate.content?.parts || []).filter(item => !item.thought && typeof item.text === 'string').map(item => item.text).join(''), model: data.modelVersion, usage: data.usageMetadata }; } // Never expose thought parts.
   const choice = data.choices?.[0]; if (choice?.finish_reason === 'content_filter') incomplete('refused'); if (!choice || choice.finish_reason !== 'stop') incomplete(); // Kimi and DeepSeek share the Chat Completions envelope.
   return { text: choice.message?.content || '', model: data.model, usage: data.usage }; // reasoning_content stays out of the answer.
+}
+
+/** Host names of a provider's official endpoints, for safe diagnostics (never a key or a full URL with parameters). */
+export function endpointHosts(provider, model = 'model') {
+  if (!Object.hasOwn(ENDPOINTS, provider)) return { inference: '', modelList: '' };
+  const inference = typeof ENDPOINTS[provider] === 'function' ? ENDPOINTS[provider](model) : ENDPOINTS[provider];
+  return { inference: new URL(inference).host, modelList: new URL(MODEL_LISTS[provider]).host };
 }
 
 /** The official model-list request for a provider. */
@@ -80,15 +88,15 @@ export function parseModelList(provider, data) {
 }
 
 /**
- * Resolve the provider, key, and model for one web request. A browser-supplied key always wins; the server's key is
- * used only for an authorized request (instance password) and only for the provider it was configured for.
+ * Resolve the provider, key, and model for one web request. Only the key the person entered in this browser tab is
+ * used: a web request never borrows a server-side provider key, and no instance password exists. The site's own key
+ * is used only for opted-in public system maps (GENIUS_PUBLIC_AI), inside the analysis service.
  */
-export function resolveCredentials(input, env, authorized) {
-  const provider = typeof input?.provider === 'string' && input.provider ? input.provider : env.GENIUS_PROVIDER || 'openai';
+export function resolveCredentials(input) {
+  const provider = typeof input?.provider === 'string' && input.provider ? input.provider : 'openai';
   if (!Object.hasOwn(PROVIDERS, provider)) throw new AppError(400, 'Choose OpenAI, Claude, Gemini, Kimi, or DeepSeek in API settings.');
-  const sameProvider = provider === (env.GENIUS_PROVIDER || 'openai');
-  const apiKey = typeof input?.apiKey === 'string' && input.apiKey ? input.apiKey : authorized && sameProvider ? env[PROVIDERS[provider].keyEnv] || '' : '';
-  const model = typeof input?.model === 'string' && input.model ? input.model : sameProvider ? env.GENIUS_MODEL || '' : '';
-  return { provider, apiKey, model, usesServerKey: !input?.apiKey && Boolean(apiKey) };
+  const apiKey = typeof input?.apiKey === 'string' ? input.apiKey.trim() : '';
+  if (apiKey.length > 1024) throw new AppError(400, 'The API key is too long.');
+  const model = typeof input?.model === 'string' ? input.model.trim() : '';
+  return { provider, apiKey, model };
 }
-

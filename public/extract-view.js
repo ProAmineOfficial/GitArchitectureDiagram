@@ -100,7 +100,7 @@ async function fromArchive(chosen) {
   const { result } = api.state; const repo = result.repository;
   controller?.abort(); controller = new AbortController(); $('#extract-cancel').hidden = false; $('#extract-run').disabled = true;
   try {
-    const response = await fetch('/api/extract', { method: 'POST', headers: api.headers(), signal: controller.signal, body: JSON.stringify({ repository: repo.fullName, commit: repo.sha, scope: repo.scope || '', ...chosen, githubToken: api.credentials().githubToken || '' }) });
+    const response = await fetch('/api/extract', { method: 'POST', headers: api.headers(), signal: controller.signal, body: JSON.stringify({ repository: repo.fullName, commit: repo.sha, scope: repo.scope || '', ...chosen }) });
     return await readEvents(response, event => status(`${event.stage}${event.detail ? `: ${event.detail}` : ''}`));
   } finally { controller = null; $('#extract-cancel').hidden = true; $('#extract-run').disabled = false; }
 }

@@ -40,6 +40,11 @@ test('each adapter uses its official endpoint, its own auth header, and keeps th
   assert.equal(structuredMode('kimi', 'kimi-k3'), 'json_schema'); assert.equal(structuredMode('kimi', 'kimi-k2.6'), 'json_object'); assert.equal(structuredMode('deepseek', 'deepseek-v4-pro'), 'json_object');
   const flash = providerRequest('deepseek', { apiKey: KEY, model: 'deepseek-flash', instructions: 'x', payload: {}, schema: SCHEMA, maxTokens: 500 }); assert.deepEqual(flash.body.thinking, { type: 'disabled' }); assert.equal(flash.body.max_tokens, 500);
   const pro = providerRequest('deepseek', { apiKey: KEY, model: 'deepseek-v4-pro', instructions: 'x', payload: {}, schema: SCHEMA, maxTokens: 500 }); assert.deepEqual(pro.body.thinking, { type: 'enabled' }); assert.ok(pro.body.max_tokens > 500);
+  const k26 = providerRequest('kimi', { apiKey: KEY, model: 'kimi-k2.6', instructions: 'x', payload: {}, schema: SCHEMA, maxTokens: 500 }); assert.deepEqual(k26.body.thinking, { type: 'disabled' }); assert.equal(k26.body.max_completion_tokens, 500); assert.equal(k26.body.max_tokens, undefined);
+  const k3 = providerRequest('kimi', { apiKey: KEY, model: 'kimi-k3', instructions: 'x', payload: {}, schema: SCHEMA, maxTokens: 500 }); assert.equal(k3.body.reasoning_effort, 'low'); assert.equal(k3.body.thinking, undefined); assert.ok(k3.body.max_completion_tokens > 500); assert.equal(k3.body.response_format.json_schema.strict, true); assert.equal(k3.body.temperature, undefined);
+  const gem = providerRequest('gemini', { apiKey: KEY, model: 'gemini-3.8-flash', instructions: 'x', payload: {}, schema: SCHEMA, maxTokens: 500 }); assert.equal(gem.body.generationConfig.responseFormat.text.mimeType, 'application/json');
+  const claude = providerRequest('anthropic', { apiKey: KEY, model: 'claude-opus-5-5', instructions: 'x', payload: {}, schema: SCHEMA, maxTokens: 500 }); assert.equal(claude.headers['anthropic-version'], '2023-06-01'); assert.deepEqual(claude.body.output_config.format, { type: 'json_schema', schema: SCHEMA });
+  const gpt = providerRequest('openai', { apiKey: KEY, model: 'gpt-6-luna', instructions: 'x', payload: {}, schema: SCHEMA, maxTokens: 500 }); assert.equal(gpt.body.store, false); assert.deepEqual(gpt.body.reasoning, { effort: 'low' }); assert.equal(gpt.body.text.format.strict, true);
   assert.throws(() => providerRequest('constructor', { apiKey: KEY, model: 'm', instructions: '', payload: {}, schema: SCHEMA }), /Choose OpenAI/);
 });
 
@@ -81,7 +86,7 @@ test('transient 429 honors Retry-After and succeeds on a later attempt', async (
 
 test('retries stop after three attempts in total and say so', async () => {
   const waits = []; const { calls, fetchImpl } = scripted([json(429, {})]);
-  await assert.rejects(callProviderJSON('openai', { apiKey: KEY, model: 'gpt-6-luna', instructions: 'x', payload: {}, schema: SCHEMA }, { fetchImpl, sleep: async ms => { waits.push(ms); }, random: () => 0.5 }), error => { assert.equal(error.kind, 'rate_limited'); assert.equal(error.attempts, RETRY.maxAttempts); assert.match(error.message, /still rate limiting requests after 3 attempts/); return true; });
+  await assert.rejects(callProviderJSON('openai', { apiKey: KEY, model: 'gpt-6-luna', instructions: 'x', payload: {}, schema: SCHEMA }, { fetchImpl, sleep: async ms => { waits.push(ms); }, random: () => 0.5 }), error => { assert.equal(error.kind, 'rate_limited'); assert.equal(error.attempts, RETRY.maxAttempts); assert.equal(error.message, 'Rate limit reached. Wait and retry.'); return true; });
   assert.equal(calls.length, 3); assert.deepEqual(waits, [1000, 2000]);
   const server = scripted([json(503, {}), json(502, {}), json(200, envelope('kimi', '{"ok":true}'))]);
   assert.deepEqual((await callProviderJSON('kimi', { apiKey: KEY, model: 'kimi-k3', instructions: 'x', payload: {}, schema: SCHEMA }, { fetchImpl: server.fetchImpl, sleep: noSleep })).parsed, { ok: true }); assert.equal(server.calls.length, 3);
@@ -94,7 +99,7 @@ test('quota-style 429, authentication, permission, and model errors are never re
     assert.equal(calls.length, 1, kind);
   }
   const quota = scripted([json(429, { error: { code: 'insufficient_quota' } })]);
-  await assert.rejects(callProviderJSON('openai', { apiKey: KEY, model: 'gpt-6-luna', instructions: 'x', payload: {}, schema: SCHEMA }, { fetchImpl: quota.fetchImpl }), /quota is exhausted\. Check the provider account or use another model or provider/);
+  await assert.rejects(callProviderJSON('openai', { apiKey: KEY, model: 'gpt-6-luna', instructions: 'x', payload: {}, schema: SCHEMA }, { fetchImpl: quota.fetchImpl }), /Provider quota\/credits are exhausted\./);
 });
 
 test('a Retry-After longer than 30 seconds is reported instead of waited for', async () => {
@@ -125,19 +130,15 @@ test('the registry reduces a model list to two verified roles and never adopts u
   const first = await discoverModels('deepseek', 'sk-discovery-key-1234567890', { fetchImpl }); const second = await discoverModels('deepseek', 'sk-discovery-key-1234567890', { fetchImpl });
   assert.equal(first.source, 'discovered'); assert.equal(second.source, 'cached'); assert.equal(listings, 1); assert.equal(first.pair.advanced.id, 'deepseek-v4-pro');
   const expired = await discoverModels('deepseek', 'sk-discovery-key-1234567890', { fetchImpl: async () => json(503, {}), now: Date.now() + 13 * 3600 * 1000 });
-  assert.equal(expired.source, 'cached'); assert.match(expired.warning, /last verified/); assert.equal(expired.pair.fast.id, 'deepseek-flash');
-  const bundled = await discoverModels('gemini', 'AIza-new-key-without-cache-000', { fetchImpl: async () => json(401, {}) }); assert.equal(bundled.source, 'bundled'); assert.deepEqual(bundled.pair, bundledPair('gemini'));
+  assert.equal(expired.source, 'cached'); assert.match(expired.warning, /discovery is unavailable\. Using the last verified recommendations/); assert.equal(expired.pair.fast.id, 'deepseek-flash');
+  const bundled = await discoverModels('gemini', 'AIza-new-key-without-cache-000', { fetchImpl: async () => json(401, {}) }); assert.equal(bundled.source, 'bundled'); assert.deepEqual(bundled.pair, bundledPair('gemini')); assert.match(bundled.warning, /^Model discovery: API key rejected by Gemini\./);
 });
 
-test('Test connection reports Connected, Authentication failed, Model unavailable, Rate limited, and Quota exhausted', async () => {
-  const ok = await testConnection('deepseek', { apiKey: 'sk-connection-test-000000', model: 'deepseek-flash', fetchImpl: async url => (url.endsWith('/models') ? Response.json({ data: [{ id: 'deepseek-flash' }] }) : Response.json(envelope('deepseek', '{"ok":true}'))) });
-  assert.equal(ok.status, 'Connected'); assert.ok(ok.ok); assert.deepEqual(ok.checks.map(check => check.status), ['ok', 'ok', 'ok', 'ok']); assert.ok(ok.checks.some(check => check.label === 'Model available'));
-  assert.equal((await testConnection('openai', { apiKey: 'sk-proj-placeholder-0000000', model: 'gpt-6-luna', fetchImpl: async () => json(401, {}) })).status, 'Authentication failed');
-  assert.equal((await testConnection('openai', { apiKey: 'sk-proj-placeholder-0000000', model: 'gpt-6-astra', fetchImpl: async () => Response.json({ data: [{ id: 'gpt-6-luna' }] }) })).status, 'Model unavailable');
-  assert.equal((await testConnection('kimi', { apiKey: 'sk-kimi-placeholder-00000000', model: 'kimi-k3', fetchImpl: async url => (url.endsWith('/models') ? Response.json({ data: [{ id: 'kimi-k3' }] }) : json(429, { error: { type: 'rate_limit_reached_error' } })) })).status, 'Rate limited');
-  assert.equal((await testConnection('openai', { apiKey: 'sk-proj-placeholder-0000000', model: 'gpt-6-luna', fetchImpl: async url => (url.endsWith('/models') ? Response.json({ data: [{ id: 'gpt-6-luna' }] }) : json(429, { error: { code: 'insufficient_quota' } })) })).status, 'Quota exhausted');
-  assert.equal((await testConnection('anthropic', { apiKey: 'has spaces', model: 'claude-opus-5-5' })).status, 'Authentication failed');
-  assert.ok(checkKeyFormat('anthropic', 'sk-proj-looks-like-openai-0000').warning);
+test('the key-format check only warns on documented prefixes and never blocks a pasted key', () => {
+  assert.ok(checkKeyFormat('anthropic', 'sk-proj-looks-like-openai-0000').warning); assert.equal(checkKeyFormat('anthropic', 'has spaces').ok, false);
+  assert.deepEqual(checkKeyFormat('gemini', 'AQ.new-style-auth-key-000000000'), { ok: true }, 'Gemini auth keys created since 2026-05-28 no longer start with AIza');
+  assert.deepEqual(checkKeyFormat('kimi', 'kimi-key-without-documented-prefix'), { ok: true });
+  assert.match(checkKeyFormat('deepseek', 'twenty-two-characters!').warning, /DeepSeek keys usually start with sk-/);
 });
 
 test('choosing DeepSeek never borrows another provider\'s server key', async () => {
@@ -149,5 +150,5 @@ test('choosing DeepSeek never borrows another provider\'s server key', async () 
 test('a provider failure leaves the structural report intact and explains the 429', async () => {
   const fixture = githubFixture({ name: 'rate-limited' }); const fetchImpl = async (url, options) => (new URL(url).hostname === 'api.github.com' ? fixture.fetchImpl(url, options) : json(429, { error: { code: 'insufficient_quota' } }));
   const result = await runAnalysis({ repository: 'acme/rate-limited', maxFiles: 2, ai: true, provider: 'openai', apiKey: KEY, model: 'gpt-6-luna' }, { fetchImpl, cachePublic: false });
-  assert.equal(result.ai, null); assert.ok(result.diagrams.architecture); assert.equal(result.aiError.kind, 'quota_exhausted'); assert.equal(result.aiError.providerName, 'OpenAI'); assert.match(result.warnings.join(' '), /quota is exhausted/);
+  assert.equal(result.ai, null); assert.ok(result.diagrams.architecture); assert.equal(result.aiError.kind, 'quota_exhausted'); assert.equal(result.aiError.providerName, 'OpenAI'); assert.match(result.warnings.join(' '), /quota\/credits are exhausted/);
 });

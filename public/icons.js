@@ -3,6 +3,8 @@ const shapes = { // Use only fixed application-owned SVG geometry.
   repo: '<path d="M5 4a2 2 0 0 1 2-2h12v16H7a2 2 0 0 0-2 2V4Z"/><path d="M5 20a2 2 0 0 0 2 2h12v-4M9 7h6"/>', // Repository identity.
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>', // Repository information.
   down: '<path d="m7 10 5 5 5-5"/>', // Menu caret.
+  eye: '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/>', // Show a masked value.
+  'eye-off': '<path d="M10.6 5.6A9.6 9.6 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a17 17 0 0 1-2.6 3.4M6.6 6.6C4 8.3 2.5 12 2.5 12S6 18.5 12 18.5a9 9 0 0 0 4.4-1.1M9.9 9.9a3 3 0 0 0 4.2 4.2M3 3l18 18"/>', // Hide it again.
   'dock-system': '<circle cx="12" cy="12" r="2.6"/><circle cx="5.5" cy="6" r="2.2"/><circle cx="18.5" cy="6" r="2.2"/><circle cx="5.5" cy="18" r="2.2"/><circle cx="18.5" cy="18" r="2.2"/><path d="m7.3 7.4 2.8 2.7M16.7 7.4l-2.8 2.7M7.3 16.6l2.8-2.7M16.7 16.6l-2.8-2.7"/>',
   'dock-architecture': '<rect x="5" y="2.5" width="14" height="4.5" rx="1.4"/><rect x="3" y="9.75" width="18" height="4.5" rx="1.4"/><rect x="5" y="17" width="14" height="4.5" rx="1.4"/><path d="M12 7v2.75M12 14.25V17"/>',
   'dock-hierarchy': '<rect x="9" y="2.5" width="6" height="4.5" rx="1.2"/><rect x="2.5" y="16.5" width="6" height="4.5" rx="1.2"/><rect x="15.5" y="16.5" width="6" height="4.5" rx="1.2"/><path d="M12 7v4.5M5.5 16.5v-5h13v5"/>',

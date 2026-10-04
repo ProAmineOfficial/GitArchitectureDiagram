@@ -3,7 +3,7 @@
 import { Buffer } from 'node:buffer'; // Make Git blob verification portable to the hosted Node-compatible runtime.
 import { createHash } from 'node:crypto'; // Verify Git blob identities before analyzing their contents.
 export class AppError extends Error { constructor(status, message) { super(message); this.status = status; } } // Carry safe HTTP error messages.
-export const VERSION = '1.0.0'; // Identify the report generator and its contracts.
+export const VERSION = '1.1.0'; // Identify the report generator and its contracts.
 const SEGMENT = /^[a-zA-Z0-9_.-]+$/; // Restrict repository identifiers to GitHub-compatible path segments.
 const SKIP = /(^|\/)(node_modules|vendor|dist|build|\.git|\.pio|coverage|__pycache__)(\/|$)/i; // Avoid generated and vendored content.
 const SECRET = /(^|\/)(\.env(?:\..*)?|.*(?:credential|secret|password|private[_-]?key).*|id_rsa|id_ed25519)$|\.(pem|p12|pfx|key)$/i; // Exclude likely credential files from ingestion.
@@ -46,7 +46,7 @@ export function rateLimitInfo(headers) { // Read GitHub's documented allowance h
 export function rateLimitMessage(info, retryAfter, authenticated) { // Tell the visitor when GitHub will accept requests again.
   const seconds = Number(retryAfter) || (info?.reset ? info.reset - Math.floor(Date.now() / 1000) : 0); // Prefer GitHub's explicit retry interval.
   const when = seconds > 0 ? ` It resets in about ${Math.max(1, Math.ceil(seconds / 60))} minute${seconds > 60 ? 's' : ''}${info?.reset ? ` (${new Date(info.reset * 1000).toISOString().slice(11, 16)} UTC)` : ''}.` : ''; // Show a concrete wait time when known.
-  return `GitHub's API rate limit was reached.${when} ${authenticated ? 'Your token\'s allowance is exhausted; wait for the reset.' : 'Add a GitHub read token in API settings for a higher allowance, or wait for the reset.'}`; // Give the actionable fix.
+  return `GitHub's API rate limit was reached.${when} ${authenticated ? 'Your token\'s allowance is exhausted; wait for the reset.' : 'Wait for the reset. The site operator can raise this allowance with a server-side GITHUB_TOKEN.'}`; // Give the actionable fix.
 } // End rate-limit messaging.
 export class GitHubReader { // Keep credentials and network controls local to one analysis.
   constructor({ token = '', signal, fetchImpl = fetch, maxRequests = Infinity } = {}) { this.token = token; this.signal = signal; this.fetchImpl = (...args) => fetchImpl(...args); this.maxRequests = maxRequests; this.requests = 0; } // Call native fetch as a standalone function; binding it to this reader breaks the Workers runtime.
@@ -66,7 +66,7 @@ export class GitHubReader { // Keep credentials and network controls local to on
     if (response.status >= 300 && response.status < 400) throw new AppError(502, 'GitHub redirected this request. Use the repository\'s current GitHub URL.'); // Reject redirects explicitly instead of using the unsupported Workers redirect-error mode.
     if (!response.ok) { // Translate GitHub failures without exposing tokens or raw response bodies.
       await response.body?.cancel().catch(() => {}); // Release the unused error body.
-      if (response.status === 404) throw new AppError(404, 'Repository, reference, or file not found. Check the spelling; private repositories need a read token.'); // Explain missing and inaccessible resources.
+      if (response.status === 404) throw new AppError(404, 'Repository, reference, or file not found. Check the spelling. Only public repositories can be analyzed on this site.'); // Explain missing and inaccessible resources.
       if (response.status === 429 || (response.status === 403 && (this.rateLimit?.remaining === 0 || response.headers.get('retry-after')))) throw new AppError(429, rateLimitMessage(this.rateLimit, response.headers.get('retry-after'), Boolean(this.token))); // Report when the allowance returns.
       if (response.status === 403) throw new AppError(403, 'GitHub denied access to this resource (HTTP 403). The token may lack Contents: read access, or the organization requires SSO authorization for it.'); // Separate permission failures from rate limits.
       if (response.status === 401) throw new AppError(401, 'GitHub rejected the read token. Create a new fine-grained token with Contents: read access.'); // Handle expired or invalid credentials.
@@ -96,7 +96,7 @@ export class GitHubReader { // Keep credentials and network controls local to on
   async snapshot(target, { ref = '', scope = '', suppliedToken = false } = {}) { // Resolve a repository target to one immutable commit.
     const route = `/repos/${encodeURIComponent(target.owner)}/${encodeURIComponent(target.repo)}`; // Build the validated API repository prefix.
     const metadata = await this.get(route); // Read visibility and the default branch.
-    if (metadata.private && !suppliedToken) throw new AppError(403, 'Private repositories require your own request-specific GitHub read token.'); // Never publish private repositories through a server-wide token.
+    if (metadata.private && !suppliedToken) throw new AppError(403, 'This repository is private. Only public repositories can be analyzed on this site; use the command-line tool with your own GITHUB_TOKEN for private code.'); // Never publish private repositories through a server-wide token.
     let revision = String(ref).trim() || metadata.default_branch; let selectedScope = normalizeScope(scope); let commit; let refKind = ref ? 'explicit' : 'default'; // Initialize explicit or default scope selection.
     if (!ref && target.tail.length) { // Resolve tree/blob URLs whose refs may contain slashes.
       const resolved = await this.resolveTreeRef(route, target.tail); revision = resolved.ref; commit = resolved.commit; refKind = resolved.kind; selectedScope ||= normalizeScope(target.tail.slice(resolved.segments).join('/')); // Split the URL into ref and path.

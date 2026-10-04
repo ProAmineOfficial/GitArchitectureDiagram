@@ -69,7 +69,7 @@ export function setupAsk({ getResult, credentials, headers, aiConfigured, onInsp
     $('#ask-cancel').hidden = false; $('#ask-ai').disabled = true;
     panel.replaceChildren(el('p', 'mode-note pending', `Waiting for ${name} (${model}). Sent ${excerpts.length} excerpts, ${characters.toLocaleString('en')} characters${matched ? '' : ', from the reading order because no line matched'}.`));
     try {
-      const response = await fetch('/api/ask', { method: 'POST', headers: headers(), signal: controller.signal, body: JSON.stringify({ ai: true, question: $('#question').value, excerpts, repository: result.repository.fullName, commit: result.repository.sha, provider, apiKey, model, githubToken: credentials().githubToken || '' }) });
+      const response = await fetch('/api/ask', { method: 'POST', headers: headers(), signal: controller.signal, body: JSON.stringify({ ai: true, question: $('#question').value, excerpts, repository: result.repository.fullName, commit: result.repository.sha, provider, apiKey, model }) });
       const type = (response.headers.get('Content-Type') || '').toLowerCase();
       if (!type.includes('application/json')) throw new Error(`The server returned ${type.split(';')[0] || 'an unknown format'} instead of an answer (HTTP ${response.status}). Reload and try again.`);
       const data = await response.json(); if (!response.ok) throw new Error(typeof data.error === 'string' ? data.error : `The request failed (HTTP ${response.status}).`);

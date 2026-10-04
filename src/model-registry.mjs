@@ -5,10 +5,12 @@
 // verified pair (or the bundled pair) stays in use. Unknown models are never promoted into the normal interface.
 import { PROVIDERS, MODEL_ROLES, ROLE_LABELS, CATALOG_CHECKED, checkKeyFormat, structuredMode } from '../public/providers.js';
 import { AppError } from './github.mjs';
-import { modelListRequest, parseModelList } from './providers.mjs';
+import { modelListRequest, parseModelList, endpointHosts } from './providers.mjs';
 import { sendProviderRequest, callProviderJSON, ProviderError, errorInfo } from './provider-errors.mjs';
 
 export const DISCOVERY_TTL_MS = 12 * 60 * 60 * 1000;
+export const DISCOVERY_UNAVAILABLE = 'Connected, but live model discovery is unavailable. Using bundled verified recommendations.';
+export const CONNECTED_WITHOUT_DISCOVERY = 'Connected. Model discovery was unavailable, so the verified bundled model pair is being used.';
 const cache = new Map(); // provider|fingerprint → { pair, listed, checkedAt, expires }
 
 /** A short, irreversible fingerprint so cache keys never contain a key. */
@@ -53,45 +55,74 @@ export async function discoverModels(provider, apiKey, { fetchImpl = fetch, sign
     return { provider, pair, source: 'discovered', checkedAt, listedModels: ids.length };
   } catch (error) {
     const fallback = hit ? structuredClone(hit.pair) : bundledPair(provider); // Last known verified pair, or the bundled pair.
-    return { provider, pair: fallback, source: hit ? 'cached' : 'bundled', checkedAt: hit?.checkedAt || CATALOG_CHECKED, warning: `Model discovery failed: ${errorInfo(error).message} Using the ${hit ? 'last verified' : 'bundled'} recommendations.` };
+    const info = errorInfo(error); const warning = info.kind === 'auth' ? `Model discovery: ${info.message}` : `Live model discovery is unavailable. Using the ${hit ? 'last verified' : 'bundled verified'} recommendations.`; // Only a real 401 is called a key problem.
+    return { provider, pair: fallback, source: hit ? 'cached' : 'bundled', checkedAt: hit?.checkedAt || CATALOG_CHECKED, warning, kind: info.kind };
   }
 }
 
-const STATUS = { auth: 'Authentication failed', permission: 'Access denied', model_unavailable: 'Model unavailable', rate_limited: 'Rate limited', quota_exhausted: 'Quota exhausted', provider_unavailable: 'Provider temporarily unavailable', network: 'Provider temporarily unavailable', timeout: 'Provider temporarily unavailable', invalid_request: 'Structured output not supported', malformed: 'Unexpected provider response', truncated: 'Unexpected provider response', refused: 'Unexpected provider response', redirect: 'Unexpected provider response', cancelled: 'Cancelled' };
+const STATUS = { auth: 'Authentication failed', permission: 'Access denied', workspace_required: 'Workspace API key required', model_unavailable: 'Model unavailable', rate_limited: 'Rate limited', quota_exhausted: 'Quota exhausted', provider_unavailable: 'Provider temporarily unavailable', network: 'Provider unreachable', timeout: 'Provider did not respond in time', invalid_request: 'Request rejected', malformed: 'Unexpected provider response', truncated: 'Unexpected provider response', refused: 'Unexpected provider response', redirect: 'Unexpected provider response', cancelled: 'Cancelled' };
 const PROBE_SCHEMA = { type: 'object', additionalProperties: false, properties: { ok: { type: 'boolean' } }, required: ['ok'] };
+const MESSAGES_TIMEOUT = 'Provider did not respond in time.';
+const PROBE_TOKENS = 1024; // Room for a few tokens of JSON plus brief reasoning on models that always reason; only used tokens are billed.
+const ACCEPTED_KEY = new Set(['model_unavailable', 'rate_limited', 'quota_exhausted', 'invalid_request', 'malformed', 'truncated', 'refused', 'workspace_required']); // The provider processed the key, then refused for another reason.
+
+/** Safe description of one provider check: HTTP status and classification only. */
+function outcome(error) { const info = errorInfo(error); return { ok: false, kind: info.kind, httpStatus: error instanceof ProviderError ? error.providerStatus : null, message: info.message, suggestion: info.suggestion || '' }; }
 
 /**
- * Test a key and model: key format, endpoint and authentication, model availability, and the structured-output
- * capability Genius needs. Sends one model-list request and one tiny structured request (a few tokens).
+ * Test a key and model with two independent checks, and report four rows: Authentication, Provider reachable,
+ * Model available, and Tiny inference.
+ *   A. The official model list (authentication and discovery). It is optional: many keys cannot list models.
+ *   B. One tiny structured request that must return {"ok": true}. This decides the result.
+ * A failed model list with a working inference is a success. Authentication is reported as failed only when the
+ * provider actually answered 401 (403 means the key is valid but lacks access). The response carries safe
+ * diagnostics — provider, model, whether a key arrived and its length, endpoint hosts, HTTP statuses, and the
+ * classification — and never the key or an authorization header.
  */
-export async function testConnection(provider, { apiKey, model, fetchImpl = fetch, signal } = {}) {
+export async function testConnection(provider, { apiKey = '', model = '', fetchImpl = fetch, signal, now = () => Date.now(), timeouts = { list: 15000, inference: 45000 } } = {}) {
   assertProvider(provider);
-  const checks = []; const add = (id, status, label) => checks.push({ id, status, label });
-  const done = (ok, statusText, extra = {}) => ({ provider, providerName: PROVIDERS[provider].name, model, ok, status: statusText, checks, ...extra });
-  const format = checkKeyFormat(provider, apiKey);
-  if (!format.ok) { add('key', 'fail', format.message); return done(false, 'Authentication failed', { kind: 'auth' }); }
-  add('key', format.warning ? 'warn' : 'ok', format.warning || 'Key format looks valid');
-  if (typeof model !== 'string' || !/^[A-Za-z0-9._:-]{1,120}$/.test(model)) { add('model', 'fail', 'Choose a model'); return done(false, 'Model unavailable', { kind: 'model_unavailable' }); }
+  const started = now(); const name = PROVIDERS[provider].name; const key = String(apiKey || ''); const hosts = endpointHosts(provider, model || 'model');
+  const diagnostics = { provider, model, apiKeyPresent: Boolean(key), keyLength: key.length, keyPrefixMatches: PROVIDERS[provider].keyPrefix ? key.startsWith(PROVIDERS[provider].keyPrefix) : null, endpointHost: hosts.inference, modelListHost: hosts.modelList, modelList: null, inference: null, classification: null, durationMs: 0 };
+  const row = (id, label) => ({ id, label, status: 'skip', detail: 'Not checked' });
+  const checks = { auth: row('auth', 'Authentication'), reachable: row('reachable', 'Provider reachable'), model: row('model', 'Model available'), inference: row('inference', 'Tiny inference') };
+  const set = (id, status, detail) => Object.assign(checks[id], { status, detail });
+  const finish = (ok, status, extra = {}) => { diagnostics.durationMs = now() - started; diagnostics.classification = ok ? 'connected' : extra.kind || 'error'; return { provider, providerName: name, model, ok, status, checks: Object.values(checks), diagnostics, ...extra }; };
+  const format = checkKeyFormat(provider, key);
+  if (!format.ok) { set('auth', 'fail', format.message); return finish(false, key ? 'Authentication failed' : 'API key missing', { kind: key ? 'auth' : 'missing_key', message: format.message, suggestion: `Paste your ${name} API key.` }); }
+  const keyNote = format.warning ? `${format.warning} The key received by the server is ${key.length} characters long. If your browser filled in a saved password, clear the field and paste the provider key.` : '';
+  if (!/^[A-Za-z0-9._:/-]{1,120}$/.test(model)) { set('model', 'fail', 'Choose a model'); return finish(false, 'Model unavailable', { kind: 'model_unavailable', message: 'Choose one of the two recommended models, or enter a custom model ID.', keyNote }); }
+
+  // A. Model list: authentication and discovery. A failure here is recorded, never final.
+  let listed = null; let list = null;
+  try { const { data } = await sendProviderRequest(provider, modelListRequest(provider, key), { fetchImpl, signal, timeoutMs: timeouts.list, maxAttempts: 1 }); listed = parseModelList(provider, data); list = { ok: true, httpStatus: 200, kind: 'ok', listedModels: listed.length }; }
+  catch (error) { if (error instanceof ProviderError && error.kind === 'cancelled') throw error; list = outcome(error); }
+  diagnostics.modelList = { httpStatus: list.httpStatus, classification: list.kind, ...(list.listedModels !== undefined ? { listedModels: list.listedModels } : {}) };
+
+  // B. Tiny inference: the check that decides.
+  let probe;
   try {
-    const { data } = await sendProviderRequest(provider, modelListRequest(provider, apiKey), { fetchImpl, signal, timeoutMs: 15000, maxAttempts: 1 });
-    add('endpoint', 'ok', `${PROVIDERS[provider].name} endpoint responded and accepted the key`);
-    const ids = parseModelList(provider, data);
-    if (ids.includes(model)) add('model', 'ok', 'Model available');
-    else if (ids.length) { add('model', 'fail', `${model} is not listed for this key`); return done(false, 'Model unavailable', { kind: 'model_unavailable', suggestion: 'Choose the other recommended model.' }); }
-    else add('model', 'warn', 'The provider did not list models; checking with a request');
-  } catch (error) {
-    const info = errorInfo(error);
-    if (!(error instanceof ProviderError) || !['model_unavailable', 'invalid_request'].includes(error.kind)) { add('endpoint', 'fail', info.message); return done(false, STATUS[info.kind] || 'Provider temporarily unavailable', info); }
-    add('endpoint', 'warn', 'The model list is not available; checking with a request'); // Some accounts cannot list models; the probe decides.
+    const { parsed } = await callProviderJSON(provider, { apiKey: key, model, instructions: 'Connection check. Return the JSON object {"ok": true}.', payload: { check: 'connection' }, schema: PROBE_SCHEMA, name: 'connection_check', maxTokens: PROBE_TOKENS }, { fetchImpl, signal, timeoutMs: timeouts.inference, maxAttempts: 1 });
+    probe = parsed?.ok === true ? { ok: true, httpStatus: 200, kind: 'ok' } : { ok: false, httpStatus: 200, kind: 'invalid_request', message: `${name} answered, but not with the requested JSON. This model may not support the structured output Genius needs.`, suggestion: 'Choose one of the two recommended models.' };
+  } catch (error) { if (error instanceof ProviderError && error.kind === 'cancelled') throw error; probe = outcome(error); }
+  diagnostics.inference = { httpStatus: probe.httpStatus, classification: probe.kind };
+
+  const answered = result => result.ok || Number.isInteger(result.httpStatus); // Any HTTP answer proves the server reached the provider.
+  set('reachable', answered(list) || answered(probe) ? 'ok' : 'fail', answered(list) || answered(probe) ? `${hosts.inference} answered` : (probe.kind === 'timeout' ? MESSAGES_TIMEOUT : `The Git Architecture Diagram server could not reach ${name}.`));
+  if (probe.ok) {
+    set('auth', 'ok', 'Key accepted'); set('inference', 'ok', structuredMode(provider, model) === 'json_schema' ? 'Returned {"ok": true} with a strict JSON schema' : 'Returned {"ok": true} in JSON mode');
+    set('model', 'ok', listed?.includes(model) ? 'Listed for this key and answering' : 'Answering');
+    const discovery = list.ok ? '' : CONNECTED_WITHOUT_DISCOVERY;
+    return finish(true, 'Connected', { message: discovery || `${name} accepted the key and ${model} answered.`, discovery: { available: list.ok, ...(list.ok ? { listedModels: listed.length } : { message: DISCOVERY_UNAVAILABLE }) }, keyNote });
   }
-  try {
-    const { parsed } = await callProviderJSON(provider, { apiKey, model, instructions: 'Connection check. Return the JSON object {"ok": true}.', payload: { check: 'connection' }, schema: PROBE_SCHEMA, name: 'connection_check', maxTokens: 400 }, { fetchImpl, signal, timeoutMs: 45000, maxAttempts: 1 });
-    if (parsed?.ok !== true) { add('structured', 'fail', 'The model did not return the requested JSON'); return done(false, 'Structured output not supported', { kind: 'invalid_request' }); }
-    add('structured', 'ok', structuredMode(provider, model) === 'json_schema' ? 'Strict JSON schema output works' : 'JSON mode output works');
-    if (!checks.some(check => check.id === 'model' && check.status === 'ok')) add('model', 'ok', 'Model available');
-    return done(true, 'Connected');
-  } catch (error) {
-    const info = errorInfo(error); add('structured', 'fail', info.message);
-    return done(false, STATUS[info.kind] || 'Provider temporarily unavailable', info);
-  }
+  const unauthorized = [list, probe].some(result => result.httpStatus === 401); const forbidden = probe.httpStatus === 403;
+  if (probe.kind === 'auth' || (unauthorized && !list.ok && !ACCEPTED_KEY.has(probe.kind))) set('auth', 'fail', `${name} answered HTTP 401`);
+  else if (forbidden) set('auth', 'warn', 'Key accepted, but it lacks access (HTTP 403)');
+  else if (list.ok || ACCEPTED_KEY.has(probe.kind)) set('auth', 'ok', 'Key accepted');
+  if (probe.kind === 'model_unavailable') set('model', 'fail', `${model} is not available for this account (HTTP ${probe.httpStatus})`);
+  else if (listed?.includes(model)) set('model', 'ok', 'Listed for this key');
+  else if (listed?.length) set('model', 'warn', `${model} is not listed for this key`);
+  set('inference', 'fail', probe.message);
+  const kind = checks.auth.status === 'fail' ? 'auth' : probe.kind;
+  const info = kind === probe.kind ? probe : outcome(Object.assign(new ProviderError(502, `API key rejected by ${name}. Check or create a new provider API key.`, { kind: 'auth', provider, providerStatus: 401, suggestion: 'Paste the key again, or create a new key in the provider console.' })));
+  return finish(false, STATUS[kind] || 'Provider temporarily unavailable', { kind, message: info.message, suggestion: info.suggestion, providerStatus: info.httpStatus, keyNote });
 }

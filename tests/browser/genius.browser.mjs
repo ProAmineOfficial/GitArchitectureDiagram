@@ -40,7 +40,8 @@ const agentOutput = (stage, payload) => {
 const openaiEnvelope = payload => Response.json({ status: 'completed', model: 'gpt-6-luna', usage: { input_tokens: 120, output_tokens: 40 }, output: [{ content: [{ type: 'output_text', text: JSON.stringify(payload) }] }] });
 const modelCall = async (url, options = {}) => {
   const target = new URL(url); const auth = options.headers?.Authorization || '';
-  if (target.pathname.endsWith('/models')) return auth.includes('bad') ? Response.json({ error: { message: 'invalid' } }, { status: 401 }) : Response.json({ data: [...PROVIDERS.openai.models, ...PROVIDERS.deepseek.models].map(id => ({ id })) });
+  if (auth.includes('bad')) return Response.json({ error: { message: 'invalid' } }, { status: 401 });
+  if (target.pathname.endsWith('/models')) return auth.includes('nolist') ? Response.json({ error: { message: 'no permission' } }, { status: 403 }) : Response.json({ data: [...PROVIDERS.openai.models, ...PROVIDERS.deepseek.models].map(id => ({ id })) });
   if (auth.includes('quota')) return Response.json({ error: { code: 'insufficient_quota', message: 'billing details sk-secret' } }, { status: 429 });
   const body = JSON.parse(options.body);
   if (target.hostname === 'api.deepseek.com') return Response.json({ model: body.model, choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({ ok: true }) } }] });
@@ -66,6 +67,11 @@ const closeSettings = page => page.click('#settings .dialog-actions .primary-but
 test('providers, two recommended models, DeepSeek, and Test connection', async () => {
   const page = await open();
   await page.click('#settings-open');
+  assert.equal(await page.locator('#github-token, #instance-token, [type=password]').count(), 0, 'no GitHub token, instance password, or password field');
+  for (const selector of ['#provider', '#api-key', '#model-picker', '#test-connection', '#settings .dialog-actions .primary-button']) assert.ok(await page.locator(selector).isVisible(), selector);
+  assert.equal(await page.getAttribute('#api-key', 'type'), 'text'); assert.equal(await page.$eval('#api-key', input => getComputedStyle(input).webkitTextSecurity), 'disc'); assert.equal(await page.getAttribute('#api-key', 'autocomplete'), 'off');
+  await page.fill('#api-key', 'sk-reveal-check-00000000'); await page.click('#key-reveal'); assert.equal(await page.$eval('#api-key', input => getComputedStyle(input).webkitTextSecurity), 'none'); assert.equal(await page.getAttribute('#key-reveal', 'aria-pressed'), 'true');
+  await page.click('#key-reveal'); assert.equal(await page.$eval('#api-key', input => getComputedStyle(input).webkitTextSecurity), 'disc'); await page.fill('#api-key', '');
   assert.deepEqual(await page.locator('#provider option').evaluateAll(options => options.map(option => option.value)), ['openai', 'anthropic', 'gemini', 'kimi', 'deepseek']);
   for (const provider of Object.keys(PROVIDERS)) {
     await page.selectOption('#provider', provider);
@@ -76,9 +82,14 @@ test('providers, two recommended models, DeepSeek, and Test connection', async (
   await page.selectOption('#provider', 'deepseek'); assert.match(await page.textContent('#provider-key-label'), /DeepSeek API key/);
   await page.check('#model-options input[value=advanced]'); assert.equal(await page.inputValue('#model'), 'deepseek-v4-pro');
   await page.fill('#api-key', 'sk-good-deepseek-key-000000'); await page.click('#test-connection');
-  await page.waitForSelector('#connection-status[data-state=ok]'); assert.match(await page.textContent('#connection-status'), /Connected/); assert.match(await page.textContent('#connection-status'), /Model available/);
-  await page.selectOption('#provider', 'openai'); await page.fill('#api-key', 'sk-bad-openai-key-00000000'); await page.click('#test-connection');
-  await page.waitForSelector('#connection-status[data-state=error]'); assert.match(await page.textContent('#connection-status'), /Authentication failed/);
+  await page.waitForSelector('#connection-status[data-state=ok]'); assert.match(await page.textContent('#connection-status'), /Connected/);
+  assert.deepEqual(await page.locator('#connection-status .check-text strong').allTextContents(), ['Authentication', 'Provider reachable', 'Model available', 'Tiny inference']); assert.equal(await page.locator('#connection-status .check-ok').count(), 4);
+  await page.click('#connection-status summary'); const diagnostics = await page.textContent('.connection-diagnostics'); assert.match(diagnostics, /Key received by the server.*yes, 27 characters/); assert.match(diagnostics, /api\.deepseek\.com/); assert.ok(!diagnostics.includes('sk-good-deepseek'));
+  await page.selectOption('#provider', 'openai'); assert.equal(await page.inputValue('#api-key'), '', 'switching provider clears the key');
+  await page.fill('#api-key', 'sk-nolist-openai-key-0000000'); await page.click('#test-connection');
+  await page.waitForSelector('#connection-status[data-state=ok]'); assert.match(await page.textContent('#connection-status'), /Connected\. Model discovery was unavailable, so the verified bundled model pair is being used\./);
+  await page.fill('#api-key', 'sk-bad-openai-key-00000000'); await page.click('#test-connection');
+  await page.waitForSelector('#connection-status[data-state=error]'); const failed = await page.textContent('#connection-status'); assert.match(failed, /Authentication failed/); assert.match(failed, /API key rejected by OpenAI\. Check or create a new provider API key\./);
   await page.click('.custom-model summary'); await page.fill('#model-custom', 'my-custom-model'); assert.equal(await page.inputValue('#model'), 'my-custom-model');
   await page.context().close();
 });
@@ -88,7 +99,7 @@ test('a quota 429 is explained professionally and the structural views keep work
   await page.click('#options-toggle'); await page.check('[name=analysis-mode][value=genius]'); assert.match(await page.textContent('#ai-cost'), /110,000 characters/);
   await page.fill('#repository', 'acme/shop'); await page.click('#analyze'); await page.waitForSelector('#workspace:not([hidden]) #diagram-content svg', { timeout: 30000 }); await page.click('[data-view=system]');
   await page.waitForSelector('#system-error'); const card = await page.textContent('#system-error');
-  assert.match(card, /Provider quota exhausted · OpenAI/); assert.match(card, /quota is exhausted/); assert.ok(!card.includes('sk-secret') && !card.includes('billing details'));
+  assert.match(card, /Provider quota exhausted · OpenAI/); assert.match(card, /Provider quota\/credits are exhausted\./); assert.ok(!card.includes('sk-secret') && !card.includes('billing details'));
   await page.click('[data-view=architecture]'); await page.waitForSelector('#diagram-content svg'); assert.ok(await page.locator('#diagram-content g.node').count() >= 3);
   await page.context().close();
 });

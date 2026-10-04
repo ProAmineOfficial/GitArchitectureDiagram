@@ -13,7 +13,7 @@ npm run build
 
 The build creates `dist/server/index.js` and `dist/client`, with an `ASSETS` binding and Node compatibility declared in `dist/server/wrangler.json`. The existing Site must be published from the same reviewed GitHub source commit. Future changes must update this repository and republish that Site; an arbitrary GitHub push alone does not trigger a Sites deployment.
 
-The hosted Worker accepts up to 40 files per run and does not retain report/session caches. Evidence search runs in the browser using already-read files. Optional AI remains disabled unless requested with an authorized key and model. No provider API key is bundled into browser assets.
+The hosted Worker accepts up to 40 files per run and does not retain report/session caches. Evidence search runs in the browser using already-read files. Optional AI runs only with the key a visitor enters for that request (or, for opted-in public system maps, the operator's key). No provider API key is bundled into browser assets.
 
 When a Worker serves both the generated address and a custom domain, set `PUBLIC_ORIGINS` to a comma-separated list of their exact HTTPS origins. Keep `PUBLIC_ORIGIN` as the primary origin. Without `PUBLIC_ORIGINS`, the Worker uses `PUBLIC_ORIGIN` as before. The local Node server continues to use its single `PUBLIC_ORIGIN`.
 
@@ -38,7 +38,7 @@ For `gitarchitecturediagram.com`, first confirm who owns it (WHOIS or the regist
 
 ## Node hosting
 
-Use a host that supports Node 22.12+, outbound HTTPS to `api.github.com`, and streamed responses. Optional AI needs outbound HTTPS to the selected provider: `api.openai.com`, `api.anthropic.com`, `generativelanguage.googleapis.com`, or `api.moonshot.ai`.
+Use a host that supports Node 22.12+, outbound HTTPS to `api.github.com`, and streamed responses. Optional AI needs outbound HTTPS to the selected provider: `api.openai.com`, `api.anthropic.com`, `generativelanguage.googleapis.com`, `api.moonshot.ai`, or `api.deepseek.com`.
 
 ```bash
 npm ci --omit=dev
@@ -104,16 +104,17 @@ Remove `HOST=127.0.0.1` from a copied `.env` or change it to `HOST=0.0.0.0` when
 
 | Variable | Purpose |
 | --- | --- |
-| `GITHUB_TOKEN` | Optional server token for public-repository API allowance. It is not a way to expose private repositories to anonymous users. |
+| `GITHUB_TOKEN` | Recommended: a server token that raises the public-repository API allowance (anonymous GitHub API access is limited per server address). It never opens private repositories to visitors, and the browser never sends a GitHub token. |
 | `GENIUS_PROVIDER` | `openai` (default), `anthropic`, `gemini`, `kimi`, or `deepseek`. |
-| `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `MOONSHOT_API_KEY`, `DEEPSEEK_API_KEY` | Optional server key for the configured provider. A different selected provider cannot reuse it. |
+| `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `MOONSHOT_API_KEY`, `DEEPSEEK_API_KEY` | Optional operator key for the configured provider, used only for opted-in public system maps (`GENIUS_PUBLIC_AI=1`) and the local CLI. Web requests never borrow it. |
 | `GENIUS_MODEL` | Explicit provider model ID; no default model or price is assumed. |
-| `GENIUS_ACCESS_TOKEN` | Shared instance password. When set, every analysis/search request needs it. Required before web requests can use the server-side AI key. |
 | `PUBLIC_ORIGIN` | Canonical externally visible origin used for browser request validation. |
 | `HOST`, `PORT` | Listening interface and port; local defaults are `127.0.0.1:3000`. `PORT` may also be a socket or pipe path supplied by a hosting runner. |
 | `GIT_ARCHITECTURE_DIAGRAM_AUTOSTART` | Set to `0` only to import `server.mjs` without opening a listener (tests). Leave unset in production. |
 
-Users can instead provide their own GitHub/provider keys in Settings. Keys pass through your server, so offer this only from a deployment whose operator they trust. Private repositories always require a request-specific GitHub token. Never publish an unrestricted proxy to a paid model key.
+Visitors provide their own AI provider key in API settings. Keys pass through your server, so offer this only from a deployment whose operator they trust. Never publish an unrestricted proxy to a paid model key.
+
+**Retired: `GENIUS_ACCESS_TOKEN`.** Release 1.1 removed the instance password together with the GitHub-token and instance-password fields in API settings. The variable is ignored; if it is still set, the server logs a one-line reminder at startup (the name only, never the value). Remove it from hPanel → Node.js → Environment variables.
 
 ## Domain replacement
 

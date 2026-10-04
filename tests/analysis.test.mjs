@@ -58,7 +58,7 @@ test('blob URLs open the file inside its nearest project folder', async () => {
 });
 
 test('rate limits and HTML interstitials produce actionable messages', async () => {
-  await assert.rejects(new GitHubReader({ fetchImpl }).get('/repos/acme/limited'), error => error.status === 429 && /resets in about 10 minutes/.test(error.message) && /Add a GitHub read token/.test(error.message));
+  await assert.rejects(new GitHubReader({ fetchImpl }).get('/repos/acme/limited'), error => error.status === 429 && /resets in about 10 minutes/.test(error.message) && /server-side GITHUB_TOKEN/.test(error.message));
   await assert.rejects(new GitHubReader({ fetchImpl }).get('/repos/acme/portal'), error => error.status === 502 && /text\/html instead of JSON/.test(error.message));
   assert.match(rateLimitMessage({ reset: Math.floor(Date.now() / 1000) + 90 }, null, true), /token's allowance/);
 });

@@ -493,7 +493,7 @@ The workspace can support providers configured by the user or operator, includin
 - Kimi
 - DeepSeek
 
-Each provider offers exactly two recommended models — **Fast** (economy) and **Advanced** (best quality) — checked against the provider's official documentation, refreshed per key from the official model list, and never replaced by an unverified model. A custom model ID stays available under Advanced settings. **Test connection** checks the key format, the endpoint, the model, and structured output. Rate limits are retried at most three times (honoring `Retry-After`), an exhausted quota is reported as such, and a provider failure never breaks the structural analysis. See [docs/AI_PROVIDERS.md](docs/AI_PROVIDERS.md).
+Each provider offers exactly two recommended models — **Fast** (economy) and **Advanced** (best quality) — checked against the provider's official documentation, refreshed per key from the official model list, and never replaced by an unverified model. A custom model ID stays available under Advanced settings. **Test connection** runs two independent checks — the provider's model list and one tiny structured request — and shows Authentication, Provider reachable, Model available, and Tiny inference, with safe diagnostics. API settings ask only for the AI provider, its key, and the model: the website analyzes public repositories and needs no GitHub token or instance password. Rate limits are retried at most three times (honoring `Retry-After`), an exhausted quota is reported as such, and a provider failure never breaks the structural analysis. See [docs/AI_PROVIDERS.md](docs/AI_PROVIDERS.md).
 
 The interface can show provider, model, request size, and output limits before an external AI request is sent.
 

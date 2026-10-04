@@ -7,7 +7,7 @@ Genius performs tree, import/include, component, reading-order, documentation, t
 | Genius system map | **Genius** mode under Options, or **Generate** in the System Map view | Repository identity, coverage, located dependencies, and up to 110,000 characters of line-numbered excerpts from files already read | 12,000 tokens (Claude requests reserve at least 8,000) |
 | Deep Genius | **Run Deep Genius…** in the Genius panel or the Process view, after a confirmation that shows provider, model, maximum calls, concurrency, input scope, and a cost warning | Per agent: bounded excerpts and summaries retrieved for that agent (at most 150,000 characters of payload, usually far less) | 3,000–6,000 tokens depending on the stage |
 | Ask *provider* | **Ask OpenAI / Claude / Gemini / Kimi / DeepSeek** in the Genius panel | Your question and up to 12 excerpts, at most 32,000 characters, chosen from files already read | 3,000 tokens |
-| Test connection | **Test connection** in API settings | One model-list request and one tiny structured request | 400 tokens |
+| Test connection | **Test connection** in API settings | One model-list request and one tiny structured request | 1,024 tokens (plus reasoning headroom on models that always reason) |
 
 **Search sources** is always free: a local keyword search over the files read. An AI failure leaves the structural report intact.
 
@@ -19,8 +19,8 @@ The normal interface shows exactly two models per provider: **Fast** (economy) a
 | --- | --- | --- | --- | --- |
 | OpenAI | `gpt-6-luna` | `gpt-6-astra` | `gpt-6.1-sol` | Responses API, strict `json_schema`, `store: false`, low reasoning effort |
 | Claude | `claude-haiku-4-5-20251001` | `claude-opus-5-5` | `claude-sonnet-5-5` | Messages API, `output_config.format` JSON schema |
-| Gemini | `gemini-3.5-flash-lite` | `gemini-3.8-flash` | `gemini-3.1-flash-lite`, `gemini-3.7-flash` | generateContent, `generationConfig.responseFormat.text` schema |
-| Kimi | `kimi-k2.6` | `kimi-k3` | — | K3: strict `json_schema` with low reasoning effort; K2.6: JSON mode |
+| Gemini | `gemini-3.5-flash-lite` | `gemini-3.8-flash` | `gemini-3.1-flash-lite`, `gemini-3.7-flash` | generateContent, `generationConfig.responseFormat.text` with `mimeType: "application/json"` and a schema |
+| Kimi | `kimi-k2.6` | `kimi-k3` | — | K3: strict `json_schema`, `reasoning_effort: low`, `max_completion_tokens` with reasoning headroom; K2.6: JSON mode with `thinking: disabled` |
 | DeepSeek | `deepseek-flash` | `deepseek-v4-pro` | — | JSON mode (`response_format: json_object`); Flash without thinking, V4 Pro with thinking |
 
 Claude Opus 5.5 is the Advanced choice because Anthropic recommends it as the starting point for demanding work; Claude Fable 5.1 (adaptive thinking always on) can be entered as a custom model.
@@ -43,26 +43,48 @@ DeepSeek uses its official OpenAI-format endpoint `https://api.deepseek.com/chat
 
 ## Test connection
 
-Test connection reports one status — **Connected**, **Authentication failed**, **Access denied**, **Model unavailable**, **Rate limited**, **Quota exhausted**, **Provider temporarily unavailable**, or **Structured output not supported** — with the individual checks: key format (local), endpoint and authentication (model list), model availability, and the structured-output contract Genius needs (one tiny request).
+Test connection runs two independent checks and shows four rows:
+
+| Row | Passes when |
+| --- | --- |
+| Authentication | The provider accepted the key. It fails only on an actual HTTP 401; a 403 means the key is valid but lacks access. |
+| Provider reachable | The Git Architecture Diagram server received any HTTP answer from the provider. |
+| Model available | The tiny request answered, or the key's model list includes the model. |
+| Tiny inference | One structured request returned exactly `{"ok": true}`. |
+
+Check A reads the provider's official model list (authentication and discovery). Many keys cannot list models — an OpenAI project key without the Models permission answers 403 — so a failed list is recorded but never decides the result. Check B, the tiny structured request, decides. A failed model list with a working inference is a success: "Connected. Model discovery was unavailable, so the verified bundled model pair is being used." Neither check is retried.
+
+**Diagnostics** (folded under the result, and written to the server log as one `[provider-test]` line) show only safe facts: provider, model, whether a key reached the server and its length, whether it has the provider's documented prefix, endpoint host, the HTTP status and classification of each check, and the duration. The key and the authorization header are never shown or logged.
+
+If the key does not have the provider's documented prefix (OpenAI and DeepSeek `sk-`, Claude `sk-ant-`), the result says so with the length the server received. The API key field is a masked text field rather than a password field, because browsers ignore `autocomplete="off"` on password fields and can fill a saved site password into it. Gemini (auth keys created since May 28, 2026) and Kimi keys have no documented prefix, so they are never questioned.
+
+### Provider contract notes (re-verified October 4, 2026)
+
+- **Gemini:** the structured-output MIME type is lowercase `application/json` (1.0.0 sent `APPLICATION_JSON`). New AI Studio keys are auth keys that no longer start with `AIza`; unrestricted standard keys are rejected by Google.
+- **Kimi:** `max_tokens` is deprecated in favor of `max_completion_tokens`. K2.6 thinks by default, so the Fast role sends `thinking: {"type": "disabled"}`; K3 always thinks, so it gets `reasoning_effort: "low"` and output headroom. K3's fixed sampling parameters are never sent.
+- **Claude:** keys that are not scoped to a workspace (personal and service-account keys) need an `anthropic-workspace-id` header that this site does not send; the result says "Workspace API key required". Use a workspace API key. `x-api-key` remains supported alongside `Authorization: Bearer`.
+- **DeepSeek:** `deepseek-chat` and `deepseek-reasoner` were retired on July 24, 2026. DeepSeek's September 2026 news and changelog disagree on whether `deepseek-v4-pro` keeps its own model after September 14, 2026; the ID is still listed and accepted, so it stays the Advanced choice until DeepSeek retires it.
+- **OpenAI:** `max_output_tokens` includes reasoning tokens, so the probe allows 1,024 tokens rather than 400.
 
 ## Errors, rate limits, and retries
 
 `src/provider-errors.mjs` classifies every failure from documented fields only; raw provider payloads are never shown.
 
-| Response | Kind | Retried |
-| --- | --- | --- |
-| 400 | Invalid request or unsupported model capability (Anthropic "credit balance" → quota) | No |
-| 401 | Invalid API key | No |
-| 403 | Key lacks access | No |
-| 404 | Model unavailable or retired | No |
-| 408, network timeout | Timeout | Yes |
-| 429 | Rate limited — or quota exhausted when the provider says so (`insufficient_quota`, `exceeded_current_quota_error`, a Gemini per-day quota) | Rate limits only |
-| 402 | Quota exhausted (DeepSeek insufficient balance) | No |
-| 500, 502, 503, 504, 529 | Provider temporarily unavailable | Yes |
+| Response | Kind | Message | Retried |
+| --- | --- | --- | --- |
+| 400 | Invalid request or unsupported model capability (Anthropic "credit balance" → quota; a missing `anthropic-workspace-id` → workspace key required) | *Provider* rejected the request (HTTP 400). … | No |
+| 401 | Invalid API key | API key rejected by *Provider*. Check or create a new provider API key. | No |
+| 403 | Key lacks access | The API key is valid but does not have access to this resource/model. | No |
+| 404 | Model unavailable or retired | The selected model is not available for this account. | No |
+| 408, network timeout | Timeout | Provider did not respond in time. | Yes |
+| 429 | Rate limited | Rate limit reached. Wait and retry. | Yes |
+| 429 with `insufficient_quota`, `exceeded_current_quota_error`, or a Gemini per-day quota; 402 (DeepSeek) | Quota exhausted | Provider quota/credits are exhausted. | No |
+| 500, 502, 503, 504, 529 | Provider temporarily unavailable | *Provider* is temporarily unavailable. | Yes |
+| No connection | Network | The Git Architecture Diagram server could not reach *Provider*. | No |
 | Redirect | Rejected; credentials are never forwarded | No |
 | Malformed JSON, empty or truncated output, refusal | Unexpected response | No |
 
-Retries: **at most 3 attempts in total**. `Retry-After` (seconds or HTTP date, or Gemini `RetryInfo`) is honored; without it the waits are about 1 s, then 2 s, with ±25% jitter. A requested wait longer than 30 seconds is reported instead of waited for. Cancelling stops immediately. While retrying, the interface says "Provider is busy. Retrying in N s."; when a quota is exhausted it says "Your provider quota is exhausted. Check the provider account or use another model or provider."
+Retries: **at most 3 attempts in total**. `Retry-After` (seconds or HTTP date, or Gemini `RetryInfo`) is honored; without it the waits are about 1 s, then 2 s, with ±25% jitter. A requested wait longer than 30 seconds is reported instead of waited for. Cancelling stops immediately. While retrying, the interface says "*Provider* is busy. Retrying in N s."
 
 Fallback is never automatic across providers, because that would need another provider's credentials. Within a provider, the interface suggests the Fast model after an Advanced failure; Deep Genius can continue with Fast only if you tick that option in its confirmation. It never moves from Fast to the more expensive Advanced model on its own.
 
@@ -84,12 +106,13 @@ Planned calls: 13 to 25. Agents never receive the whole repository: `public/repo
 
 ## Public system maps (operator opt-in)
 
-With `GENIUS_PUBLIC_AI=1`, a provider key, and `GENIUS_MODEL`, anonymous visitors of **public** repositories receive system maps generated with the operator's key. Saved maps are keyed by repository, commit, folder, file budget, provider, model, and analyzer version. `GENIUS_PUBLIC_DAILY_LIMIT` (default 25) counts only real model calls per UTC day. Deep Genius never uses the public allowance: it needs your own key, or the instance password on a protected deployment.
+With `GENIUS_PUBLIC_AI=1`, a provider key, and `GENIUS_MODEL`, anonymous visitors of **public** repositories receive system maps generated with the operator's key. Saved maps are keyed by repository, commit, folder, file budget, provider, model, and analyzer version. `GENIUS_PUBLIC_DAILY_LIMIT` (default 25) counts only real model calls per UTC day. Deep Genius never uses the public allowance: it needs your own key. There is no instance password.
 
 ## Request and credential behavior
 
 - Provider destinations are fixed official HTTPS endpoints. No arbitrary endpoint field is exposed.
 - Each provider uses its own authentication header. Keys never appear in URLs, logs, caches, exports, or browser storage.
+- A web request only ever uses the key sent with it. The operator's server key is used only for opted-in public system maps, never for Test connection, Ask, Deep Genius, or a visitor's analysis.
 - Changing providers clears the key. A selection for a different provider never borrows another provider's server key.
 - Redirects are rejected. Refusals, incomplete output, malformed responses, and invalid source references never become a completed report.
 - No agent is asked for hidden reasoning; thinking and reasoning content is discarded from every provider response.
@@ -102,4 +125,4 @@ With `GENIUS_PUBLIC_AI=1`, a provider key, and `GENIUS_MODEL`, anonymous visitor
 - Kimi: [pricing and models](https://platform.kimi.ai/docs/pricing/chat), [K3 quickstart](https://platform.kimi.ai/docs/guide/kimi-k3-quickstart), [JSON mode](https://platform.kimi.ai/docs/guide/use-json-mode-feature-of-kimi-api).
 - DeepSeek: [API](https://api-docs.deepseek.com/), [models and pricing](https://api-docs.deepseek.com/quick_start/pricing), [JSON output](https://api-docs.deepseek.com/guides/json_mode), [thinking mode](https://api-docs.deepseek.com/guides/thinking_mode), [list models](https://api-docs.deepseek.com/api/list-models).
 
-These integrations were verified with deterministic fixtures in each provider's documented response shape. **No paid model request was made during the 1.0.0 validation**, because no provider credentials were available; the first real call on each provider, and especially DeepSeek's JSON mode, is still untested.
+These integrations were verified with deterministic fixtures in each provider's documented response shape (`tests/provider-connection.test.mjs` runs the whole browser → server → provider path for all five providers). **No paid model request was made during the 1.0.0 or 1.1.0 validation**, because no provider credentials were available in the development sandbox; a real connection must be confirmed with Test connection on the production site.

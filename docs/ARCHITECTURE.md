@@ -67,11 +67,11 @@ flowchart TD
 
 `POST /api/models` — JSON `provider`, optional `apiKey`. Returns the two recommended models (`pair.fast`, `pair.advanced`), their availability for the key, and whether they came from the bundled catalog, discovery, or the cache.
 
-`POST /api/provider/test` — JSON `provider`, `apiKey`, `model`. Returns `status` (Connected, Authentication failed, Model unavailable, Rate limited, Quota exhausted, …) and the individual checks.
+`POST /api/provider/test` — JSON `provider`, `apiKey`, `model`. Runs two independent checks (the official model list, then one tiny structured request that must return `{"ok": true}`) and returns `status`, `message`, four `checks` (Authentication, Provider reachable, Model available, Tiny inference), and safe `diagnostics` (provider, model, whether a key arrived and its length, endpoint host, HTTP statuses, classification — never the key).
 
 `POST /api/genius/agent` — JSON `agent` (1A–3C or `core`), `stage`, `repository`, full `commit`, `scope`, `payload` (bounded evidence and prior team outputs), `provider`, `apiKey`, `model`. Returns the schema-conformed `output`, `usage`, `model`, and `attempts`. Provider failures return HTTP 502 with `error`, `kind`, `retryable`, and `suggestion`. The browser runs the orchestrator and verifies every citation against the analysis it holds.
 
-`GET /api/health` — version, runtime limits, provider identifiers, whether a server AI key is usable, whether an access password is required.
+`GET /api/health` — version, runtime limits, provider identifiers, and the public system-map allowance. There is no instance password: every API route is public, same-origin, and rate-limited, and a web request only ever uses the provider key sent with it.
 
 Both runtimes allow 20 API requests per client address per minute (90 for Deep Genius agent calls, which are short and bounded at three in flight); the Node server runs up to 3 analyses at once, the Worker 2 per isolate with 48 GitHub requests per run. Request bodies are capped at 20 KB (64 KB for `/api/ask`).
 

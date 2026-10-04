@@ -237,23 +237,21 @@
     </div>
     <div class="footer-copyright"><p>© 2026 Amine Saoud ibn al-Bashir | <a href="https://proamine.tech/" target="_blank" rel="noopener noreferrer">Pro_Amine LLC</a></p></div>
   </footer>
-  <dialog id="settings" aria-labelledby="settings-title"><form method="dialog">
+  <dialog id="settings" aria-labelledby="settings-title"><form method="dialog" autocomplete="off">
     <div class="dialog-heading"><h2 id="settings-title">API settings</h2><button class="icon-button" aria-label="Close settings"><span data-icon="close"></span></button></div>
-    <p>Keys stay in this tab's memory. They are sent to this site's server only for the request you start, forwarded to the provider you choose, and never saved in browser storage, links, or exports.</p>
-    <label>GitHub token <span>Optional. Needed for private repositories and a higher rate limit. A fine-grained token with Contents: read is enough.</span><input id="github-token" type="password" autocomplete="off" placeholder="github_pat_…"></label>
+    <p>Your provider key stays in this tab's memory. It is sent to this site's server only for the AI request you start, forwarded to the provider you choose, and never saved in browser storage, links, or exports.</p>
     <div class="provider-section">
       <label>AI provider<select id="provider"><option value="openai">OpenAI</option><option value="anthropic">Claude (Anthropic)</option><option value="gemini">Gemini (Google)</option><option value="kimi">Kimi (Moonshot)</option><option value="deepseek">DeepSeek</option></select></label>
-      <label><span id="provider-key-label" class="field-title">OpenAI API key</span><input id="api-key" type="password" autocomplete="off" placeholder="Paste your provider API key"></label>
+      <div class="key-field"><label for="api-key" id="provider-key-label" class="field-title">OpenAI API key</label><div class="key-input"><input id="api-key" name="provider-api-key" class="secret-input" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-1p-ignore data-lpignore="true" data-form-type="other" aria-describedby="key-note" placeholder="Paste your provider API key"><button id="key-reveal" class="key-reveal" type="button" aria-pressed="false" aria-label="Show key"><span data-icon="eye"></span></button></div><span id="key-note" class="key-note">Paste the key from the provider's console. Saved browser passwords are not offered here.</span></div>
       <fieldset class="model-picker" id="model-picker"><legend>Model</legend><div class="model-options" id="model-options"></div></fieldset>
       <details class="custom-model"><summary>Advanced: use a custom model ID</summary><label>Custom model ID<input id="model-custom" autocomplete="off" spellcheck="false" maxlength="120" placeholder="Leave empty to use the model chosen above"><span>Only text models with structured JSON output work. Custom models are not checked by Git Architecture Diagram.</span></label></details>
       <input id="model" type="hidden">
-      <div class="model-help"><span id="preset-note"></span><a id="provider-docs" target="_blank" rel="noreferrer">Provider model list</a></div>
-      <div class="connection"><button id="test-connection" class="quiet-button" type="button"><span data-icon="check"></span> Test connection</button><span class="subtle">Sends one model-list request and one tiny request (a few tokens).</span></div>
+      <div class="model-help"><span id="preset-note"></span><a id="provider-docs" target="_blank" rel="noopener noreferrer">Provider model list</a></div>
+      <div class="connection"><button id="test-connection" class="quiet-button" type="button"><span data-icon="check"></span> Test connection</button><span class="subtle">Checks the key with the provider's model list and one tiny request (a few tokens).</span></div>
       <div id="connection-status" class="connection-status" role="status" aria-live="polite" hidden></div>
     </div>
-    <label>Instance password <span>Only for protected deployments.</span><input id="instance-token" type="password" autocomplete="off"></label>
     <div class="settings-note" id="provider-disclosure"></div>
-    <div class="dialog-actions"><button id="clear-credentials" class="quiet-button" type="button">Remove all keys</button><button class="primary-button">Done</button></div>
+    <div class="dialog-actions"><button id="clear-credentials" class="quiet-button" type="button">Remove key</button><button class="primary-button">Done</button></div>
   </form></dialog>
   <dialog id="doc-dialog" class="doc-dialog" aria-labelledby="doc-title"><form method="dialog">
     <div class="dialog-heading"><div><h2 id="doc-title"></h2><span id="doc-basis" class="basis-tag"></span></div><button class="icon-button" aria-label="Close"><span data-icon="close"></span></button></div>
