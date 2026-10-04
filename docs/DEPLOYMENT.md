@@ -89,6 +89,8 @@ https://gitarchitecturediagram.com/ProAmineOfficial/NanoKit-ESP32/blob/main/READ
 
 Each repository link must open the workspace and start analysis automatically.
 
+Also check the footer: its images load from `/assets/brand/` (a missing image shows a labeled placeholder, never a broken icon), and the copyright line reads `© 2026 Amine Saoud ibn al-Bashir | Pro_Amine LLC`. See [BRAND.md](BRAND.md) for adding the official images.
+
 ## Docker
 
 ```bash

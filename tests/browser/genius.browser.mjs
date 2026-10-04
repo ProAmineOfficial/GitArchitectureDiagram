@@ -133,4 +133,25 @@ test('Export Project 2.0: Genius Development Pack, prompt, skills, and Mermaid d
   await page.context().close();
 });
 
+test('the official footer: content, links, assets, themes, and every width', async () => {
+  const page = await open('/');
+  const footer = page.locator('#site-footer'); await footer.scrollIntoViewIfNeeded();
+  assert.equal((await page.textContent('.footer-copyright p')).trim(), '© 2026 Amine Saoud ibn al-Bashir | Pro_Amine LLC'); assert.ok(!/all rights reserved/i.test(await footer.textContent())); assert.equal(await page.locator('text=Built by').count(), 0);
+  const links = await footer.locator('a').evaluateAll(anchors => anchors.map(anchor => ({ href: anchor.getAttribute('href'), target: anchor.target, rel: anchor.rel, label: anchor.getAttribute('aria-label') })));
+  for (const href of ['https://proamine.tech/', 'https://proamine.tech/about-us/', 'https://proamine.tech/contact-us/', 'https://proamine.tech/product/nanokit-integrated-esp32-board-development-2/', 'https://proamine.tech/what-is-the-umt-platform/', 'https://github.com/ProAmineOfficial', 'https://www.linkedin.com/company/pro-amine-llc/', '/']) assert.ok(links.some(link => link.href === href), href);
+  for (const link of links.filter(item => /^https?:/.test(item.href))) { assert.equal(link.target, '_blank', link.href); assert.match(link.rel, /noopener/); assert.match(link.rel, /noreferrer/); }
+  const social = links.filter(link => link.label?.startsWith('Pro_Amine on ')); assert.equal(social.length, 8); assert.ok(social.every(link => link.label));
+  await page.locator('.brand-nanokit img').scrollIntoViewIfNeeded(); await page.waitForFunction(() => document.querySelector('.brand-nanokit img').naturalWidth > 0);
+  await page.waitForTimeout(400); const broken = await page.locator('.brand-media img').evaluateAll(images => images.filter(image => image.complete && !image.naturalWidth && !image.closest('.brand-media').classList.contains('missing')).length); assert.equal(broken, 0, 'no broken image is ever shown');
+  assert.ok(await page.locator('.brand-media img[loading=lazy]').count() >= 4); assert.equal(await page.locator('.brand-icon').count() >= 1, true);
+  await page.keyboard.press('Tab'); await page.focus('.footer-nav a >> nth=0'); // Keyboard modality makes :focus-visible apply. assert.match(await page.evaluate(() => getComputedStyle(document.activeElement).outlineStyle), /solid|auto/);
+  for (const width of [390, 430, 768, 820, 1280, 1440, 1920]) { await page.setViewportSize({ width, height: 900 }); await page.waitForTimeout(120); assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), `no horizontal overflow at ${width}px`); }
+  await page.setViewportSize({ width: 1440, height: 900 }); const dark = await page.locator('.footer-copyright p').evaluate(node => getComputedStyle(node).color);
+  await page.click('#theme'); await page.waitForTimeout(150); const light = await page.locator('.footer-copyright p').evaluate(node => getComputedStyle(node).color); assert.notEqual(dark, light, 'copyright adapts to the light theme');
+  await page.context().close();
+  const reduced = await open('/', { reducedMotion: 'reduce' }); assert.equal(await reduced.locator('.footer-card').first().evaluate(card => getComputedStyle(card).opacity), '1'); await reduced.context().close();
+  const deep = await open('/acme/shop/tree/main/server', { viewport: { width: 820, height: 1000 } }); const order = await deep.evaluate(() => document.querySelector('#site-footer').getBoundingClientRect().top >= document.querySelector('#workspace').getBoundingClientRect().bottom); assert.ok(order, 'the footer follows the workspace and never overlaps it');
+  assert.ok(await deep.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)); await deep.context().close();
+});
+
 test('no uncaught page errors', () => { assert.deepEqual(errors, []); });

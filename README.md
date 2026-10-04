@@ -585,6 +585,17 @@ Third-party licenses remain with their respective authors.
 
 ---
 
+## Developed by
+
+Git Architecture Diagram is developed by Amine Saoud ibn al-Bashir / Pro_Amine LLC.
+
+- Official website: <https://gitarchitecturediagram.com>
+- Company: <https://proamine.tech>
+
+Brand assets and their provenance are listed in [docs/BRAND.md](docs/BRAND.md).
+
+---
+
 ## License
 
 MIT License.

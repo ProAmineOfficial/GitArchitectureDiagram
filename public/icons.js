@@ -17,6 +17,20 @@ const shapes = { // Use only fixed application-owned SVG geometry.
   warning: '<path d="M12 3.5 2.8 19.5h18.4Z"/><path d="M12 10v4.5M12 17h.01"/>', // Needs attention.
   loop: '<path d="M17 4.5 20 7.5l-3 3"/><path d="M20 7.5H9a5 5 0 0 0-5 5"/><path d="M7 19.5 4 16.5l3-3"/><path d="M4 16.5h11a5 5 0 0 0 5-5"/>', // Revision loop.
   shield: '<path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.2 7.5 9.5 4.3-1.3 7.5-4.9 7.5-9.5V6Z"/><path d="m9 12 2.2 2.2L15.5 10"/>', // Verified evidence.
+  home: '<path d="M3.5 11 12 4l8.5 7"/><path d="M6 9.5V20h12V9.5M10 20v-5.5h4V20"/>',
+  help: '<circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.2-2.4 3.8M12 17h.01"/>',
+  mail: '<rect x="3" y="5.5" width="18" height="13" rx="2"/><path d="m3.5 7 8.5 6 8.5-6"/>',
+  cart: '<path d="M3 4h2.5l2.2 10.5h10.6L20.5 7H7"/><circle cx="9.5" cy="19" r="1.5"/><circle cx="17" cy="19" r="1.5"/>',
+  chip: '<rect x="6.5" y="6.5" width="11" height="11" rx="1.6"/><rect x="9.5" y="9.5" width="5" height="5" rx=".8"/><path d="M9.5 3v3.5M14.5 3v3.5M9.5 17.5V21M14.5 17.5V21M3 9.5h3.5M3 14.5h3.5M17.5 9.5H21M17.5 14.5H21"/>',
+  projects: '<rect x="3" y="4" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="4" width="7.5" height="7.5" rx="1.5"/><rect x="3" y="14.5" width="7.5" height="5.5" rx="1.5"/><rect x="13.5" y="14.5" width="7.5" height="5.5" rx="1.5"/>',
+  'social-send': '<path d="m21 3.5-18 7.2 6.8 2.4L21 3.5Z"/><path d="m21 3.5-4 16.5-7.2-6.9"/>', // Generic paper plane (messaging).
+  'social-music': '<path d="M9 18.5V6l10-2v12"/><circle cx="6.5" cy="18.5" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/>', // Generic music note (short videos).
+  'social-video': '<rect x="2.5" y="5.5" width="19" height="13" rx="3.5"/><path d="m10 9.2 5 2.8-5 2.8Z"/>', // Generic video player.
+  'social-people': '<circle cx="9" cy="8.5" r="3"/><path d="M3.5 19.5c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5"/><circle cx="17" cy="9.5" r="2.3"/><path d="M15.8 14.6c2.3.2 3.9 1.8 4.4 4.4"/>', // Generic community.
+  'social-camera': '<rect x="3" y="6.5" width="18" height="13" rx="3"/><circle cx="12" cy="13" r="3.4"/><path d="M8.5 6.5 10 4h4l1.5 2.5"/>', // Generic camera (photos).
+  'social-code': '<path d="m8 8-4.5 4L8 16M16 8l4.5 4L16 16"/><circle cx="12" cy="12" r="1.3"/>', // Generic code (source hosting).
+  'social-x': '<path d="m5 4.5 14 15M19 4.5l-14 15"/>', // A plain letter X.
+  'social-briefcase': '<rect x="3" y="7.5" width="18" height="12" rx="2"/><path d="M8.5 7.5V5.5a1.5 1.5 0 0 1 1.5-1.5h4a1.5 1.5 0 0 1 1.5 1.5v2M3 12.5h18"/>', // Generic professional network.
   'zoom': '<circle cx="10.5" cy="10.5" r="6.5"/><path d="m20 20-4.6-4.6M10.5 7.5v6M7.5 10.5h6"/>',
   target: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5"/><path d="M12 1v3M12 20v3M1 12h3M20 12h3"/>', // Highlights.
   play: '<path d="M7 5v14l12-7Z"/>', // Play the tour.

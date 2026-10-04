@@ -17,6 +17,7 @@ import { icon, installIcons } from './icons.js';
 import { parseRoute, workspacePath, inputToPath, lineAnchor, DEFAULT_FILES } from './route.js';
 import { setupAsk } from './ask.js';
 import { renderBrowse, renderStarters } from './browse.js';
+import { setupBrand } from './brand.js';
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
@@ -537,7 +538,7 @@ const deep = setupDeepGenius({ state, credentials, headers: requestHeaders, aiCo
 
 // ——— Startup ———
 async function start() {
-  installIcons(); $$('.site-host').forEach(element => { element.textContent = location.host; });
+  installIcons(); setupBrand(); $$('.site-host').forEach(element => { element.textContent = location.host; });
   updateProvider(); renderStarters($('#starter-examples'));
   try { const response = await fetch('/api/health'); const type = response.headers.get('Content-Type') || ''; if (response.ok && type.includes('json')) { const health = await response.json(); state.maxFiles = Number(health.limits?.maxFiles) || 120; state.limits = health.limits || {}; state.publicAI = health.publicAI?.enabled ? health.publicAI : null; state.aiAvailable = Boolean(health.aiAvailable); if (state.publicAI?.remainingToday) setMode('genius'); updateCostNote(); $('#max-files').max = String(state.maxFiles); if (Number($('#max-files').value) > state.maxFiles) $('#max-files').value = String(state.maxFiles); } } catch { /* The analysis request reports connection problems itself. */ }
   await route();
