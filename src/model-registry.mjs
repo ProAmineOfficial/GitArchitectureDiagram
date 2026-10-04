@@ -63,7 +63,7 @@ export async function discoverModels(provider, apiKey, { fetchImpl = fetch, sign
   }
 }
 
-const STATUS = { auth: 'Authentication failed', permission: 'Access denied', workspace_required: 'Workspace API key required', model_unavailable: 'Model unavailable', rate_limited: 'Rate limited', quota_exhausted: 'Quota exhausted', provider_unavailable: 'Provider temporarily unavailable', network: 'Provider unreachable', timeout: 'Provider did not respond in time', invalid_request: 'Request rejected', malformed: 'Unexpected provider response', truncated: 'Unexpected provider response', refused: 'Unexpected provider response', redirect: 'Unexpected provider response', cancelled: 'Cancelled' };
+const STATUS = { auth: 'Authentication failed', permission: 'Access denied', workspace_required: 'Workspace API key required', model_unavailable: 'Model unavailable', rate_limited: 'Rate limited', quota_exhausted: 'Quota exhausted', provider_unavailable: 'Provider temporarily unavailable', network: 'Provider unreachable', blocked: 'Provider unreachable', timeout: 'Provider did not respond in time', invalid_request: 'Request rejected', malformed: 'Unexpected provider response', truncated: 'Unexpected provider response', refused: 'Unexpected provider response', redirect: 'Unexpected provider response', cancelled: 'Cancelled' };
 const PROBE_SCHEMA = { type: 'object', additionalProperties: false, properties: { ok: { type: 'boolean' } }, required: ['ok'] };
 const MESSAGES_TIMEOUT = 'Provider did not respond in time.';
 const PROBE_TOKENS = 1024; // Room for a few tokens of JSON plus brief reasoning on models that always reason; only used tokens are billed.
@@ -109,15 +109,15 @@ export async function testConnection(provider, { apiKey = '', model = '', fetchI
   } catch (error) { if (error instanceof ProviderError && error.kind === 'cancelled') throw error; probe = outcome(error); }
   diagnostics.inference = { httpStatus: probe.httpStatus, classification: probe.kind };
 
-  const answered = result => result.ok || Number.isInteger(result.httpStatus); // Any HTTP answer proves the server reached the provider.
-  set('reachable', answered(list) || answered(probe) ? 'ok' : 'fail', answered(list) || answered(probe) ? `${hosts.inference} answered` : (probe.kind === 'timeout' ? MESSAGES_TIMEOUT : `The Git Architecture Diagram server could not reach ${name}.`));
+  const answered = result => result.ok || (Number.isInteger(result.httpStatus) && result.kind !== 'blocked'); // Any provider API answer proves the server reached it; an intermediary's refusal does not.
+  set('reachable', answered(list) || answered(probe) ? 'ok' : 'fail', answered(list) || answered(probe) ? `${hosts.inference} answered` : probe.kind === 'timeout' ? MESSAGES_TIMEOUT : probe.kind === 'blocked' ? `Refused before reaching ${name} (HTTP ${probe.httpStatus})` : `The Git Architecture Diagram server could not reach ${name}.`);
   if (probe.ok) {
     set('auth', 'ok', 'Key accepted'); set('inference', 'ok', structuredMode(provider, model) === 'json_schema' ? 'Returned {"ok": true} with a strict JSON schema' : 'Returned {"ok": true} in JSON mode');
     set('model', 'ok', listed?.includes(model) ? 'Listed for this key and answering' : 'Answering');
     const discovery = list.ok ? '' : CONNECTED_WITHOUT_DISCOVERY;
     return finish(true, 'Connected', { message: discovery || `${name} accepted the key and ${model} answered.`, discovery: { available: list.ok, ...(list.ok ? { listedModels: listed.length } : { message: DISCOVERY_UNAVAILABLE }) }, keyNote });
   }
-  const unauthorized = [list, probe].some(result => result.httpStatus === 401); const forbidden = probe.httpStatus === 403;
+  const unauthorized = [list, probe].some(result => result.kind === 'auth'); const forbidden = probe.kind === 'permission';
   if (probe.kind === 'auth' || (unauthorized && !list.ok && !ACCEPTED_KEY.has(probe.kind))) set('auth', 'fail', `${name} answered HTTP 401`);
   else if (forbidden) set('auth', 'warn', 'Key accepted, but it lacks access (HTTP 403)');
   else if (list.ok || ACCEPTED_KEY.has(probe.kind)) set('auth', 'ok', 'Key accepted');

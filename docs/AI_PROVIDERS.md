@@ -54,6 +54,8 @@ Test connection runs two independent checks and shows four rows:
 
 Check A reads the provider's official model list (authentication and discovery). Many keys cannot list models — an OpenAI project key without the Models permission answers 403 — so a failed list is recorded but never decides the result. Check B, the tiny structured request, decides. A failed model list with a working inference is a success: "Connected. Model discovery was unavailable, so the verified bundled model pair is being used." Neither check is retried.
 
+A 401 or 403 that is not the provider's JSON error (for example a plain-text refusal from an egress firewall or proxy) is reported as **Provider unreachable**, never as a key problem: the key was not tested.
+
 **Diagnostics** (folded under the result, and written to the server log as one `[provider-test]` line) show only safe facts: provider, model, whether a key reached the server and its length, whether it has the provider's documented prefix, endpoint host, the HTTP status and classification of each check, and the duration. The key and the authorization header are never shown or logged.
 
 If the key does not have the provider's documented prefix (OpenAI and DeepSeek `sk-`, Claude `sk-ant-`), the result says so with the length the server received. The API key field is a masked text field rather than a password field, because browsers ignore `autocomplete="off"` on password fields and can fill a saved site password into it. Gemini (auth keys created since May 28, 2026) and Kimi keys have no documented prefix, so they are never questioned.
@@ -81,6 +83,7 @@ If the key does not have the provider's documented prefix (OpenAI and DeepSeek `
 | 429 with `insufficient_quota`, `exceeded_current_quota_error`, or a Gemini per-day quota; 402 (DeepSeek) | Quota exhausted | Provider quota/credits are exhausted. | No |
 | 500, 502, 503, 504, 529 | Provider temporarily unavailable | *Provider* is temporarily unavailable. | Yes |
 | No connection | Network | The Git Architecture Diagram server could not reach *Provider*. | No |
+| 401 or 403 whose body is not a provider JSON error (a firewall, proxy, or WAF page) | Blocked | The Git Architecture Diagram server could not reach *Provider*: the connection was refused before the key was checked. … | No |
 | Redirect | Rejected; credentials are never forwarded | No |
 | Malformed JSON, empty or truncated output, refusal | Unexpected response | No |
 

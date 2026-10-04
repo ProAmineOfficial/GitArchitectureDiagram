@@ -32,6 +32,7 @@ const MESSAGES = { // The wording people see; it never includes a key, a raw pro
   quota_exhausted: () => 'Provider quota/credits are exhausted.',
   provider_unavailable: p => `${nameOf(p)} is temporarily unavailable.`,
   network: p => `The Git Architecture Diagram server could not reach ${nameOf(p)}.`,
+  blocked: (p, s) => `The Git Architecture Diagram server could not reach ${nameOf(p)}: the connection was refused before the key was checked (HTTP ${s}, not a ${nameOf(p)} API response). A firewall or proxy may be blocking it.`,
   malformed: p => `${nameOf(p)} returned an unreadable response.`,
   redirect: (p, s) => `${nameOf(p)} answered with an unexpected redirect (HTTP ${s}); credentials are never forwarded to another address.`,
   cancelled: () => 'The request was cancelled.',
@@ -47,6 +48,7 @@ const SUGGESTIONS = { // What the person can do next. The application never swit
   workspace_required: 'Workspace keys are created under Settings → API keys in the Claude Console.',
   timeout: 'Try again, choose the Fast model, or narrow the folder scope.',
   network: 'Try again shortly. If it persists, the hosting server may be blocking outbound HTTPS to this provider.',
+  blocked: 'Allow outbound HTTPS from the hosting server to the provider\'s API host. The key itself was not tested.',
 };
 
 /** Retry delay requested by the provider, in milliseconds: Retry-After (seconds or HTTP date) or Gemini RetryInfo. */
@@ -81,6 +83,7 @@ export function classifyStatus(provider, status, body, headers, model = '') {
   else if (status === 402 || (status === 429 && isQuotaExhausted(status, body)) || (status === 400 && isQuotaExhausted(status, body))) kind = 'quota_exhausted';
   else if (status === 400 && /anthropic-workspace-id/i.test(String(body?.error?.message || ''))) kind = 'workspace_required'; // Claude identity-linked keys need a workspace header; the message is inspected, never shown.
   else if (status === 400 || status === 413 || status === 422) kind = 'invalid_request';
+  else if ((status === 401 || status === 403) && (body === null || typeof body !== 'object')) kind = 'blocked'; // Provider APIs answer 401/403 with a JSON error; a plain-text or HTML refusal comes from something in between.
   else if (status === 401) kind = 'auth';
   else if (status === 403) kind = 'permission';
   else if (status === 404) kind = 'model_unavailable';

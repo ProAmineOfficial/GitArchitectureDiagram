@@ -111,6 +111,13 @@ test('a key that does not look like the provider\'s is diagnosed without reveali
   assert.equal(missing.status, 'API key missing'); assert.equal(missing.diagnostics.apiKeyPresent, false); assert.equal(none.calls.length, 0);
 });
 
+test('a plain-text 401/403 from a firewall or proxy is reported as unreachable, never as a key problem', async () => {
+  const fetchImpl = async () => new Response('Forbidden by egress policy', { status: 403, headers: { 'Content-Type': 'text/plain' } });
+  const result = await testConnection('deepseek', { apiKey: PROVIDERS.deepseek.key, model: 'deepseek-flash', fetchImpl });
+  assert.equal(result.status, 'Provider unreachable'); assert.equal(result.kind, 'blocked'); assert.match(result.message, /refused before the key was checked \(HTTP 403, not a DeepSeek API response\)/);
+  assert.deepEqual(statuses(result), { auth: 'skip', reachable: 'fail', model: 'skip', inference: 'fail' });
+});
+
 test('a Claude key that is not scoped to a workspace is explained, not reported as a structured-output problem', async () => {
   const fetchImpl = async (url, options) => (options.body ? json(400, { type: 'error', error: { type: 'invalid_request_error', message: 'anthropic-workspace-id is required when authenticating with an identity-linked API key; send the id of the workspace this request acts in.' } }) : Response.json(listing('anthropic')));
   const result = await testConnection('anthropic', { apiKey: PROVIDERS.anthropic.key, model: 'claude-haiku-4-5-20251001', fetchImpl });

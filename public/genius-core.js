@@ -15,7 +15,7 @@ import { createEvidenceStore, verifyItem, verifyCitation, evidenceCoverage, path
 
 export const PIPELINE_VERSION = 1;
 export const AGENT_STATES = ['queued', 'reading', 'analyzing', 'completed', 'needs-revision', 'approved', 'failed', 'skipped'];
-const FATAL = new Set(['auth', 'quota_exhausted', 'cancelled', 'permission', 'model_unavailable', 'workspace_required']);
+const FATAL = new Set(['auth', 'quota_exhausted', 'cancelled', 'permission', 'model_unavailable', 'workspace_required', 'blocked']);
 
 /** Run tasks with at most `max` in flight; `peak` records the highest concurrency observed. */
 export function createLimiter(max) {
