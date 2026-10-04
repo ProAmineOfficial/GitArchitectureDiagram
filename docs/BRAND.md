@@ -5,21 +5,51 @@ Git Architecture Diagram is developed by Amine Saoud ibn al-Bashir / Pro_Amine L
 - Official website: <https://gitarchitecturediagram.com>
 - Company: <https://proamine.tech>
 
-The footer connects the workspace to the wider Pro_Amine ecosystem: a Pro_Amine LLC card, an ecosystem card (Pro_AmineUMT IDE with AI, site navigation, social profiles), and a NanoKit / UMT card, followed by the copyright line `© 2026 Amine Saoud ibn al-Bashir | Pro_Amine LLC`. There is no "All rights reserved" line, because the project is MIT licensed.
+The footer connects the workspace to the wider Pro_Amine ecosystem: a Pro_Amine LLC card, an ecosystem card (Pro_AmineUMT IDE with AI, site navigation, social profiles), and a NanoKit / UMT card, followed by the centered copyright line `© 2026 Pro_Amine LLC · Created & Developed by Amine Saoud ibn al-Bashir`. There is no "All rights reserved" line, because the project is MIT licensed.
+
+## Footer design
+
+The footer uses a premium dark-glass palette, with a light counterpart for the light theme. It contains no neon green or yellow.
+
+| Token | Dark | Light |
+| --- | --- | --- |
+| Backgrounds | `#090D14`, `#0B1020`, `#101522` | `#EEF2F8`, `#E7ECF5`, `#F6F8FC` |
+| Glass | `rgba(20,28,40,.55)` → `rgba(15,23,42,.60)` | `rgba(255,255,255,.66)` → `.56` |
+| Text / secondary / muted | `#F3F4F6` / `#CBD5E1` / `#94A3B8` | `#0F172A` / `#334155` / `#475569` |
+| Accent | `#8BA8FF` (with `#7DD3FC`, `#A78BFA` in glows) | `#4F6BDB` |
+| Borders | `rgba(255,255,255,.08)` | `rgba(15,23,42,.08)` |
+
+Cards use a large radius (28 px), a 1 px translucent border, an 18 px backdrop blur, a soft shadow, and an inner highlight. On hover they lift by 4 px and gain a soft accent glow. Titles are off-white, and paragraphs are muted gray. Buttons are dark glass, and the NanoKit purchase button uses the muted cool accent. Images sit in soft frames. The black Pro_Amine logo sits on a light frosted plate, so it stays legible on dark glass. The cards fade in upward, once, at 0, 150, and 300 ms, followed by the copyright at 450 ms (1 s, `cubic-bezier(.22,1,.36,1)`). Reduced motion turns off the reveal and all hover movement. The styles live in one footer layer in `public/styles.css` (the `--ft-*` tokens), with no override layers.
+
+## Product icon
+
+The official Git Architecture Diagram icon (a black-and-white symbol on a transparent background) is the product icon everywhere. `git-architecture-diagram-icon-pro.png` is the official master, unmodified. The derivatives in `public/assets/brand/icons/` were produced from it with Pillow (Lanczos). They are trimmed to the visible symbol and centered with 6% transparent padding, so no line touches the edge, with proportions and transparency kept:
+
+| File | Use |
+| --- | --- |
+| `/favicon.ico` (16, 32, 48 px) and `gad-icon-16.png`, `gad-icon-32.png`, `gad-icon-48.png` | Browser favicons |
+| `gad-icon-64.png`, `gad-icon-96.png` (header `srcset`) | Header mark: 36 px container (34 px icon) on desktop, 30 px on mobile, immediately before "Git Architecture Diagram" |
+| `gad-icon-48.png` / `gad-icon-96.png` | Footer identity line and the ecosystem link to Git Architecture Diagram |
+| `gad-icon-180.png` | Apple touch icon |
+| `gad-icon-192.png`, `gad-icon-512.png` | Larger uses (install prompts, previews) |
+
+If an icon ever fails to load, the header shows the vector mark instead of a broken image. The earlier white-line variant `git-architecture-diagram-icon.png` is kept for reference and is no longer referenced by the page.
 
 ## Local assets and provenance
 
-Images are served from `public/assets/brand/` and are never hotlinked. Until a file exists, its card shows a labeled fallback instead of a broken image, and the favicon and header keep the vector mark until the official icon loads.
+Images are served from `public/assets/brand/` and are never hotlinked. If a file is missing, its card shows a labeled fallback instead of a broken image.
 
 | File | Source | Use |
 | --- | --- | --- |
 | `nanokit-integrated-esp32.webp` | `Icon NanoKit Integrated ESP32.png` in the official repository [ProAmineOfficial/Driver-NanoKit-ESP32-of-T.U.M-Pro_Amine-IC](https://github.com/ProAmineOfficial/Driver-NanoKit-ESP32-of-T.U.M-Pro_Amine-IC), trimmed to the board and resized to 1200 px wide (WebP, quality 90). The same render is published at <https://proamine.tech/wp-content/uploads/2025/03/Icon-NanoKit-Integrated-ESP32.webp>. | Footer: NanoKit Integrated ESP32 |
-| `git-architecture-diagram-icon.png` | <https://proamine.tech/wp-content/uploads/2026/10/Icon-Git-Architecture-Diagram.png> | Favicon, touch icon, header mark |
+| `git-architecture-diagram-icon-pro.png` | The official icon supplied by the owner ("Pro git-architecture-diagram-icon.png", 1254 × 1254, transparent) | Master for every favicon and product icon |
+| `git-architecture-diagram-icon.png` | <https://proamine.tech/wp-content/uploads/2026/10/Icon-Git-Architecture-Diagram.png> (earlier white-line variant) | Not referenced; kept for reference |
+| `nanokit-integrated-esp32-official.webp` | Official render committed by the owner | Not referenced yet; available as a higher-resolution replacement for the NanoKit image |
 | `pro-amineumt-ide-ai.png` | <https://proamine.tech/wp-content/uploads/2026/09/with-deep-sek.png> | Footer: Pro_AmineUMT IDE with AI |
 | `umt-16x16-bga-hybrid-mcu-soc.png` | <https://proamine.tech/wp-content/uploads/2026/09/UMT-16x16-BGA-IC.png> | Footer: UMT 16×16 BGA package |
 | `pro-amine-logo.png` | <https://proamine.tech/wp-content/uploads/2023/03/logo-use-transparent-1024x468.png> | Footer: Pro_Amine LLC logo |
 
-The four proamine.tech files could not be downloaded from the development sandbox, whose network policy blocks that host. To add them, run this on a machine that can reach proamine.tech, check the images, and commit them:
+The owner committed the official images on October 4, 2026 (`90cb56d`). If a proamine.tech image is ever missing, restore it on a machine that can reach proamine.tech, check it, and commit it:
 
 ```bash
 node scripts/fetch-brand-assets.mjs

@@ -12,7 +12,7 @@ test('brand images are served locally; a missing brand file is a 404, while repo
   const missing = await fetch(`${base}/assets/brand/not-there.png`); assert.equal(missing.status, 404); await missing.text();
   const deep = await fetch(`${base}/ProAmineOfficial/Driver-NanoKit-ESP32-of-T.U.M-Pro_Amine-IC/blob/main/Icon%20NanoKit%20Integrated%20ESP32.png`); assert.equal(deep.status, 200); assert.match(await deep.text(), /Git Architecture Diagram/);
   const page = await (await fetch(base + '/')).text();
-  assert.match(page, /© 2026 Amine Saoud ibn al-Bashir \| <a [^>]*>Pro_Amine LLC<\/a>/); assert.ok(!page.includes('Built by')); assert.ok(!/all rights reserved/i.test(page));
+  assert.match(page, /<p>© 2026 <a [^>]*>Pro_Amine LLC<\/a> · Created &amp; Developed by Amine Saoud ibn al-Bashir<\/p>/); assert.ok(!page.includes('Amine Saoud ibn al-Bashir |')); assert.ok(!page.includes('Built by')); assert.ok(!/all rights reserved/i.test(page));
   assert.ok(!/<img[^>]+src="https?:/.test(page), 'no hotlinked images'); assert.ok(!/<script[^>]+src="https?:/.test(page), 'no remote scripts');
   const footer = page.slice(page.indexOf('<footer'), page.indexOf('</footer>')); assert.ok(footer.length > 1000);
   for (const match of footer.matchAll(/<a [^>]*href="https?:[^"]+"[^>]*>/g)) { assert.match(match[0], /target="_blank"/); assert.match(match[0], /rel="noopener noreferrer"/); }
