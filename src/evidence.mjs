@@ -1,3 +1,6 @@
+// Copyright © 2026 Pro_Amine LLC
+// Created & Developed by Amine Saoud ibn al-Bashir
+// Git Architecture Diagram · SPDX-License-Identifier: MIT · Provenance ID: GAD-EVIDENCE-001
 // Project: Git Architecture Diagram | Component: Portable evidence search | Author: Amine Saoud ibn al-Bashir.
 export function searchEvidence(result, question) { // Search the already-read source in either the browser or Node without another provider request.
   const words = String(question).toLowerCase().match(/[\p{L}\p{N}_]{3,}/gu)?.slice(0, 12) || []; const matches = []; // Extract a bounded Unicode query while preserving original source text.

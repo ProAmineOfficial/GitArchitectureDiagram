@@ -1,3 +1,6 @@
+// Copyright © 2026 Pro_Amine LLC
+// Created & Developed by Amine Saoud ibn al-Bashir
+// Git Architecture Diagram · SPDX-License-Identifier: MIT · Provenance ID: GAD-PROVENANCE-CORE-001
 // Project: Git Architecture Diagram | Script: download the official brand images into public/assets/brand/ | Author: Amine Saoud ibn al-Bashir.
 // Run once on a machine that can reach proamine.tech, review the files, and commit them:
 //   node scripts/fetch-brand-assets.mjs            # download only missing files

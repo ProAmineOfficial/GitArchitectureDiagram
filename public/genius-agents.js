@@ -1,3 +1,6 @@
+// Copyright © 2026 Pro_Amine LLC
+// Created & Developed by Amine Saoud ibn al-Bashir
+// Git Architecture Diagram · SPDX-License-Identifier: MIT · Provenance ID: GAD-GENIUS-PIPELINE-001
 // Project: Git Architecture Diagram | Component: Genius agent definitions (shared by browser and server) | Author: Amine Saoud ibn al-Bashir.
 // Three teams of exactly three specialized agents, plus the Genius Core synthesis. The server builds every provider
 // request from these definitions: a browser can choose which agent and stage to run, never the instructions or the

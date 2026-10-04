@@ -1,3 +1,6 @@
+// Copyright © 2026 Pro_Amine LLC
+// Created & Developed by Amine Saoud ibn al-Bashir
+// Git Architecture Diagram · SPDX-License-Identifier: MIT · Provenance ID: GAD-EVIDENCE-001
 // Project: Git Architecture Diagram | Component: Repository intelligence (shared by browser and server) | Author: Amine Saoud ibn al-Bashir.
 // Large repositories are never sent whole to a model. This module turns an analysis result into a hierarchy of
 // deterministic, evidence-grounded summaries and then retrieves only what each Genius agent needs:

@@ -1,3 +1,6 @@
+// Copyright © 2026 Pro_Amine LLC
+// Created & Developed by Amine Saoud ibn al-Bashir
+// Git Architecture Diagram · SPDX-License-Identifier: MIT · Provenance ID: GAD-EXPORT-PACK-001
 // Project: Git Architecture Diagram | Component: Highlights, hierarchy, cross-view selection, exports, Build With Genius | Author: Amine Saoud ibn al-Bashir.
 // Connected to the workspace through a small API object so the stable app.js modules stay as they are.
 import { MODES, computeHighlight, readModel, applyHighlight, clearHighlight } from './highlights.js';
@@ -6,11 +9,13 @@ import { workspacePath } from './route.js';
 import { zipSync, strToU8 } from '/vendor/fflate/browser.js';
 import { renderPreview } from './diagram.js';
 import { exportDiagram } from './exports.js';
+import { redactSecrets, redactFiles } from './secret-scan.js'; // Exports never carry credential-shaped values.
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
 function el(tag, className, text) { const element = document.createElement(tag); if (className) element.className = className; if (text !== undefined) element.textContent = text; return element; }
-function download(name, data, type) { const url = URL.createObjectURL(new Blob([data], { type })); const anchor = el('a'); anchor.href = url; anchor.download = name; document.body.append(anchor); anchor.click(); anchor.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
+function download(name, data, type) { const url = URL.createObjectURL(new Blob([typeof data === 'string' ? redactSecrets(data).text : data], { type })); const anchor = el('a'); anchor.href = url; anchor.download = name; document.body.append(anchor); anchor.click(); anchor.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
+const redactedNote = count => `${count} credential-shaped value${count === 1 ? ' was' : 's were'} redacted.`;
 const BASIS = { source: 'Source-derived', genius: 'Genius interpretation', keyword: 'Keyword match', selection: 'Your selection' };
 let api; let current = null; // The active highlight: {mode, query, paths, label}.
 
@@ -115,7 +120,7 @@ function focusHierarchy(paths) {
 
 // ——— Export menu and document dialog ———
 function permalinkPath() { const { result } = api.state; return workspacePath(result.repository, { pinned: true, files: result.coverage.maxFiles }); }
-async function copyText(text, message = 'Copied.') { try { await navigator.clipboard.writeText(text); api.toast(message); } catch { api.toast('Copying is blocked here; use Download.'); } }
+async function copyText(text, message = 'Copied.') { try { const safe = redactSecrets(text); await navigator.clipboard.writeText(safe.text); api.toast(safe.count ? `${message} ${redactedNote(safe.count)}` : message); } catch { api.toast('Copying is blocked here; use Download.'); } }
 function wireExportMenu() {
   $$('#export-menu [data-group-tab]').forEach(tab => tab.addEventListener('click', event => { event.stopPropagation(); $$('#export-menu [data-group-tab]').forEach(item => item.setAttribute('aria-selected', String(item === tab))); $$('#export-menu [data-group]').forEach(group => { group.hidden = group.dataset.group !== tab.dataset.groupTab; }); }));
   $$('#export-menu [data-action]').forEach(item => item.addEventListener('click', () => { api.closeMenus(); if (api.state.result) runAction(item.dataset.action); }));
@@ -139,11 +144,11 @@ export async function runAction(action, options = {}) {
     'mermaid-hierarchy': () => ({ title: 'Software hierarchy Mermaid', basis: 'Source-derived', text: knowledge.hierarchyMermaid(result.hierarchy.source.root), filename: `${base}-software-hierarchy.mmd` }),
     'tree': () => ({ title: 'Repository tree', basis: 'Listing at this commit', text: result.tree, filename: `${base}-tree.txt` }),
   };
-  const zip = (name, files, folder) => { download(name, zipSync(Object.fromEntries(Object.entries(files).map(([file, text]) => [`${folder}/${file}`, strToU8(text)]))), 'application/zip'); };
-  if (action === 'genius-pack') { zip(`${base}-gitarchitecture.zip`, knowledge.geniusDevelopmentPack(result, { origin, path: permalinkPath() }), '.gitarchitecture'); api.toast(result.deep ? 'Genius Development Pack downloaded, with the Deep Genius results.' : 'Genius Development Pack downloaded (structural analysis; run Deep Genius to add findings and validated fixes).'); return; }
-  if (action === 'developer-pack') { zip(`${base}-developer-pack.zip`, knowledge.developerPack(result, { origin, path: permalinkPath() }), `${repo.repo}-developer-pack`); api.toast('Developer pack downloaded.'); return; }
-  if (action === 'knowledge-pack') { zip(`${base}-knowledge-pack.zip`, knowledge.knowledgePack(result), `${repo.repo}-knowledge-pack`); api.toast('Project knowledge pack downloaded.'); return; }
-  if (action === 'pack') { const files = knowledge.reconstructionPack(result, { origin, path: permalinkPath() }); download(`${base}-reconstruction-pack.zip`, zipSync(Object.fromEntries(Object.entries(files).map(([name, text]) => [`${repo.repo}-reconstruction-pack/${name}`, strToU8(text)]))), 'application/zip'); api.toast('Project reconstruction pack downloaded.'); return; }
+  const zip = (name, files, folder) => { const safe = redactFiles(files); download(name, zipSync(Object.fromEntries(Object.entries(safe.files).map(([file, text]) => [`${folder}/${file}`, strToU8(text)]))), 'application/zip'); return safe.count ? ` ${redactedNote(safe.count)}` : ''; };
+  if (action === 'genius-pack') { const note = zip(`${base}-gitarchitecture.zip`, knowledge.geniusDevelopmentPack(result, { origin, path: permalinkPath() }), '.gitarchitecture'); api.toast((result.deep ? 'Genius Development Pack downloaded, with the Deep Genius results.' : 'Genius Development Pack downloaded (structural analysis; run Deep Genius to add findings and validated fixes).') + note); return; }
+  if (action === 'developer-pack') { const note = zip(`${base}-developer-pack.zip`, knowledge.developerPack(result, { origin, path: permalinkPath() }), `${repo.repo}-developer-pack`); api.toast('Developer pack downloaded.' + note); return; }
+  if (action === 'knowledge-pack') { const note = zip(`${base}-knowledge-pack.zip`, knowledge.knowledgePack(result), `${repo.repo}-knowledge-pack`); api.toast('Project knowledge pack downloaded.' + note); return; }
+  if (action === 'pack') { const note = zip(`${base}-reconstruction-pack.zip`, knowledge.reconstructionPack(result, { origin, path: permalinkPath() }), `${repo.repo}-reconstruction-pack`); api.toast('Project reconstruction pack downloaded.' + note); return; }
   if (action === 'readme-picture') { openReadmePicture(); return; }
   if (action === 'extract') { await api.selectView('extract'); return; } // The standalone Project extract view.
   if (docs[action]) openDoc(docs[action]());

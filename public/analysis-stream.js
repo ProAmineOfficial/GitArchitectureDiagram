@@ -1,3 +1,6 @@
+// Copyright © 2026 Pro_Amine LLC
+// Created & Developed by Amine Saoud ibn al-Bashir
+// Git Architecture Diagram · SPDX-License-Identifier: MIT · Provenance ID: GAD-WORKSPACE-UI-001
 // Project: Git Architecture Diagram | Component: Analysis response reader | Author: Amine Saoud ibn al-Bashir.
 const INVALID_DATA = 'The analysis service returned malformed data. Please retry; if it persists, the hosting service needs attention.'; // Explain a broken response without exposing an HTML page or parser exception.
 function hostingError(response) { return new Error(`The hosting service returned a page instead of analysis data (HTTP ${response.status}). Reload and try again; if it persists, the hosting service needs attention.`); } // Distinguish a gateway or sign-in page from repository or Mermaid syntax errors.

@@ -16,7 +16,9 @@
     "check": "node scripts/check.mjs",
     "analyze": "node --env-file-if-exists=.env cli.mjs",
     "build": "node scripts/build.mjs",
-    "test:browser": "node --test tests/browser/*.browser.mjs"
+    "test:browser": "node --test tests/browser/*.browser.mjs",
+    "scan:secrets": "node scripts/secret-scan.mjs",
+    "provenance": "node scripts/provenance.mjs"
   },
   "dependencies": {
     "dompurify": "^3.4.16",
@@ -28,5 +30,11 @@
     "esbuild": "0.28.2",
     "miniflare": "4.20260730.0",
     "playwright": "^1.56.0"
+  },
+  "overrides": {
+    "miniflare": {
+      "undici": "7.30.0",
+      "sharp": "0.35.4"
+    }
   }
 }

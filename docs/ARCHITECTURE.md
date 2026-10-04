@@ -34,6 +34,8 @@ flowchart TD
 | `src/ask.mjs` | Grounded single-question answers from client-supplied excerpts, with citation validation |
 | `src/providers.mjs` | Fixed-endpoint adapters for OpenAI Responses, Claude Messages, Gemini generateContent, Kimi, and DeepSeek Chat Completions; model-list requests; credential resolution |
 | `src/provider-errors.mjs` | One classification of provider failures (auth, quota, rate limit, model, timeout, malformed, truncated, refused), bounded retries with `Retry-After` and jittered backoff |
+| `src/provenance.mjs` | Public provenance record and the non-secret `/api/version` build fingerprint (source digest over the shipped files) |
+| `public/secret-scan.js` | High-confidence credential detection, shared by export redaction (browser) and `npm run scan:secrets` |
 | `src/model-registry.mjs` | Exactly two verified models per provider, refreshed from the official model list per key (12-hour cache), and Test connection |
 | `src/genius-agent.mjs` | One allowlisted Deep Genius agent call: server-side instructions and schema, schema conformance of the output |
 | `public/providers.js` | The shared provider catalog: Fast and Advanced models, structured-output mode, key-format check |
@@ -70,6 +72,8 @@ flowchart TD
 `POST /api/provider/test` — JSON `provider`, `apiKey`, `model`. Runs two independent checks (the official model list, then one tiny structured request that must return `{"ok": true}`) and returns `status`, `message`, four `checks` (Authentication, Provider reachable, Model available, Tiny inference), and safe `diagnostics` (provider, model, whether a key arrived and its length, endpoint host, HTTP statuses, classification — never the key).
 
 `POST /api/genius/agent` — JSON `agent` (1A–3C or `core`), `stage`, `repository`, full `commit`, `scope`, `payload` (bounded evidence and prior team outputs), `provider`, `apiKey`, `model`. Returns the schema-conformed `output`, `usage`, `model`, and `attempts`. Provider failures return HTTP 502 with `error`, `kind`, `retryable`, and `suggestion`. The browser runs the orchestrator and verifies every citation against the analysis it holds.
+
+`GET /api/version` — public provenance: project, version, commit (when the host provides it), `sourceDigest`, `fingerprint`, provenance ID, organization, creator, repository, website, license. Recompute with `npm run provenance`.
 
 `GET /api/health` — version, runtime limits, provider identifiers, and the public system-map allowance. There is no instance password: every API route is public, same-origin, and rate-limited, and a web request only ever uses the provider key sent with it.
 

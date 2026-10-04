@@ -1,0 +1,21 @@
+{
+  "provenanceVersion": 1,
+  "project": "Git Architecture Diagram",
+  "creator": "Amine Saoud ibn al-Bashir",
+  "organization": "Pro_Amine LLC",
+  "copyright": "© 2026 Pro_Amine LLC · Created & Developed by Amine Saoud ibn al-Bashir",
+  "canonicalRepository": "https://github.com/ProAmineOfficial/GitArchitectureDiagram",
+  "canonicalWebsite": "https://gitarchitecturediagram.com",
+  "firstReleaseYear": 2026,
+  "license": "MIT",
+  "identifiers": {
+    "GAD-PROVENANCE-CORE-001": "Runtime core: HTTP server, hosted Worker, CLI, GitHub ingestion, analysis service, extract, build and release scripts",
+    "GAD-PROVIDER-LAYER-001": "AI provider layer: adapters, error classification and retries, model registry, connection test, provider catalog",
+    "GAD-GENIUS-PIPELINE-001": "Genius pipeline: Deep Genius teams and orchestrator, agent contracts, server agent runner, grounded questions",
+    "GAD-EVIDENCE-001": "Evidence contract and repository intelligence: citation verification, evidence search, hierarchical summaries",
+    "GAD-SYSTEM-MAP-001": "System Map 2.0: AI system map, graph validation, structural overview, guided tour, software hierarchy",
+    "GAD-EXPORT-PACK-001": "Export Project 2.0: .gitarchitecture pack, prompts, skills, reconstruction packs, project extract, secret redaction",
+    "GAD-WORKSPACE-UI-001": "Workspace interface: browser application, routing, diagrams, highlights, styles",
+    "GAD-BRAND-001": "Official Pro_Amine brand integration: footer, social dock, product icon"
+  }
+}

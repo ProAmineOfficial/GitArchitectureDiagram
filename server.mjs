@@ -1,7 +1,10 @@
+// Copyright © 2026 Pro_Amine LLC
+// Created & Developed by Amine Saoud ibn al-Bashir
+// Git Architecture Diagram · SPDX-License-Identifier: MIT · Provenance ID: GAD-PROVENANCE-CORE-001
 // Project: Git Architecture Diagram | Component: HTTP server | Author: Amine Saoud ibn al-Bashir.
 // Features: same-origin API, streamed progress, bundled browser modules, bounded analysis, and secure defaults.
 import http from 'node:http'; // Serve the application without an additional web framework.
-import { readFile } from 'node:fs/promises'; // Read allowlisted static assets.
+import { readFile, readdir } from 'node:fs/promises'; // Read allowlisted static assets and the release files for /api/version.
 import path from 'node:path'; // Resolve static files within fixed roots.
 import { fileURLToPath } from 'node:url'; // Resolve the application directory independently of the working directory.
 import { AppError, VERSION } from './src/github.mjs'; // Reuse user-facing HTTP errors and the release identifier.
@@ -15,9 +18,16 @@ import { PROVIDERS, resolveCredentials } from './src/providers.mjs'; // Describe
 import { discoverModels, testConnection } from './src/model-registry.mjs'; // Two recommended models per provider and the connection test.
 import { runGeniusAgent } from './src/genius-agent.mjs'; // One Deep Genius agent call per request.
 import { ProviderError } from './src/provider-errors.mjs'; // Classified provider failures carry a stable kind for the interface.
+import { versionInfo, sourceDigest, SOURCE_PATTERN, cleanCommit } from './src/provenance.mjs'; // Public provenance and a non-secret build fingerprint.
 const CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"; // Keep repository content from loading arbitrary scripts or remote assets.
 function json(response, status, data) { response.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); response.end(JSON.stringify(data)); } // Return compact uncached API responses.
 async function body(request, limit = 20000) { let text = ''; for await (const chunk of request) { text += chunk; if (Buffer.byteLength(text) > limit) throw new AppError(413, 'The request is too large.'); } try { return JSON.parse(text); } catch { throw new AppError(400, 'Expected a JSON request.'); } } // Bound and parse incoming JSON.
+async function gitHead() { // The deployed commit when the host keeps .git; never required.
+  try { const head = (await readFile(path.join(ROOT, '.git', 'HEAD'), 'utf8')).trim(); if (!head.startsWith('ref: ')) return cleanCommit(head); const ref = head.slice(5); if (!/^refs\/[\w./-]+$/.test(ref) || ref.includes('..')) return null; // Only follow a plain branch reference inside .git.
+    try { return cleanCommit(await readFile(path.join(ROOT, '.git', ref), 'utf8')); } catch { const packed = await readFile(path.join(ROOT, '.git', 'packed-refs'), 'utf8'); return cleanCommit(packed.split('\n').find(line => line.endsWith(` ${ref}`))?.split(' ')[0]); } } catch { return null; }
+} // End commit lookup.
+let version = null; // Computed once per process: the release files do not change while it runs.
+async function buildVersion() { const files = []; for (const dir of ['', 'src', 'public']) for (const name of await readdir(path.join(ROOT, dir))) { const relative = dir ? `${dir}/${name}` : name; if (SOURCE_PATTERN.test(relative)) files.push([relative, await readFile(path.join(ROOT, relative))]); } return versionInfo({ commit: cleanCommit(process.env.GAD_COMMIT || process.env.SOURCE_COMMIT || process.env.GIT_COMMIT) || await gitHead(), digest: await sourceDigest(files), runtime: 'node' }); } // Digest of the shipped source, recomputable with npm run provenance.
 function diagnose(result) { if (!process.env.NODE_TEST_CONTEXT) console.info('[provider-test]', JSON.stringify(result.diagnostics)); return result; } // Log safe connection diagnostics only: provider, model, key presence and length, hosts, HTTP statuses, classification.
 const LIMITS = { agent: 90, default: 20 }; // Requests per client address per minute; a Deep Genius run makes up to 25 short agent calls.
 function guard(request, bucket = 'default') { // Validate browser origin and request frequency. There is no instance password: the public site needs none.
@@ -44,6 +54,7 @@ export function createAppServer({ fetchImpl = fetch } = {}) { // Export the actu
     try { // Convert all request failures into bounded user-facing errors.
       const url = new URL(request.url, 'http://localhost'); // Parse routing independently of an untrusted Host header.
       if (url.pathname === '/api/health' && request.method === 'GET') return json(response, 200, { ok: true, version: VERSION, limits: { extract: EXTRACT_LIMITS.node,  maxFiles: 120 }, providers: Object.keys(PROVIDERS), publicAI: publicAIStatus(process.env) }); // Expose capability state without secrets.
+      if (url.pathname === '/api/version' && request.method === 'GET') return json(response, 200, await (version ??= buildVersion())); // Public provenance: project, version, commit, source digest, fingerprint. No secrets.
       if (url.pathname.startsWith('/api/')) { // Admit only the documented same-origin API operations.
         if (request.method !== 'POST') throw new AppError(405, 'Use POST for this API endpoint.'); guard(request, url.pathname === '/api/genius/agent' ? 'agent' : 'default'); // Require bounded authenticated browser actions where configured.
         if (!String(request.headers['content-type'] || '').startsWith('application/json')) throw new AppError(415, 'Use application/json.'); const input = await body(request, url.pathname === '/api/genius/agent' ? 200000 : url.pathname === '/api/ask' ? 64000 : 20000); if (input && typeof input === 'object') delete input.githubToken; // Reject cross-site form submissions and oversized bodies. The browser never supplies GitHub credentials; only the optional server GITHUB_TOKEN is used, for public repositories.

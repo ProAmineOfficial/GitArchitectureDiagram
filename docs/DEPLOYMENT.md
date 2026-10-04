@@ -81,6 +81,7 @@ Verify after each deployment:
 
 ```text
 https://gitarchitecturediagram.com/api/health                      → 200 JSON with "ok": true
+https://gitarchitecturediagram.com/api/version                     → 200 JSON; sourceDigest equals `npm run provenance` on the deployed commit
 https://gitarchitecturediagram.com/                                → workspace
 https://gitarchitecturediagram.com/ProAmineOfficial/Driver-NanoKit-ESP32-of-T.U.M-Pro_Amine-IC
 https://gitarchitecturediagram.com/ProAmineOfficial/NanoKit-ESP32/tree/main/examples_on_platformio/ultrasonic_distance
@@ -110,6 +111,7 @@ Remove `HOST=127.0.0.1` from a copied `.env` or change it to `HOST=0.0.0.0` when
 | `GENIUS_MODEL` | Explicit provider model ID; no default model or price is assumed. |
 | `PUBLIC_ORIGIN` | Canonical externally visible origin used for browser request validation. |
 | `HOST`, `PORT` | Listening interface and port; local defaults are `127.0.0.1:3000`. `PORT` may also be a socket or pipe path supplied by a hosting runner. |
+| `GAD_COMMIT` | Optional: the deployed commit SHA, reported by `/api/version` when the host does not keep `.git`. Not a secret. |
 | `GIT_ARCHITECTURE_DIAGRAM_AUTOSTART` | Set to `0` only to import `server.mjs` without opening a listener (tests). Leave unset in production. |
 
 Visitors provide their own AI provider key in API settings. Keys pass through your server, so offer this only from a deployment whose operator they trust. Never publish an unrestricted proxy to a paid model key.

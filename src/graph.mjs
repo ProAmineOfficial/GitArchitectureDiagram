@@ -1,3 +1,6 @@
+// Copyright © 2026 Pro_Amine LLC
+// Created & Developed by Amine Saoud ibn al-Bashir
+// Git Architecture Diagram · SPDX-License-Identifier: MIT · Provenance ID: GAD-SYSTEM-MAP-001
 // Project: Git Architecture Diagram | Component: Structured graph compiler | Author: Amine Saoud ibn al-Bashir.
 // Description: Validate a component graph against the repository inventory, then compile it into Mermaid.
 // Both the deterministic overview and optional AI output use this path, so every rendered node is either

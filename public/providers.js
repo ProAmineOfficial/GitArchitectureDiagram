@@ -1,3 +1,6 @@
+// Copyright © 2026 Pro_Amine LLC
+// Created & Developed by Amine Saoud ibn al-Bashir
+// Git Architecture Diagram · SPDX-License-Identifier: MIT · Provenance ID: GAD-PROVIDER-LAYER-001
 // Project: Git Architecture Diagram | Component: Provider catalog (shared by browser and server) | Author: Amine Saoud ibn al-Bashir.
 // Each provider offers exactly two recommended models: Fast (economy) and Advanced (best quality). Every model ID
 // below was checked against the provider's official model documentation on CATALOG_CHECKED. The server's model

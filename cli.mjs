@@ -1,3 +1,6 @@
+// Copyright © 2026 Pro_Amine LLC
+// Created & Developed by Amine Saoud ibn al-Bashir
+// Git Architecture Diagram · SPDX-License-Identifier: MIT · Provenance ID: GAD-PROVENANCE-CORE-001
 // Project: Git Architecture Diagram | Component: CLI | Author: Amine Saoud ibn al-Bashir.
 import { mkdir, writeFile } from 'node:fs/promises'; // Write real Genius artifacts after successful analysis.
 import path from 'node:path'; // Resolve a user-selected output directory.

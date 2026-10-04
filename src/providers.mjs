@@ -1,3 +1,6 @@
+// Copyright © 2026 Pro_Amine LLC
+// Created & Developed by Amine Saoud ibn al-Bashir
+// Git Architecture Diagram · SPDX-License-Identifier: MIT · Provenance ID: GAD-PROVIDER-LAYER-001
 // Project: Git Architecture Diagram | Component: Provider adapters | Author: Amine Saoud ibn al-Bashir.
 // Fixed-endpoint text-model adapters; caller credentials never choose an arbitrary destination.
 // Each adapter builds one provider-native request and normalizes the final text, keeping reasoning or thinking

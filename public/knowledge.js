@@ -1,8 +1,12 @@
+// Copyright © 2026 Pro_Amine LLC
+// Created & Developed by Amine Saoud ibn al-Bashir
+// Git Architecture Diagram · SPDX-License-Identifier: MIT · Provenance ID: GAD-EXPORT-PACK-001
 // Project: Git Architecture Diagram | Component: Project knowledge generators | Author: Amine Saoud ibn al-Bashir.
 // Pure functions over an analysis result: prompts, skills, blueprints, roadmaps, AI-ready context, project extract,
 // README snippets, and the reconstruction pack. No model is called here: every section is assembled from evidence
 // the analyzer holds, and anything that came from the optional AI step is labeled as Genius interpretation.
 
+import { redactFiles } from './secret-scan.js'; // Exported packs never carry credential-shaped values.
 const SITE = 'Git Architecture Diagram';
 const short = sha => sha.slice(0, 7);
 const relative = (result, path) => { const scope = result.repository.scope ? result.repository.scope + '/' : ''; return path.startsWith(scope) ? path.slice(scope.length) : path; };
@@ -265,6 +269,6 @@ export function geniusDevelopmentPack(result, { origin = '', path = '' } = {}) {
   files['EVIDENCE.json'] = JSON.stringify(evidence, null, 2);
   const manifest = { generator: { name: SITE, version: result.generator?.version || '' }, generatedAt: new Date().toISOString(), repository: repo.fullName, commit: repo.sha, scope: repo.scope || '', analysis: { filesRead: result.coverage.readFiles, filesListed: result.coverage.listedFiles }, deepGenius: deep ? { ran: true, status: deep.status, provider: deep.provider, model: deep.model, calls: deep.calls, revisionLoops: deep.loops, findings: deep.findings.length, approvedSolutions: deep.solutions.filter(item => item.status === 'APPROVED').length, unresolved: deep.unresolved.length } : { ran: false }, files: Object.keys(files).concat('manifest.json').map(name => ({ path: `.gitarchitecture/${name}`, bytes: name === 'manifest.json' ? null : new TextEncoder().encode(files[name]).length })), credentials: 'none — no key, token, or password is ever included' };
   files['manifest.json'] = JSON.stringify(manifest, null, 2);
-  return files;
+  return redactFiles(files).files; // Repository excerpts can contain credentials; the pack never does.
 }
 

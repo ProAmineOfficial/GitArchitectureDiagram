@@ -1,3 +1,6 @@
+// Copyright © 2026 Pro_Amine LLC
+// Created & Developed by Amine Saoud ibn al-Bashir
+// Git Architecture Diagram · SPDX-License-Identifier: MIT · Provenance ID: GAD-EXPORT-PACK-001
 // Project: Git Architecture Diagram | Component: Project extract view | Author: Amine Saoud ibn al-Bashir.
 // Five sections (summary, statistics, directory structure, important files, file contents), each with Copy,
 // plus Copy all and Download. Files come from the analysis (instant) or the full archive (one GitHub request).

@@ -1,3 +1,6 @@
+// Copyright © 2026 Pro_Amine LLC
+// Created & Developed by Amine Saoud ibn al-Bashir
+// Git Architecture Diagram · SPDX-License-Identifier: MIT · Provenance ID: GAD-GENIUS-PIPELINE-001
 // Project: Git Architecture Diagram | Component: Genius | Author: Amine Saoud ibn al-Bashir.
 // Description: Generate reproducible architecture, evidence, documentation checks, and engineering guides.
 import { mindmapColor } from '../public/diagram-colors.js'; // Share the actual rendered folder palette with exported legends.

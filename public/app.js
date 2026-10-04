@@ -1,3 +1,6 @@
+// Copyright © 2026 Pro_Amine LLC
+// Created & Developed by Amine Saoud ibn al-Bashir
+// Git Architecture Diagram · SPDX-License-Identifier: MIT · Provenance ID: GAD-WORKSPACE-UI-001
 // Project: Git Architecture Diagram | Component: Repository workspace | Author: Amine Saoud ibn al-Bashir.
 // Routing, analysis runs, and the three-panel workspace. Repository-derived text is always inserted with
 // textContent (never innerHTML) except the sanitized guide, and every source link is pinned to the analyzed commit.
@@ -11,6 +14,7 @@ import { setupDock } from './dock.js';
 import { exportGuide, exportDiagram } from './exports.js';
 import { readAnalysisResponse } from './analysis-stream.js';
 import { PROVIDERS, MODEL_ROLES, ROLE_LABELS, CATALOG_CHECKED, roleOf, checkKeyFormat } from './providers.js';
+import { redactSecrets } from './secret-scan.js'; // Copied and downloaded text never carries credential-shaped values.
 import { setupDeepGenius, errorTitle } from './deep-genius.js';
 import { pinnedSourceURL } from './source-navigation.js';
 import { icon, installIcons } from './icons.js';
@@ -544,8 +548,8 @@ $('#copy-host').addEventListener('click', async () => { try { await navigator.cl
 function exportView(format, name) { return exportDiagram(format, getSource(), getSVG(), name); }
 const askControls = setupAsk({ getResult: () => state.result, credentials, headers: requestHeaders, aiConfigured, onInspect: (path, line) => inspect({ path, type: 'blob' }, { lines: line ? { start: line, end: line } : null }) });
 const extras = setupExtras({ state, selectView, diagramFor, inspect, revealInTree, setDrawer, closeMenus, toast, aiConfigured, exportView });
-async function copyText(text, message = 'Copied.') { try { await navigator.clipboard.writeText(text); toast(message); } catch { toast('Copying is blocked here; use Download.'); } }
-function downloadText(name, data, type) { const url = URL.createObjectURL(new Blob([data], { type })); const anchor = el('a'); anchor.href = url; anchor.download = name; document.body.append(anchor); anchor.click(); anchor.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
+async function copyText(text, message = 'Copied.') { try { const safe = redactSecrets(text); await navigator.clipboard.writeText(safe.text); toast(safe.count ? `${message} ${safe.count} credential-shaped value${safe.count === 1 ? ' was' : 's were'} redacted.` : message); } catch { toast('Copying is blocked here; use Download.'); } }
+function downloadText(name, data, type) { const url = URL.createObjectURL(new Blob([typeof data === 'string' ? redactSecrets(data).text : data], { type })); const anchor = el('a'); anchor.href = url; anchor.download = name; document.body.append(anchor); anchor.click(); anchor.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
 const extractView = setupExtractView({ state, headers: requestHeaders, credentials, copy: copyText, download: downloadText, openDoc });
 const deep = setupDeepGenius({ state, credentials, headers: requestHeaders, aiConfigured, toast, selectView: view => selectView(view), inspect: (path, line) => inspect({ path, type: 'blob' }, { lines: line ? { start: line, end: line } : null }), openSettings: role => { if (role) { state.role = role; $('#model-custom').value = ''; renderModelOptions(); syncModel(); } $('#settings').showModal(); }, runAction: action => runAction(action), onComplete: () => { $('#genius-mode').textContent = 'Deep Genius + source'; extractView.reset(); if (state.view === 'extract') extractView.render(); } });
 

@@ -1,3 +1,6 @@
+// Copyright © 2026 Pro_Amine LLC
+// Created & Developed by Amine Saoud ibn al-Bashir
+// Git Architecture Diagram · SPDX-License-Identifier: MIT · Provenance ID: GAD-PROVENANCE-CORE-001
 // Project: Git Architecture Diagram | Component: Hosted Worker | Author: Amine Saoud ibn al-Bashir.
 import { AppError, boundedJson, VERSION } from './src/github.mjs'; // Reuse the validated ingestion contracts and bounded JSON reader.
 import { runAnalysis, publicAIStatus } from './src/service.mjs'; // Run the same real source analyzer used by the local server and CLI.
@@ -5,12 +8,14 @@ import { PROVIDERS, resolveCredentials } from './src/providers.mjs';
 import { discoverModels, testConnection } from './src/model-registry.mjs';
 import { runGeniusAgent } from './src/genius-agent.mjs';
 import { ProviderError } from './src/provider-errors.mjs';
+import { versionInfo, cleanCommit } from './src/provenance.mjs'; // Public provenance and a non-secret build fingerprint.
 import { askGenius } from './src/ask.mjs';
 import { extractRepository, validateExtractInput, EXTRACT_LIMITS } from './src/extract.mjs'; // Full-repository extract from one archive. // Answer questions without retaining sessions. // Describe the same authorized provider catalog as the analysis service.
 const CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"; // Keep untrusted repository content inside the same rendering boundary as the local app.
 const SECURITY = { 'Content-Security-Policy': CSP, 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'Permissions-Policy': 'camera=(), microphone=(), geolocation=()' }; // Apply the browser protections to hosted responses.
 const HOSTED_FILES = 40; // Keep hosted analyses within a bounded upstream request budget.
 function json(status, data) { return new Response(JSON.stringify(data), { status, headers: { ...SECURITY, 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } }); } // Produce uncached API responses without leaking internal exceptions.
+const BUILD = typeof __GAD_BUILD__ !== 'undefined' ? __GAD_BUILD__ : { commit: null, digest: null }; // Injected by scripts/build.mjs; absent in unbundled tests.
 function withoutGitHubToken(input) { if (input && typeof input === 'object') delete input.githubToken; return input; } // The browser never supplies GitHub credentials; only the optional server GITHUB_TOKEN is used, for public repositories.
 function cacheStore() { // Persist public system maps in the platform cache when the runtime provides one.
   const cache = globalThis.caches?.default; if (!cache) return null;
@@ -23,6 +28,7 @@ export function createWorker({ analyze = runAnalysis, ask = askGenius, extract =
     try { // Convert API and routing failures into clear browser messages.
       const url = new URL(request.url); // Read the incoming path independently of any repository input.
       if (url.pathname === '/api/health' && request.method === 'GET') return json(200, { ok: true, version: VERSION, runtime: 'worker', limits: { maxFiles: HOSTED_FILES, extract: EXTRACT_LIMITS.worker }, providers: Object.keys(PROVIDERS), publicAI: publicAIStatus(env) }); // Expose capabilities and budget limits without exposing keys.
+      if (url.pathname === '/api/version' && request.method === 'GET') return json(200, await versionInfo({ commit: cleanCommit(env.GAD_COMMIT) || BUILD.commit, digest: BUILD.digest, runtime: 'worker' })); // Public provenance; no secrets.
       if (url.pathname.startsWith('/api/')) { // Admit only documented hosted analysis requests.
         if (request.method !== 'POST') throw new AppError(405, 'Use POST for analysis.'); const origin = request.headers.get('Origin'); const allowedOrigins = (env.PUBLIC_ORIGINS || env.PUBLIC_ORIGIN || url.origin).split(',').map(value => value.trim()).filter(Boolean); if (origin && !allowedOrigins.includes(origin)) throw new AppError(403, 'This API accepts same-origin requests only.'); // Admit only explicitly configured website origins, including an optional custom domain.
         if (!(request.headers.get('Content-Type') || '').startsWith('application/json')) throw new AppError(415, 'Use application/json.'); const bodyLimit = url.pathname === '/api/genius/agent' ? 200000 : url.pathname === '/api/ask' ? 64000 : 20000; if (Number(request.headers.get('Content-Length')) > bodyLimit) throw new AppError(413, 'The request is too large.'); // Reject form submissions and clearly oversized requests early.

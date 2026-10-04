@@ -1,3 +1,6 @@
+// Copyright © 2026 Pro_Amine LLC
+// Created & Developed by Amine Saoud ibn al-Bashir
+// Git Architecture Diagram · SPDX-License-Identifier: MIT · Provenance ID: GAD-BRAND-001
 // Project: Git Architecture Diagram | Component: Brand assets and footer behavior | Author: Amine Saoud ibn al-Bashir.
 // Official Pro_Amine and Git Architecture Diagram images are served locally from /assets/brand/ (provenance in
 // docs/BRAND.md). A missing asset never shows a broken image: its card falls back to a labeled placeholder, and the

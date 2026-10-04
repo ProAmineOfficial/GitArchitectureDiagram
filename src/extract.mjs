@@ -1,3 +1,6 @@
+// Copyright © 2026 Pro_Amine LLC
+// Created & Developed by Amine Saoud ibn al-Bashir
+// Git Architecture Diagram · SPDX-License-Identifier: MIT · Provenance ID: GAD-PROVENANCE-CORE-001
 // Project: Git Architecture Diagram | Component: Full-repository project extract | Author: Amine Saoud ibn al-Bashir.
 // One GitHub API request returns a redirect to the commit's archive on codeload.github.com. The archive is streamed,
 // decompressed, and parsed file by file under hard limits; nothing is written to disk or kept after the response.

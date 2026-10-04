@@ -1,3 +1,6 @@
+// Copyright © 2026 Pro_Amine LLC
+// Created & Developed by Amine Saoud ibn al-Bashir
+// Git Architecture Diagram · SPDX-License-Identifier: MIT · Provenance ID: GAD-GENIUS-PIPELINE-001
 // Project: Git Architecture Diagram | Component: Genius questions | Author: Amine Saoud ibn al-Bashir.
 // Description: Answer one question about a repository from excerpts the browser already holds.
 // The hosted Worker keeps no sessions, so the client sends bounded excerpts; every citation in the

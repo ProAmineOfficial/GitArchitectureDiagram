@@ -1,3 +1,6 @@
+// Copyright © 2026 Pro_Amine LLC
+// Created & Developed by Amine Saoud ibn al-Bashir
+// Git Architecture Diagram · SPDX-License-Identifier: MIT · Provenance ID: GAD-EVIDENCE-001
 // Project: Git Architecture Diagram | Component: Genius evidence contract (shared by browser and server) | Author: Amine Saoud ibn al-Bashir.
 // The single rule for turning a model's citation into evidence: a citation is "verified" only when its path exists in
 // the analyzed commit, its line exists in the file that was read (SHA-verified during analysis), and its quote appears

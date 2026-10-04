@@ -519,6 +519,8 @@ npm run check
 npm test
 npm run test:browser
 npm run build
+npm run scan:secrets   # before every push
+npm run provenance     # the /api/version fingerprint of this checkout
 ```
 
 The project includes:
@@ -548,6 +550,8 @@ Generated/vendor folders, likely credential files, symlinks, and binaries can be
 Large monorepos work best when analyzed folder by folder.
 
 No analyzed repository code is executed, built, or installed as part of repository analysis.
+
+Secrets never enter the repository or the browser bundle, every export is scanned and credential-shaped values are redacted, and there is no tracking or telemetry. See [SECURITY.md](SECURITY.md), the permanent [security policy](docs/SECURITY_POLICY.md), and the [legacy file audit](docs/LEGACY_AUDIT.md).
 
 ---
 
@@ -598,7 +602,9 @@ Brand assets and their provenance are listed in [docs/BRAND.md](docs/BRAND.md).
 
 ## License
 
-MIT License.
+MIT License. See [LICENSE](LICENSE) and [NOTICE.md](NOTICE.md).
+
+Official builds can be verified with public provenance: [PROVENANCE.md](PROVENANCE.md) describes the stable identifiers, `PROVENANCE.json`, and the `/api/version` build fingerprint.
 
 ---
 

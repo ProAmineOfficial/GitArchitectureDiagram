@@ -1,3 +1,6 @@
+// Copyright © 2026 Pro_Amine LLC
+// Created & Developed by Amine Saoud ibn al-Bashir
+// Git Architecture Diagram · SPDX-License-Identifier: MIT · Provenance ID: GAD-GENIUS-PIPELINE-001
 // Project: Git Architecture Diagram | Component: Deep Genius panel, confirmation, and process view | Author: Amine Saoud ibn al-Bashir.
 // Runs the shared Genius Core orchestrator in the browser: each agent call is one short POST to /api/genius/agent,
 // so no request outlives a hosting proxy timeout, and every citation is verified here against the commit the

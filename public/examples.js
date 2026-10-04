@@ -1,3 +1,6 @@
+// Copyright © 2026 Pro_Amine LLC
+// Created & Developed by Amine Saoud ibn al-Bashir
+// Git Architecture Diagram · SPDX-License-Identifier: MIT · Provenance ID: GAD-WORKSPACE-UI-001
 // Project: Git Architecture Diagram | Component: Saved example snapshots | Author: Amine Saoud ibn al-Bashir.
 // Each entry was measured by running this analyzer (see "analyzer") on the pinned commit. The counts describe what the
 // analyzer read and found; they are not stars, usage numbers, or test results. Previews are the generated overview or the

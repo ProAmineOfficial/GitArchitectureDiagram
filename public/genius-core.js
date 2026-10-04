@@ -1,3 +1,6 @@
+// Copyright © 2026 Pro_Amine LLC
+// Created & Developed by Amine Saoud ibn al-Bashir
+// Git Architecture Diagram · SPDX-License-Identifier: MIT · Provenance ID: GAD-GENIUS-PIPELINE-001
 // Project: Git Architecture Diagram | Component: Genius Core orchestrator (shared by browser and server) | Author: Amine Saoud ibn al-Bashir.
 // Coordinates the deterministic analysis, the verified evidence store, the selected model, and three agent teams:
 //   Team 1 audits → findings are verified and merged → Team 2 proposes solutions → Team 1 validates them →

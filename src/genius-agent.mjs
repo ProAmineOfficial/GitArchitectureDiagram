@@ -1,3 +1,6 @@
+// Copyright © 2026 Pro_Amine LLC
+// Created & Developed by Amine Saoud ibn al-Bashir
+// Git Architecture Diagram · SPDX-License-Identifier: MIT · Provenance ID: GAD-GENIUS-PIPELINE-001
 // Project: Git Architecture Diagram | Component: Genius agent endpoint | Author: Amine Saoud ibn al-Bashir.
 // Runs exactly one Genius agent call. The caller chooses an allowlisted agent and stage and supplies bounded data
 // (repository identity, commit, summaries, excerpts, and prior team outputs); the server supplies the instructions and

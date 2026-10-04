@@ -1,7 +1,20 @@
 node_modules/
+
+# Secrets never enter Git. Keep only the empty public template.
 .env
 .env.*
 !.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
+credentials.json
+secrets.json
+
 .genius/
 coverage/
 test-results/
