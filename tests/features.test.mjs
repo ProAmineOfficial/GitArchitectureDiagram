@@ -58,7 +58,7 @@ test('question requests are validated before any provider call', async () => {
 });
 
 test('provider failures and HTML pages become actionable errors', async () => {
-  await assert.rejects(askGenius({ question: 'q', excerpts: [excerpt] }, { apiKey: 'k', model: 'm', provider: 'anthropic', fetchImpl: async () => new Response('{}', { status: 401 }) }), /Claude returned HTTP 401\. Check your API key/);
+  await assert.rejects(askGenius({ question: 'q', excerpts: [excerpt] }, { apiKey: 'k', model: 'm', provider: 'anthropic', fetchImpl: async () => new Response('{}', { status: 401 }) }), /Claude rejected the API key \(HTTP 401\)\. Check the key in API settings/);
   await assert.rejects(askGenius({ question: 'q', excerpts: [excerpt] }, { apiKey: 'k', model: 'm', fetchImpl: async () => new Response('<!doctype html><p>Proxy</p>', { status: 200 }) }), /HTML page instead of JSON/);
 });
 

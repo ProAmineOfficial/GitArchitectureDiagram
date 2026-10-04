@@ -267,6 +267,8 @@ A guided tour can:
 
 System Map output can distinguish repository-backed evidence from model inference.
 
+Each tour step (3 to 12, never padded) names its stage — who or what starts the system, the entry point, the layer that receives control, the next components, the data that moves, external services or devices, where state lives, and what is produced — plus the exact supporting files and whether the step is observed in source, stated in documentation, or a Genius interpretation. Supporting files open in the inspector. The Architecture view also has a structural tour built only from the README, the declared entry point, and located imports, so it works without any AI key.
+
 ---
 
 ## Genius and verified evidence
@@ -289,6 +291,23 @@ The interface can distinguish:
 - **Genius inference**
 
 Browser-supplied text alone does not make a citation trusted.
+
+---
+
+## Deep Genius: three teams of agents
+
+Choose **Quick** (structure only, no AI), **Genius** (one AI system map with a guided tour), or **Deep Genius** under Options. Deep Genius always asks first, showing the provider, model, maximum planned calls (13 to 25), concurrency (at most 3 at a time), the approximate input scope, and a cost warning.
+
+```text
+Genius Core → repository evidence
+  → Team 1 — Audit: reliability · architecture & performance · security & developer experience (in parallel)
+  → Team 2 — Solutions: fix planner · architecture engineer · innovation & tooling (in parallel)
+  → Validation by Team 1, then at most two revise-and-revalidate loops; anything still disputed is UNRESOLVED with both positions
+  → Team 3 — comparison · documentation & diagrams · development pack (validated work only)
+  → Genius Core synthesis → final engineering pack
+```
+
+Agents receive bounded, retrieved evidence — never the whole repository: files are classified by role, summarized per file, folder, subsystem, and repository, and each agent gets the excerpts that match its focus. Every path, line, and quote an agent returns is checked against the analyzed commit; invented paths and impossible lines are rejected, and anything unchecked stays labeled as Genius inference. Agents return findings, evidence, confidence, and proposed actions only — never hidden reasoning. The **Process** view in the dock animates the pipeline, and each agent card opens its results and evidence.
 
 ---
 
@@ -472,6 +491,9 @@ The workspace can support providers configured by the user or operator, includin
 - Claude
 - Gemini
 - Kimi
+- DeepSeek
+
+Each provider offers exactly two recommended models — **Fast** (economy) and **Advanced** (best quality) — checked against the provider's official documentation, refreshed per key from the official model list, and never replaced by an unverified model. A custom model ID stays available under Advanced settings. **Test connection** checks the key format, the endpoint, the model, and structured output. Rate limits are retried at most three times (honoring `Retry-After`), an exhausted quota is reported as such, and a provider failure never breaks the structural analysis. See [docs/AI_PROVIDERS.md](docs/AI_PROVIDERS.md).
 
 The interface can show provider, model, request size, and output limits before an external AI request is sent.
 

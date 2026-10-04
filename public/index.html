@@ -36,7 +36,7 @@
         <label>Branch, tag, or commit<input id="ref" placeholder="Default branch" maxlength="200" autocomplete="off" spellcheck="false"></label>
         <label>Folder<input id="scope" placeholder="Entire repository" maxlength="1000" autocomplete="off" spellcheck="false"></label>
         <label>Files to read<input id="max-files" type="number" min="1" max="120" value="32"></label>
-        <label class="check-label"><input id="use-ai" type="checkbox"> Draw an AI system map</label>
+        <fieldset class="mode-picker" id="analysis-mode"><legend>Analysis mode</legend><label><input type="radio" name="analysis-mode" value="quick" checked><span><strong>Quick</strong><small>Structure, tree, and source links. No AI.</small></span></label><label><input type="radio" name="analysis-mode" value="genius"><span><strong>Genius</strong><small>Adds one AI system map with a guided tour.</small></span></label><label><input type="radio" name="analysis-mode" value="deep"><span><strong>Deep Genius</strong><small>Nine agents audit, solve, validate, and document. Asks before it starts.</small></span></label></fieldset><input id="use-ai" type="checkbox" hidden aria-hidden="true" tabindex="-1">
         <p id="ai-cost" class="subtle ai-cost">Structure, tree, and source links need no AI key.</p>
       </div>
     </section>
@@ -116,6 +116,7 @@
           <button class="dock-item" role="tab" type="button" data-view="documented" aria-selected="false" aria-label="Project Diagrams"><span class="dock-icon"><span data-icon="dock-diagrams"></span><span id="docs-count" class="dock-badge count" aria-hidden="true">0</span></span><i class="dock-dot" aria-hidden="true"></i><span class="dock-label">Diagrams</span><span class="dock-tip" aria-hidden="true">Project Diagrams</span></button>
           <button class="dock-item" role="tab" type="button" data-view="source" aria-selected="false" aria-label="Mermaid Source"><span class="dock-icon"><span data-icon="dock-source"></span></span><i class="dock-dot" aria-hidden="true"></i><span class="dock-label">Source</span><span class="dock-tip" aria-hidden="true">Mermaid Source</span></button>
           <button class="dock-item" role="tab" type="button" data-view="guide" aria-selected="false" aria-label="Genius Guide"><span class="dock-icon"><span data-icon="dock-guide"></span></span><i class="dock-dot" aria-hidden="true"></i><span class="dock-label">Genius</span><span class="dock-tip" aria-hidden="true">Genius Guide</span></button>
+          <button class="dock-item" role="tab" type="button" data-view="pipeline" aria-selected="false" aria-label="Genius Process"><span class="dock-icon"><span data-icon="dock-agents"></span><span id="deep-badge" class="dock-badge deep" aria-hidden="true" hidden>9</span></span><i class="dock-dot" aria-hidden="true"></i><span class="dock-label">Process</span><span class="dock-tip" aria-hidden="true">Genius Process</span></button>
           <span class="dock-sep" aria-hidden="true"></span>
           <button class="dock-item" role="tab" type="button" data-view="extract" aria-selected="false" aria-label="Export Project"><span class="dock-icon"><span data-icon="dock-export-project"></span></span><i class="dock-dot" aria-hidden="true"></i><span class="dock-label">Export Project</span><span class="dock-tip" aria-hidden="true">Export Project</span></button>
           <button id="dock-export" class="dock-item" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Export"><span class="dock-icon"><span data-icon="dock-export"></span></span><i class="dock-dot" aria-hidden="true"></i><span class="dock-label">Export</span><span class="dock-tip" aria-hidden="true">Export</span></button>
@@ -148,7 +149,7 @@
           <div id="canvas" class="canvas" tabindex="0" aria-label="Diagram canvas. Use plus and minus to zoom, arrow keys to pan, 0 to fit.">
             <div id="diagram-content" class="diagram-content"></div>
             <div id="diagram-empty" class="canvas-message" hidden></div>
-            <div id="tour" class="tour-card" hidden role="region" aria-label="Guided tour" aria-live="polite"><div class="tour-meta"><span id="tour-count"></span><strong id="tour-node"></strong></div><p id="tour-text"></p><div class="tour-controls"><button id="tour-prev" class="icon-button" type="button" aria-label="Previous step"><span data-icon="prev"></span></button><button id="tour-play" class="icon-button" type="button" aria-label="Pause tour" data-state="playing"><span class="when-paused" data-icon="play"></span><span class="when-playing" data-icon="pause"></span></button><button id="tour-next" class="icon-button" type="button" aria-label="Next step"><span data-icon="next"></span></button><button id="tour-close" class="icon-button" type="button" aria-label="End tour"><span data-icon="close"></span></button></div><div id="tour-progress" class="tour-progress"><i></i></div></div>
+            <div id="tour" class="tour-card" hidden role="region" aria-label="Guided tour" aria-live="polite"><div class="tour-meta"><span id="tour-count"></span><span id="tour-stage" class="tour-stage"></span><strong id="tour-node"></strong></div><p id="tour-text"></p><div class="tour-evidence"><span id="tour-basis" class="basis-tag"></span><span id="tour-files" class="tour-files" aria-label="Supporting files"></span></div><div class="tour-controls"><button id="tour-prev" class="icon-button" type="button" aria-label="Previous step"><span data-icon="prev"></span></button><button id="tour-play" class="icon-button" type="button" aria-label="Pause tour" data-state="playing"><span class="when-paused" data-icon="play"></span><span class="when-playing" data-icon="pause"></span></button><button id="tour-next" class="icon-button" type="button" aria-label="Next step"><span data-icon="next"></span></button><button id="tour-close" class="icon-button" type="button" aria-label="End tour"><span data-icon="close"></span></button></div><div id="tour-progress" class="tour-progress"><i></i></div></div>
             <div id="canvas-tools" class="canvas-tools">
               <button id="zoom-out" type="button" aria-label="Zoom out" title="Zoom out (−)"><span data-icon="minus"></span></button>
               <span id="zoom-label">100%</span>
@@ -161,6 +162,7 @@
           <div id="system-empty" class="system-empty" hidden><div class="system-card"><span class="system-orb" data-icon="spark"></span><h3>The whole system, in one picture</h3><p id="system-empty-text"></p><button id="system-generate" class="primary-button" type="button">Generate system map</button><p id="system-cost" class="subtle"></p></div></div>
           <div id="hierarchy-view" class="hierarchy-view" hidden></div>
           <div id="extract-view" class="extract-view" hidden aria-label="Export Project"></div>
+          <div id="pipeline-view" class="pipeline-view" hidden aria-label="Genius process"></div>
           <div id="source-view" class="source-view" hidden>
             <div class="source-toolbar"><label>Editing <select id="source-target" aria-label="Diagram to edit"></select></label><span id="source-status" class="source-status" aria-live="polite"></span></div>
             <textarea id="mermaid-source" aria-label="Editable Mermaid source" spellcheck="false"></textarea>
@@ -175,6 +177,7 @@
           <div class="panel-body">
             <div class="genius-scroll">
             <section id="genius-focus" class="genius-focus" hidden aria-live="polite"></section>
+            <section id="deep-genius" class="deep-genius" aria-labelledby="deep-title"></section>
             <section id="build-genius" class="build-genius" aria-labelledby="build-title">
               <h3 id="build-title"><span data-icon="spark"></span> Build with Genius</h3>
               <div class="build-grid"><button type="button" data-action="prompt">Development prompt</button><button type="button" data-action="skills">Development skills</button><button type="button" data-action="blueprint">App blueprint</button><button type="button" data-action="roadmap">Implementation roadmap</button><button type="button" data-action="context">AI-ready context</button><button type="button" data-action="pack">Reconstruction pack</button><button type="button" data-action="extract">Export Project</button><button type="button" data-action="clone">Clone repository</button></div>
@@ -205,10 +208,14 @@
     <p>Keys stay in this tab's memory. They are sent to this site's server only for the request you start, forwarded to the provider you choose, and never saved in browser storage, links, or exports.</p>
     <label>GitHub token <span>Optional. Needed for private repositories and a higher rate limit. A fine-grained token with Contents: read is enough.</span><input id="github-token" type="password" autocomplete="off" placeholder="github_pat_…"></label>
     <div class="provider-section">
-      <label>AI provider<select id="provider"><option value="openai">OpenAI</option><option value="anthropic">Claude (Anthropic)</option><option value="gemini">Gemini (Google)</option><option value="kimi">Kimi (Moonshot)</option></select></label>
+      <label>AI provider<select id="provider"><option value="openai">OpenAI</option><option value="anthropic">Claude (Anthropic)</option><option value="gemini">Gemini (Google)</option><option value="kimi">Kimi (Moonshot)</option><option value="deepseek">DeepSeek</option></select></label>
       <label><span id="provider-key-label" class="field-title">OpenAI API key</span><input id="api-key" type="password" autocomplete="off" placeholder="Paste your provider API key"></label>
-      <label>Model ID<input id="model" list="model-presets" autocomplete="off" spellcheck="false" maxlength="120"><datalist id="model-presets"></datalist><span>Pick a preset or type any text model your account can use. Image models such as DALL·E cannot analyze code.</span></label>
+      <fieldset class="model-picker" id="model-picker"><legend>Model</legend><div class="model-options" id="model-options"></div></fieldset>
+      <details class="custom-model"><summary>Advanced: use a custom model ID</summary><label>Custom model ID<input id="model-custom" autocomplete="off" spellcheck="false" maxlength="120" placeholder="Leave empty to use the model chosen above"><span>Only text models with structured JSON output work. Custom models are not checked by Git Architecture Diagram.</span></label></details>
+      <input id="model" type="hidden">
       <div class="model-help"><span id="preset-note"></span><a id="provider-docs" target="_blank" rel="noreferrer">Provider model list</a></div>
+      <div class="connection"><button id="test-connection" class="quiet-button" type="button"><span data-icon="check"></span> Test connection</button><span class="subtle">Sends one model-list request and one tiny request (a few tokens).</span></div>
+      <div id="connection-status" class="connection-status" role="status" aria-live="polite" hidden></div>
     </div>
     <label>Instance password <span>Only for protected deployments.</span><input id="instance-token" type="password" autocomplete="off"></label>
     <div class="settings-note" id="provider-disclosure"></div>
@@ -220,6 +227,19 @@
     <div class="doc-controls"><label id="doc-mode-label" hidden>Mode <select id="doc-mode"></select></label><label>Format <select id="doc-format"></select></label></div>
     <pre id="doc-text" tabindex="0"></pre>
     <div class="dialog-actions"><button id="doc-copy" class="quiet-button" type="button"><span data-icon="link"></span> Copy</button><button id="doc-download" class="primary-button" type="button"><span data-icon="download"></span> Download</button></div>
+  </form></dialog>
+  <dialog id="deep-confirm" class="deep-confirm" aria-labelledby="deep-confirm-title"><form method="dialog">
+    <div class="dialog-heading"><h2 id="deep-confirm-title">Run Deep Genius?</h2><button class="icon-button" value="cancel" aria-label="Close"><span data-icon="close"></span></button></div>
+    <p class="subtle">Three teams of three agents audit this commit, propose solutions, validate them, and document the result. Every citation is checked against the analyzed commit.</p>
+    <dl id="deep-plan" class="deep-plan"></dl>
+    <p id="deep-cost" class="deep-cost"></p>
+    <label id="deep-fallback-label" class="check-label"><input id="deep-fallback" type="checkbox"> If the Advanced model is unavailable, continue with Fast (never the other way round)</label>
+    <div class="dialog-actions"><button class="quiet-button" value="cancel">Cancel</button><button id="deep-confirm-start" class="primary-button" value="start">Start Deep Genius</button></div>
+  </form></dialog>
+  <dialog id="agent-dialog" class="agent-dialog" aria-labelledby="agent-title"><form method="dialog">
+    <div class="dialog-heading"><div><h2 id="agent-title"></h2><span id="agent-state" class="basis-tag"></span></div><button class="icon-button" aria-label="Close"><span data-icon="close"></span></button></div>
+    <div id="agent-body" class="agent-body"></div>
+    <p class="fineprint">Results, evidence, and confidence only. Agents are not asked for, and never return, hidden reasoning.</p>
   </form></dialog>
   <div id="toast" class="toast" role="status" hidden></div>
 </body>

@@ -113,7 +113,7 @@ test('the 0.7 workspace', async t => {
     assert.match(await page.textContent('#doc-text'), /### Security/); await page.keyboard.press('Escape');
   });
   await t.test('Genius answers separate verified source from inference (checked on the server)', async () => {
-    await page.keyboard.press('Escape'); await page.click('#settings-open'); await page.fill('#api-key', 'visitor-key'); await page.fill('#model', 'test-model'); await page.click('#settings .dialog-actions .primary-button');
+    await page.keyboard.press('Escape'); await page.click('#settings-open'); await page.fill('#api-key', 'visitor-key'); await page.click('.custom-model summary'); await page.fill('#model-custom', 'test-model'); await page.click('#settings .dialog-actions .primary-button');
     await page.click('[data-drawer=genius]'); await page.fill('#question', 'How are tokens checked?'); await page.click('#ask-ai');
     await page.waitForSelector('.verified-title', { timeout: 15000 });
     assert.equal(await page.locator('.findings.verified li').count(), 1); assert.equal(await page.locator('.findings.inferred li').count(), 1);
@@ -151,8 +151,8 @@ test('the 0.7 workspace', async t => {
   await t.test('Dock: every view has its own icon, badges, and a moving active indicator', async () => {
     await page.keyboard.press('Escape');
     const labels = await page.locator('#view-dock .dock-item').evaluateAll(items => items.map(item => item.getAttribute('aria-label')));
-    assert.deepEqual(labels, ['System Map', 'Architecture', 'Software Hierarchy', 'Repository Mind Map', 'Project Diagrams', 'Mermaid Source', 'Genius Guide', 'Export Project', 'Export', 'Build With Genius']);
-    const icons = await page.locator('#view-dock .dock-icon svg').evaluateAll(svgs => svgs.map(svg => svg.innerHTML)); assert.equal(new Set(icons).size, 10, 'ten distinct icons');
+    assert.deepEqual(labels, ['System Map', 'Architecture', 'Software Hierarchy', 'Repository Mind Map', 'Project Diagrams', 'Mermaid Source', 'Genius Guide', 'Genius Process', 'Export Project', 'Export', 'Build With Genius']);
+    const icons = await page.locator('#view-dock .dock-icon svg').evaluateAll(svgs => svgs.map(svg => svg.innerHTML)); assert.equal(new Set(icons).size, 11, 'eleven distinct icons');
     assert.equal(await page.locator('#view-dock [data-view=system] .dock-badge.ai').count(), 1); assert.ok(await page.isHidden('#docs-count'), 'no count badge without diagrams');
     assert.equal(await page.locator('#view-dock .dock-sep').count(), 2);
     await page.click('#view-dock [data-view=hierarchy]'); await page.waitForTimeout(400); assert.equal(await page.getAttribute('#view-dock [data-view=hierarchy]', 'aria-selected'), 'true'); // Colors transition over 250 ms.
@@ -181,7 +181,7 @@ test('the 0.7 workspace', async t => {
   });
   await t.test('Export Project: grouped cards, clone command, diagram exports, and packs', async () => {
     await page.click('#view-dock [data-view=extract]'); await page.waitForSelector('.xp-card');
-    assert.deepEqual(await page.locator('.xp-card summary strong').allTextContents(), ['Clone Repository', 'Project Files', 'Project Diagrams', 'Project Skills', 'Genius', 'AI / Developer Context']);
+    assert.deepEqual(await page.locator('.xp-card summary strong').allTextContents(), ['Genius Development Pack', 'Clone Repository', 'Project Files', 'Project Diagrams', 'Project Skills', 'Genius', 'AI / Developer Context']);
     assert.equal(await page.textContent('#extract-run'), 'Export Project');
     await page.click('.xp-card[data-card=clone] summary'); await page.click('text=Copy Clone Command'); assert.equal(await page.evaluate(() => navigator.clipboard.readText()), `git clone https://github.com/acme/shop.git\ncd shop\ngit checkout ${sha}`);
     await page.click('.xp-card[data-card=diagrams] summary'); const row = page.locator('.xp-diagram-row[data-view=hierarchy]');

@@ -5,12 +5,13 @@ import { marked } from '/vendor/marked/marked.esm.js';
 import DOMPurify from '/vendor/dompurify/purify.es.mjs';
 import { renderDiagram, redrawDiagram, clearDiagram, getSource, getSVG, zoom, fit, validateSource, lightTint, decorate } from './diagram.js';
 import { startTour, stopTour, tourActive } from './tour.js';
-import { setupExtras, openDoc } from './extras.js';
+import { setupExtras, openDoc, runAction } from './extras.js';
 import { setupExtractView } from './extract-view.js';
 import { setupDock } from './dock.js';
 import { exportGuide, exportDiagram } from './exports.js';
 import { readAnalysisResponse } from './analysis-stream.js';
-import { PROVIDERS } from './providers.js';
+import { PROVIDERS, MODEL_ROLES, ROLE_LABELS, CATALOG_CHECKED, roleOf, checkKeyFormat } from './providers.js';
+import { setupDeepGenius, errorTitle } from './deep-genius.js';
 import { pinnedSourceURL } from './source-navigation.js';
 import { icon, installIcons } from './icons.js';
 import { parseRoute, workspacePath, inputToPath, lineAnchor, DEFAULT_FILES } from './route.js';
@@ -19,10 +20,10 @@ import { renderBrowse, renderStarters } from './browse.js';
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
-const state = { result: null, view: 'architecture', mode: 'overview', drill: '', controller: null, filter: 'all', current: null, edits: new Map(), cache: new Map(), displayKey: '', maxFiles: 120 };
+const state = { result: null, view: 'architecture', mode: 'overview', drill: '', controller: null, filter: 'all', current: null, edits: new Map(), cache: new Map(), displayKey: '', maxFiles: 120, pairs: {}, role: 'fast', deepCache: new Map() };
 const CODE = /\.(m?[jc]?[jt]sx?|py|c|cc|cpp|h|hpp|ino|rs|go|java|kt|cs|rb|php|swift|vue|svelte)$/i;
 const DOC = /\.(md|mdx|mmd|rst|txt)$/i;
-const VIEWS = new Set(['system', 'architecture', 'hierarchy', 'mindmap', 'documented', 'source', 'guide', 'extract']);
+const VIEWS = new Set(['system', 'architecture', 'hierarchy', 'mindmap', 'documented', 'source', 'guide', 'extract', 'pipeline']);
 const reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /** Create an element with safe text content. */
@@ -37,6 +38,9 @@ const sourceURL = (path, line) => pinnedSourceURL(state.result.repository, { pat
 function requestHeaders() { const token = $('#instance-token').value; return { 'Content-Type': 'application/json', ...(token ? { 'X-Instance-Token': token } : {}) }; }
 function credentials() { return { githubToken: $('#github-token').value.trim(), apiKey: $('#api-key').value.trim(), model: $('#model').value.trim(), provider: $('#provider').value }; }
 function aiConfigured() { const { apiKey, model } = credentials(); return Boolean(apiKey && model); }
+function serverAI() { return Boolean(state.aiAvailable && $('#instance-token').value && $('#model').value); } // The operator's key, for protected instances only.
+function analysisMode() { return document.querySelector('[name=analysis-mode]:checked')?.value || 'quick'; }
+function setMode(mode) { const input = document.querySelector(`[name=analysis-mode][value=${mode}]`); if (input) input.checked = true; $('#use-ai').checked = mode === 'genius'; updateCostNote(); }
 
 // ——— Pages and routing ———
 function showPage(page) {
@@ -78,7 +82,7 @@ async function analyze({ refresh = false, history: mode = 'push', lines = null, 
   if (state.controller) state.controller.abort();
   const controller = new AbortController(); state.controller = controller; setBusy(true);
   status('Connecting to GitHub…', { progress: 0 });
-  const input = { repository: $('#repository').value.trim(), ref: $('#ref').value.trim(), scope: $('#scope').value.trim(), maxFiles: Number($('#max-files').value) || DEFAULT_FILES, ai: $('#use-ai').checked, refresh, ...credentials() };
+  const deepAfter = analysisMode() === 'deep'; const input = { repository: $('#repository').value.trim(), ref: $('#ref').value.trim(), scope: $('#scope').value.trim(), maxFiles: Number($('#max-files').value) || DEFAULT_FILES, ai: $('#use-ai').checked, refresh, ...credentials() };
   try {
     const response = await fetch('/api/analyze', { method: 'POST', headers: requestHeaders(), body: JSON.stringify(input), signal: controller.signal });
     const result = await readAnalysisResponse(response, event => status(`${event.stage}${event.detail ? ` — ${event.detail}` : ''}`, { progress: Number.isFinite(event.read) && event.total ? event.read / event.total : null }));
@@ -88,6 +92,7 @@ async function analyze({ refresh = false, history: mode = 'push', lines = null, 
     if (location.pathname + location.search + location.hash !== path) window.history[mode === 'push' ? 'pushState' : 'replaceState']({}, '', path);
     state.displayKey = keyOf(); remember(state.displayKey, result);
     hideStatus(); showPage('repo'); showResult(); if (VIEWS.has(view)) selectView(view); applyFocus(lines);
+    if (deepAfter && !result.deep) deep.confirm(); // Deep Genius always asks before spending model calls.
   } catch (error) {
     if (state.controller !== controller) return;
     status(error.name === 'AbortError' ? 'Analysis cancelled.' : error.message, { error: error.name !== 'AbortError' });
@@ -110,7 +115,7 @@ function showResult() {
   $('#tree-search').value = ''; setFilter('all', false); renderTree(); revealInTree(repo.scope, { select: false });
   $('#tree-count').textContent = String(repo.listedEntries ?? repo.entries.length);
   $('#tree-foot').textContent = `${result.coverage.readFiles} of ${result.coverage.listedFiles} files read. Unread files are dimmed; their contents were not analyzed.${result.coverage.treeTruncated ? ' The listing is partial.' : ''}`;
-  renderGenius(); renderGuide(); fillSourceTargets(); renderInfo(); closeMenus(); extras.reset(); extractView.reset(); $('#genius-focus').hidden = true;
+  renderGenius(); renderGuide(); fillSourceTargets(); renderInfo(); closeMenus(); extras.reset(); extractView.reset(); deep.reset(); $('#genius-focus').hidden = true;
   $('[data-view=system]').dataset.ready = String(Boolean(result.ai?.graph));
   state.defaultView = result.ai?.graph ? 'system' : repo.scope && result.documented.length && !result.dependencies.length && !result.diagrams.components?.some(item => item.read && item.kind === 'source') ? 'documented' : 'architecture';
   selectView(result.ai?.graph ? 'system' : repo.scope && result.documented.length && !result.dependencies.length && !result.diagrams.components?.some(item => item.read && item.kind === 'source') ? 'documented' : 'architecture');
@@ -147,19 +152,20 @@ function diagramFor(view = state.view) {
     if (!graph) return null;
     return { key: state.drill ? `files:${state.drill}` : 'files', label: state.drill ? `Files in ${state.drill}` : 'Files and imports', source: graph.architecture, paths: graph.nodePaths || {}, legend: (graph.legend || []).map(item => ({ ...item, label: `${item.label} (${item.count})` })), legendTitle: 'Role hints from file names', basis: 'Located imports and includes', caption: `${graph.displayedFiles} files shown, ${graph.omittedNodes} omitted. Colors are file-name hints, not verified behavior.` };
   }
-  return { key: 'overview', label: 'Components', source: d.overview, paths: d.overviewPaths || {}, legend: (d.overviewLegend || []).map(item => ({ ...item, label: `${item.label} (${item.count})` })), edgeLegend: d.overviewEdges, legendTitle: 'Kinds', basis: 'Folders from the file tree; arrows from located imports', caption: `${d.components.length} components. Select one to inspect it, or switch to Files and imports for file-level detail.` };
+  return { key: 'overview', label: 'Components', source: d.overview, paths: d.overviewPaths || {}, legend: (d.overviewLegend || []).map(item => ({ ...item, label: `${item.label} (${item.count})` })), edgeLegend: d.overviewEdges, legendTitle: 'Kinds', basis: 'Folders from the file tree; arrows from located imports', caption: `${d.components.length} components. Select one to inspect it, or switch to Files and imports for file-level detail.${d.overviewTour?.length ? ' Play the tour for a guided walk from the README and entry point, built only from located evidence.' : ''}`, tour: d.overviewTour || [] };
 }
 
 async function selectView(next, { focusTab = false } = {}) {
   state.view = next; if (tourActive()) stopTour({ refit: false }); $('#system-empty').hidden = true; $('#tour-start').hidden = true; $('#tour-action').hidden = true;
   $$('#view-dock [role=tab]').forEach(tab => { const selected = tab.dataset.view === next; tab.setAttribute('aria-selected', String(selected)); tab.tabIndex = selected ? 0 : -1; if (selected && focusTab) tab.focus(); });
-  const isDiagram = ['system', 'architecture', 'mindmap', 'documented'].includes(next); $('#hierarchy-view').hidden = next !== 'hierarchy'; $('#extract-view').hidden = next !== 'extract'; $('#mindmap-mode-label').hidden = next !== 'mindmap';
+  const isDiagram = ['system', 'architecture', 'mindmap', 'documented'].includes(next); $('#hierarchy-view').hidden = next !== 'hierarchy'; $('#extract-view').hidden = next !== 'extract'; $('#pipeline-view').hidden = next !== 'pipeline'; $('#mindmap-mode-label').hidden = next !== 'mindmap';
   $('#canvas').hidden = !isDiagram; $('#source-view').hidden = next !== 'source'; $('#guide').hidden = next !== 'guide';
   $('.diagram-meta').hidden = !isDiagram; $('#diagram-legend').hidden = true;
   $('#architecture-mode-label').hidden = next !== 'architecture'; $('#drill-chip').hidden = !(next === 'architecture' && state.mode === 'files' && state.drill);
   $('#document-picker').hidden = next !== 'documented' || !state.result.documented.length;
   $('.node-action').hidden = next === 'documented';
   $('#diagram-source-link').hidden = true;
+  if (next === 'pipeline') { deep.renderPipeline(); $('#diagram-caption').textContent = 'How Genius Core coordinates three teams of three agents. Solid entries are verified at this commit; dotted entries are Genius inference.'; return; }
   if (next === 'extract') { extractView.render(); $('#diagram-caption').textContent = 'Clone the source, export project files and diagrams, skills, prompts, plans, and AI-ready knowledge. Repository text is shown as plain text.'; return; }
   if (next === 'hierarchy') { extras.renderHierarchyView(); $('#diagram-caption').textContent = 'How the software is organized: layers, components, and key files. Repository Tree shows where files are; this shows what they are for.'; return; }
   if (next === 'source') { $('#diagram-caption').textContent = 'Edit any diagram source; Preview edits renders it in its own view.'; loadSourceEditor(); return; }
@@ -175,7 +181,7 @@ async function selectView(next, { focusTab = false } = {}) {
   if (!diagram.item) $('#drill-label').textContent = state.drill ? `Files in ${state.drill}` : '';
   renderLegend(diagram, edited);
   await renderDiagram(edited ?? diagram.source, edited ? {} : diagram.paths, navigateTarget, { generated: !edited && next !== 'documented' });
-  if (state.view !== next) return; queueMicrotask(() => extras.afterRender(next)); decorate({ flowEdges: edited ? [] : diagram.flowEdges || [] }); $('#tour-start').hidden = !(next === 'system' && !edited && diagram.tour?.length); $('#tour-action').hidden = $('#tour-start').hidden;
+  if (state.view !== next) return; queueMicrotask(() => extras.afterRender(next)); decorate({ flowEdges: edited ? [] : diagram.flowEdges || [] }); $('#tour-start').hidden = !((next === 'system' || (next === 'architecture' && diagram.key === 'overview')) && !edited && diagram.tour?.length); $('#tour-action').hidden = $('#tour-start').hidden;
 }
 
 function renderLegend(diagram, edited) {
@@ -352,7 +358,7 @@ $('#layout-toggle').addEventListener('click', () => setLayout(focusLayout() ? 's
 // ——— Genius panel ———
 function renderGenius() {
   const { result } = state; const panel = $('#genius-content'); panel.replaceChildren();
-  $('#genius-mode').textContent = result.ai ? 'AI + source' : 'Source mode';
+  $('#genius-mode').textContent = result.deep ? 'Deep Genius + source' : result.ai ? 'AI + source' : 'Source mode';
   const section = (title, ...children) => { const block = el('section', 'genius-section'); block.append(el('h3', '', title), ...children); panel.append(block); };
   section('At a glance', el('p', '', result.summary));
   if (result.structure) section('Structure', el('p', '', result.structure));
@@ -450,29 +456,71 @@ document.addEventListener('keydown', event => { // "/" finds a file; Escape clos
 document.addEventListener('diagram-error', () => { if (state.view !== 'source') $('#diagram-caption').textContent = 'This diagram has a syntax problem. Open the Mermaid source tab to fix it or reset it.'; });
 
 // ——— Settings and theme ———
+function pairFor(provider) { return state.pairs[provider] || Object.fromEntries(MODEL_ROLES.map(role => [role, { role, id: PROVIDERS[provider].recommended[role].id, note: PROVIDERS[provider].recommended[role].note, available: null }])); }
+function syncModel() { const custom = $('#model-custom').value.trim(); $('#model').value = custom || pairFor($('#provider').value)[state.role].id; updateCostNote(); askControls?.refresh(); }
+function renderModelOptions() {
+  const provider = $('#provider').value; const pair = pairFor(provider);
+  $('#model-options').replaceChildren(...MODEL_ROLES.map(role => {
+    const item = pair[role]; const label = el('label', 'model-option'); const input = el('input'); input.type = 'radio'; input.name = 'model-role'; input.value = role; input.checked = state.role === role;
+    input.addEventListener('change', () => { state.role = role; syncModel(); $('#connection-status').hidden = true; });
+    const card = el('span', 'model-card'); card.append(el('strong', '', role === 'fast' ? 'Fast · economy' : 'Advanced · best quality'), el('code', '', item.id), el('small', '', item.note));
+    if (item.available === true) card.append(el('em', 'availability ok', 'Listed for your key')); else if (item.available === false) card.append(el('em', 'availability missing', 'Not listed for your key'));
+    label.append(input, card); return label;
+  }));
+}
+async function discoverModels() { // Refresh the two recommended models for the pasted key; never shows raw model lists.
+  const provider = $('#provider').value; const apiKey = $('#api-key').value.trim(); if (!checkKeyFormat(provider, apiKey).ok) return;
+  try { const response = await fetch('/api/models', { method: 'POST', headers: requestHeaders(), body: JSON.stringify({ provider, apiKey }) }); const data = await response.json(); if (!response.ok || provider !== $('#provider').value) return; state.pairs[provider] = data.pair; renderModelOptions(); syncModel(); $('#preset-note').textContent = data.source === 'bundled' ? `Recommended models checked against ${PROVIDERS[provider].name}'s documentation on ${CATALOG_CHECKED}.${data.warning ? ` ${data.warning}` : ''}` : `Availability checked for your key ${data.source === 'cached' ? '(cached)' : 'just now'}; recommendations come only from verified models.`; } catch { /* The bundled pair stays in use. */ }
+}
 function updateProvider(clearKey = false) {
-  const provider = PROVIDERS[$('#provider').value]; if (clearKey) $('#api-key').value = '';
-  $('#provider-key-label').textContent = `${provider.name} API key`; $('#model').value = provider.models[0];
-  $('#model-presets').replaceChildren(...provider.models.map(value => { const option = el('option'); option.value = value; return option; }));
-  $('#provider-docs').href = provider.docs; $('#preset-note').textContent = provider.name === 'Claude' ? 'Presets checked 28 Sep 2026' : 'Presets recorded 27 Sep 2026';
+  const provider = PROVIDERS[$('#provider').value]; if (clearKey) { $('#api-key').value = ''; $('#model-custom').value = ''; }
+  $('#provider-key-label').textContent = `${provider.name} API key`; $('#api-key').placeholder = `Paste your ${provider.name} API key (${provider.keyHint})`;
+  renderModelOptions(); syncModel(); $('#connection-status').hidden = true;
+  $('#provider-docs').href = provider.docs; $('#preset-note').textContent = `Two recommended models, checked against ${provider.name}'s documentation on ${CATALOG_CHECKED}.`;
   $('#provider-disclosure').textContent = `AI features send selected source excerpts to ${provider.name} and bill your ${provider.name} account. Nothing is sent until you choose an AI action.`;
-  updateCostNote(); askControls.refresh();
+  updateCostNote(); askControls?.refresh();
+}
+async function testConnection() {
+  const box = $('#connection-status'); const provider = $('#provider').value; const apiKey = $('#api-key').value.trim(); const model = $('#model').value.trim();
+  box.hidden = false; box.dataset.state = 'pending'; box.replaceChildren(el('strong', '', 'Testing…'));
+  try {
+    const response = await fetch('/api/provider/test', { method: 'POST', headers: requestHeaders(), body: JSON.stringify({ provider, apiKey, model }) }); const data = await response.json();
+    if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+    box.dataset.state = data.ok ? 'ok' : 'error'; const list = el('ul', 'connection-checks');
+    data.checks.forEach(check => { const row = el('li', `check-${check.status}`); row.append(icon(check.status === 'ok' ? 'check' : check.status === 'warn' ? 'info' : 'warning'), document.createTextNode(check.label)); list.append(row); });
+    box.replaceChildren(el('strong', '', data.status), ...(data.ok ? [el('span', 'subtle', `${data.providerName} · ${data.model}`)] : []), list, ...(data.suggestion ? [el('p', 'fineprint', data.suggestion)] : []));
+    if (data.ok) discoverModels();
+  } catch (error) { box.dataset.state = 'error'; box.replaceChildren(el('strong', '', 'Provider temporarily unavailable'), el('p', 'fineprint', error.message)); }
 }
 function renderSystemEmpty() {
-  const provider = PROVIDERS[$('#provider').value]; const failure = state.result?.warnings.find(item => /AI|model|provider|system maps|HTTP/.test(item) && !/lexical/.test(item));
-  const button = $('#system-generate'); button.hidden = false;
+  const provider = PROVIDERS[$('#provider').value]; const failure = state.result?.aiError; const warning = !failure && state.result?.warnings.find(item => /AI|model|provider|system maps|HTTP/.test(item) && !/lexical/.test(item));
+  const button = $('#system-generate'); button.hidden = false; $('#system-error')?.remove();
   if (aiConfigured()) { $('#system-empty-text').textContent = 'Genius reads the files already analyzed and draws the people, components, and main flow of this repository, with a guided tour. Every link is checked against this commit.'; button.textContent = `Generate with ${provider.name}`; $('#system-cost').textContent = `Uses your key: up to 110,000 characters in, at most 12,000 output tokens, model ${$('#model').value.trim()}.`; }
   else if (state.publicAI?.remainingToday) { $('#system-empty-text').textContent = 'Genius reads the files already analyzed and draws the people, components, and main flow of this repository, with a guided tour. Every link is checked against this commit.'; button.textContent = 'Generate system map'; $('#system-cost').textContent = `Free on this site (${state.publicAI.remainingToday} left today). The result is saved, so everyone who opens this commit sees it without another model call.`; }
   else { $('#system-empty-text').textContent = 'A system map needs an AI model. Add a provider key and model in API settings to generate one for this repository.'; button.textContent = 'Open API settings'; $('#system-cost').textContent = state.publicAI ? 'Today\'s free system maps on this site are used up.' : 'The site operator can also enable free, cached system maps for public repositories.'; }
-  if (failure) $('#system-cost').textContent = `Last attempt: ${failure}`;
+  if (failure) { // A provider failure is explained as what it is, never as a broken feature.
+    const card = el('div', `provider-error kind-${failure.kind}`); card.id = 'system-error'; card.setAttribute('role', 'alert');
+    card.append(el('strong', '', `${errorTitle(failure.kind)} · ${failure.providerName}`), el('p', '', failure.message), el('p', 'fineprint', `${failure.suggestion || ''} The structural analysis, tree, and every other view are unaffected.`.trim()));
+    if (['rate_limited', 'model_unavailable', 'timeout', 'provider_unavailable'].includes(failure.kind) && roleOf($('#provider').value, $('#model').value) === 'advanced') { const fast = el('button', 'quiet-button', 'Switch to the Fast model'); fast.type = 'button'; fast.addEventListener('click', () => { state.role = 'fast'; $('#model-custom').value = ''; renderModelOptions(); syncModel(); toast(`Fast model selected: ${$('#model').value}.`); renderSystemEmpty(); }); card.append(fast); }
+    $('#system-cost').after(card); button.textContent = failure.kind === 'quota_exhausted' || failure.kind === 'auth' ? 'Open API settings' : 'Try again';
+  } else if (warning) $('#system-cost').textContent = `Last attempt: ${warning}`;
 }
-$('#system-generate').addEventListener('click', () => { if (!aiConfigured() && !state.publicAI?.remainingToday) { $('#settings').showModal(); return; } $('#use-ai').checked = true; analyze({ history: 'replace' }); });
-$('#tour-start').addEventListener('click', () => startTour(diagramFor('system')?.tour));
-function updateCostNote() { const provider = PROVIDERS[$('#provider').value]; $('#ai-cost').textContent = $('#use-ai').checked ? (!aiConfigured() && state.publicAI?.remainingToday ? `Draws a system map with this site's ${state.publicAI.provider} model (${state.publicAI.remainingToday} free today). Saved maps are reused at no cost.` : aiConfigured() ? `Sends up to 110,000 characters of the files read (about 28,000 tokens) to ${provider.name}, model ${$('#model').value.trim()}, with at most 12,000 output tokens. Billed to your key.` : `Add a ${provider.name} key and model in API settings; without them you get the structural analysis only.`) : 'Structure, tree, and source links need no AI key.'; }
+$('#system-generate').addEventListener('click', () => { const kind = state.result?.aiError?.kind; if ((!aiConfigured() && !state.publicAI?.remainingToday) || kind === 'quota_exhausted' || kind === 'auth') { $('#settings').showModal(); return; } setMode('genius'); analyze({ history: 'replace' }); });
+$('#tour-start').addEventListener('click', () => startTour(diagramFor(state.view)?.tour, { onFile: path => inspect({ path, type: state.result.repository.entries.some(entry => entry.path === path && entry.type === 'tree') ? 'tree' : 'blob' }) })); // System map or component overview; supporting files open in the inspector.
+function updateCostNote() {
+  const provider = PROVIDERS[$('#provider').value]; const mode = analysisMode(); const model = $('#model').value.trim();
+  if (mode === 'quick') $('#ai-cost').textContent = 'Structure, tree, and source links need no AI key.';
+  else if (mode === 'deep') $('#ai-cost').textContent = aiConfigured() ? `Runs the Quick analysis, then asks before Deep Genius starts: up to 25 calls to ${provider.name} ${model}, at most 3 at a time. Provider usage may incur cost.` : `Deep Genius needs your ${provider.name} key in API settings. The Quick analysis still runs.`;
+  else $('#ai-cost').textContent = !aiConfigured() && state.publicAI?.remainingToday ? `Draws a system map with this site's ${state.publicAI.provider} model (${state.publicAI.remainingToday} free today). Saved maps are reused at no cost.` : aiConfigured() ? `Sends up to 110,000 characters of the files read (about 28,000 tokens) to ${provider.name}, model ${model}, with at most 12,000 output tokens. Billed to your key.` : `Add a ${provider.name} key in API settings; without it you get the structural analysis only.`;
+}
 $('#provider').addEventListener('change', () => updateProvider(true));
-['#api-key', '#model'].forEach(id => $(id).addEventListener('input', () => { updateCostNote(); askControls.refresh(); }));
+$('#api-key').addEventListener('input', () => { updateCostNote(); askControls.refresh(); $('#connection-status').hidden = true; });
+$('#api-key').addEventListener('change', discoverModels);
+$('#model-custom').addEventListener('input', syncModel);
+$('#test-connection').addEventListener('click', testConnection);
+document.querySelectorAll('[name=analysis-mode]').forEach(input => input.addEventListener('change', () => setMode(analysisMode())));
 $('#settings-open').addEventListener('click', () => $('#settings').showModal());
-$('#clear-credentials').addEventListener('click', () => { ['github-token', 'api-key', 'instance-token'].forEach(id => { $(`#${id}`).value = ''; }); state.cache.clear(); updateCostNote(); askControls.refresh(); toast('Keys removed from this tab, and cached analyses cleared.'); });
+$('#clear-credentials').addEventListener('click', () => { ['github-token', 'api-key', 'instance-token', 'model-custom'].forEach(id => { $(`#${id}`).value = ''; }); state.cache.clear(); state.pairs = {}; renderModelOptions(); syncModel(); $('#connection-status').hidden = true; updateCostNote(); askControls.refresh(); toast('Keys removed from this tab, and cached analyses cleared.'); });
 function applyTheme(theme) { document.documentElement.dataset.theme = theme; $('#theme').setAttribute('aria-label', `Switch to ${theme === 'light' ? 'dark' : 'light'} theme`); }
 try { applyTheme(localStorage.getItem('gad-theme') === 'light' ? 'light' : 'dark'); } catch { applyTheme('dark'); }
 $('#theme').addEventListener('click', () => { const theme = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'; applyTheme(theme); try { localStorage.setItem('gad-theme', theme); } catch { /* Theme still applies without storage. */ } if (state.result && ['system', 'architecture', 'mindmap', 'documented'].includes(state.view)) selectView(state.view); });
@@ -485,12 +533,13 @@ const extras = setupExtras({ state, selectView, diagramFor, inspect, revealInTre
 async function copyText(text, message = 'Copied.') { try { await navigator.clipboard.writeText(text); toast(message); } catch { toast('Copying is blocked here; use Download.'); } }
 function downloadText(name, data, type) { const url = URL.createObjectURL(new Blob([data], { type })); const anchor = el('a'); anchor.href = url; anchor.download = name; document.body.append(anchor); anchor.click(); anchor.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
 const extractView = setupExtractView({ state, headers: requestHeaders, credentials, copy: copyText, download: downloadText, openDoc });
+const deep = setupDeepGenius({ state, credentials, headers: requestHeaders, aiConfigured, serverAI, toast, selectView: view => selectView(view), inspect: (path, line) => inspect({ path, type: 'blob' }, { lines: line ? { start: line, end: line } : null }), openSettings: role => { if (role) { state.role = role; $('#model-custom').value = ''; renderModelOptions(); syncModel(); } $('#settings').showModal(); }, runAction: action => runAction(action), onComplete: () => { $('#genius-mode').textContent = 'Deep Genius + source'; extractView.reset(); if (state.view === 'extract') extractView.render(); } });
 
 // ——— Startup ———
 async function start() {
   installIcons(); $$('.site-host').forEach(element => { element.textContent = location.host; });
   updateProvider(); renderStarters($('#starter-examples'));
-  try { const response = await fetch('/api/health'); const type = response.headers.get('Content-Type') || ''; if (response.ok && type.includes('json')) { const health = await response.json(); state.maxFiles = Number(health.limits?.maxFiles) || 120; state.limits = health.limits || {}; state.publicAI = health.publicAI?.enabled ? health.publicAI : null; if (state.publicAI?.remainingToday) $('#use-ai').checked = true; updateCostNote(); $('#max-files').max = String(state.maxFiles); if (Number($('#max-files').value) > state.maxFiles) $('#max-files').value = String(state.maxFiles); } } catch { /* The analysis request reports connection problems itself. */ }
+  try { const response = await fetch('/api/health'); const type = response.headers.get('Content-Type') || ''; if (response.ok && type.includes('json')) { const health = await response.json(); state.maxFiles = Number(health.limits?.maxFiles) || 120; state.limits = health.limits || {}; state.publicAI = health.publicAI?.enabled ? health.publicAI : null; state.aiAvailable = Boolean(health.aiAvailable); if (state.publicAI?.remainingToday) setMode('genius'); updateCostNote(); $('#max-files').max = String(state.maxFiles); if (Number($('#max-files').value) > state.maxFiles) $('#max-files').value = String(state.maxFiles); } } catch { /* The analysis request reports connection problems itself. */ }
   await route();
 }
 start();

@@ -158,8 +158,9 @@ export function extractSkills(result) {
   if (result.documented.length) add('Documentation', 'Mermaid diagrams', result.documented[0].path);
   const list = [...observed.values()].sort((a, b) => a.category.localeCompare(b.category) || b.evidence.length - a.evidence.length || a.name.localeCompare(b.name));
   const categories = [...new Set(list.map(item => item.category))];
-  const recommended = categories.flatMap(category => (RECOMMEND[category] || []).map(([name, why]) => ({ category, name, why })));
-  recommended.push({ category: 'Security', name: 'Keeping credentials out of source control', why: 'Applies to every project.' });
+  const modulesFor = category => [...new Set(list.filter(item => item.category === category).flatMap(item => item.evidence).map(path => (path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : path)))].slice(0, 3); // Folders (or root files) where the category was observed.
+  const recommended = categories.flatMap(category => (RECOMMEND[category] || []).map(([name, why]) => ({ category, name, why, relatedModules: modulesFor(category), confidence: 'medium' })));
+  recommended.push({ category: 'Security', name: 'Keeping credentials out of source control', why: 'Applies to every project.', relatedModules: [], confidence: 'high' });
   const weight = category => list.filter(item => item.category === category).reduce((sum, item) => sum + item.evidence.length, 0);
   return { observed: list, recommended, priorities: categories.sort((a, b) => weight(b) - weight(a)).slice(0, 6) };
 }

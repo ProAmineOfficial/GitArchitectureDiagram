@@ -154,10 +154,44 @@ export function buildOverview(snapshot, files, edges, external = [], { maxCompon
   const folders = new Set(snapshot.entries.filter(entry => entry.type === 'tree').map(entry => entry.path));
   const scopeNodes = nodes.map(node => (node.path === '.' ? { ...node, path: scope || '.' } : node)); // The scope root maps to its folder, or to the repository root.
   if (!scope) folders.add('.');
-  const { graph } = validateGraph({ direction: 'TD', groups, nodes: scopeNodes, edges: [...pairs.values()] }, { paths, folders });
+  const tour = structuralTour({ files, shown, idOf, componentOf, pairs, topExternal, relative }); // A guided walk built only from located evidence, available without any AI key.
+  const { graph } = validateGraph({ direction: 'TD', groups, nodes: scopeNodes, edges: [...pairs.values()], tour }, { paths, folders });
   graph.nodes.forEach(node => { if (node.path === '.') node.path = ''; }); // The repository root is the empty path for source links.
   const compiled = compileGraph(graph, { title: 'Component overview. Folders come from the file tree, and arrows come only from located imports or includes.' });
   return { ...compiled, components: shown.map(component => ({ name: component.name, folder: component.folder, kind: component.kind, files: component.members.length, read: component.read, projects: component.projects })), hiddenComponents: hidden.length, externalCount: externals.size };
+}
+
+/**
+ * A deterministic guided tour of the component overview: what the README says, the entry point, the components it
+ * reaches through located imports, the external modules they use, and the build or delivery files. Every step names
+ * the files that support it; a step is "observed" only when an import or manifest line shows it.
+ */
+export function structuralTour({ files, shown, idOf, componentOf, pairs, topExternal, relative }) {
+  const steps = []; const visited = new Set(); const label = component => (component.name === '.' ? 'the top-level files' : component.label);
+  const readme = files.find(file => /(^|\/)readme(\.md)?$/i.test(file.path) && !relative(file.path).includes('/'));
+  if (readme) { const lines = readme.content.split('\n'); const index = lines.findIndex(line => line.trim().length > 20 && !/^\s*(#|!\[|\[!\[|<|```|\||-{3,})/.test(line)); const component = componentOf(readme.path); if (component) steps.push({ node: idOf(component), stage: 'start', text: index >= 0 ? `The README introduces the project: “${lines[index].trim().slice(0, 150)}”` : 'The README is the first thing a newcomer reads.', files: [readme.path], basis: 'documented' }); }
+  const declared = files.find(file => /^(Declared|Built)/.test(file.reason || ''));
+  const named = files.find(file => /(^|\/)(main|app|server|index|cli)\.(cpp|c|ino|py|[cm]?js|ts|tsx|go|rs)$/i.test(file.path));
+  const entry = declared || named; const entryComponent = entry ? componentOf(entry.path) : [...pairs.values()].map(pair => shown.find(component => idOf(component) === pair.from)).find(Boolean);
+  if (entryComponent) {
+    const manifest = declared ? (declared.reason.match(/(?:in|by) (\S+)$/) || [])[1] : '';
+    steps.push({ node: idOf(entryComponent), stage: 'entry', text: entry ? `${entry.path} is where execution starts${declared ? ` — ${declared.reason.charAt(0).toLowerCase()}${declared.reason.slice(1)}` : ', judging by its file name'}.` : `${label(entryComponent)} is the component with the most outgoing imports.`, files: [entry?.path, manifest].filter(Boolean), basis: declared ? 'observed' : 'inferred' });
+    visited.add(idOf(entryComponent));
+    const queue = [idOf(entryComponent)];
+    while (queue.length && steps.length < 10) { // Follow located imports outward from the entry component.
+      const from = queue.shift();
+      for (const pair of [...pairs.values()].filter(item => item.from === from && item.to.startsWith('c_') && !visited.has(item.to)).sort((a, b) => b.count - a.count)) {
+        const target = shown.find(component => idOf(component) === pair.to); if (!target) continue; visited.add(pair.to); queue.push(pair.to);
+        const source = shown.find(component => idOf(component) === from);
+        steps.push({ node: pair.to, stage: target.kind === 'data' ? 'state' : steps.some(step => step.stage === 'control') ? 'component' : 'control', text: `${label(source)} ${pair.label === 'includes' ? 'includes' : 'imports'} ${label(target)}: ${pair.count} located reference${pair.count === 1 ? '' : 's'}, the first at ${pair.evidencePath}:${pair.evidenceLine}.`, files: [pair.evidencePath], basis: 'observed' });
+        if (steps.length >= 10) break;
+      }
+    }
+  }
+  topExternal.slice(0, 2).forEach(([name, item], index) => { if (steps.length >= 11) return; const [, usage] = [...item.from][0] || []; if (usage) steps.push({ node: `x_${index}`, stage: 'external', text: `${name} is an external dependency, imported ${item.total} time${item.total === 1 ? '' : 's'}.`, files: [usage.path], basis: 'observed' }); });
+  const delivery = shown.find(component => ['automation', 'tests'].includes(component.kind) && !visited.has(idOf(component)));
+  if (delivery && steps.length < 12) steps.push({ node: idOf(delivery), stage: 'output', text: `${label(delivery)} ${delivery.kind === 'tests' ? 'holds the tests that check the result' : 'defines how the project is built, tested, or shipped'}.`, files: delivery.members.slice(0, 2), basis: 'observed' });
+  return steps.length >= 3 ? steps : [];
 }
 
 /**

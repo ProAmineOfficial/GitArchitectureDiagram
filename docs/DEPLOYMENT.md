@@ -103,8 +103,8 @@ Remove `HOST=127.0.0.1` from a copied `.env` or change it to `HOST=0.0.0.0` when
 | Variable | Purpose |
 | --- | --- |
 | `GITHUB_TOKEN` | Optional server token for public-repository API allowance. It is not a way to expose private repositories to anonymous users. |
-| `GENIUS_PROVIDER` | `openai` (default), `anthropic`, `gemini`, or `kimi`. |
-| `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `MOONSHOT_API_KEY` | Optional server key for the configured provider. A different selected provider cannot reuse it. |
+| `GENIUS_PROVIDER` | `openai` (default), `anthropic`, `gemini`, `kimi`, or `deepseek`. |
+| `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `MOONSHOT_API_KEY`, `DEEPSEEK_API_KEY` | Optional server key for the configured provider. A different selected provider cannot reuse it. |
 | `GENIUS_MODEL` | Explicit provider model ID; no default model or price is assumed. |
 | `GENIUS_ACCESS_TOKEN` | Shared instance password. When set, every analysis/search request needs it. Required before web requests can use the server-side AI key. |
 | `PUBLIC_ORIGIN` | Canonical externally visible origin used for browser request validation. |

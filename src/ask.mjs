@@ -3,7 +3,8 @@
 // The hosted Worker keeps no sessions, so the client sends bounded excerpts; every citation in the
 // answer is checked against those excerpt line ranges before it is shown.
 import { AppError, boundedJson, GitHubReader, encodePath } from './github.mjs';
-import { providerRequest, providerOutput, PROVIDERS } from './providers.mjs';
+import { PROVIDERS } from './providers.mjs';
+import { callProviderJSON } from './provider-errors.mjs';
 
 export const ASK_LIMITS = { question: 600, excerpts: 12, excerptCharacters: 4000, totalCharacters: 32000, outputTokens: 3000 }; // Disclosed in the interface before sending.
 const string = { type: 'string' };
@@ -63,17 +64,13 @@ export async function verifyCitations(findings, { repository, commit, githubToke
 /** Ask the configured provider one grounded question. */
 export async function askGenius(input, { apiKey, model, provider = 'openai', signal, fetchImpl = fetch, githubToken = '' }) {
   const request = validateAskInput(input);
-  if (!Object.hasOwn(PROVIDERS, provider)) throw new AppError(400, 'Choose OpenAI, Claude, Gemini, or Kimi in API settings.');
+  if (!Object.hasOwn(PROVIDERS, provider)) throw new AppError(400, 'Choose OpenAI, Claude, Gemini, Kimi, or DeepSeek in API settings.');
   if (!apiKey || !model) throw new AppError(400, 'Asking Genius needs a provider API key and model ID in API settings. Keyword search works without them.');
   if (typeof model !== 'string' || !/^[A-Za-z0-9._:-]{1,120}$/.test(model) || typeof apiKey !== 'string' || apiKey.length > 1024) throw new AppError(400, 'Invalid AI settings.');
   const payload = { repository: request.repository, commit: request.commit, question: request.question, excerpts: request.excerpts.map(item => ({ path: item.path, lines: `${item.startLine}-${item.endLine}`, source: item.text.split('\n').map((line, index) => `${item.startLine + index}: ${line}`).join('\n') })) };
-  const call = providerRequest(provider, { apiKey, model, instructions, payload, schema, name: 'genius_answer', maxTokens: ASK_LIMITS.outputTokens });
-  const timeout = signal ? AbortSignal.any([signal, AbortSignal.timeout(60000)]) : AbortSignal.timeout(60000);
-  let response; try { response = await fetchImpl(call.url, { method: 'POST', redirect: 'manual', signal: timeout, headers: call.headers, body: JSON.stringify(call.body) }); } catch { if (signal?.aborted) throw new AppError(408, 'The question was cancelled.'); throw new AppError(502, `${PROVIDERS[provider].name} could not be reached, or did not answer within 60 seconds.`); }
-  if (!response.ok) { await response.body?.cancel().catch(() => {}); const help = response.status === 429 ? 'Check your provider quota or try later.' : [401, 403].includes(response.status) ? 'Check your API key and model access.' : 'Check the model ID and provider status.'; throw new AppError(502, `${PROVIDERS[provider].name} returned HTTP ${response.status}. ${help}`); }
-  const data = await boundedJson(response, 1000000).catch(error => { throw new AppError(502, `${PROVIDERS[provider].name} returned an unreadable response. ${error.message}`); });
-  const output = providerOutput(provider, data);
-  let parsed; try { parsed = JSON.parse(output.text); } catch { throw new AppError(502, 'The answer could not be parsed. Try again or choose another model.'); }
+  let parsed; let output;
+  try { const answer = await callProviderJSON(provider, { apiKey, model, instructions, payload, schema, name: 'genius_answer', maxTokens: ASK_LIMITS.outputTokens }, { fetchImpl, signal, timeoutMs: 60000 }); parsed = answer.parsed; output = answer; }
+  catch (error) { if (error.kind === 'cancelled') throw new AppError(408, 'The question was cancelled.'); throw error; } // Classified, display-safe provider errors.
   const shaped = validateAnswer(parsed); const verification = await verifyCitations(shaped.findings, { repository: request.repository, commit: request.commit, githubToken, fetchImpl, signal });
   return { ...shaped, findings: verification.findings, verification: { method: 'Fetched from GitHub at the analyzed commit', filesChecked: verification.checked, verified: verification.findings.filter(item => item.verified).length, inferred: verification.findings.filter(item => !item.verified).length }, provider, providerName: PROVIDERS[provider].name, model: output.model || model, usage: output.usage || null, sent: { excerpts: request.excerpts.length, characters: request.excerpts.reduce((sum, item) => sum + item.text.length, 0) } };
 }

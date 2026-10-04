@@ -29,6 +29,10 @@ export const BASES = {
   inferred: { label: 'AI interpretation — review the evidence', arrow: '-.->' },
 };
 
+// Guided-tour stages, in the order a newcomer asks about a system.
+export const TOUR_STAGES = ['start', 'entry', 'control', 'component', 'data', 'external', 'state', 'output', 'other'];
+export const TOUR_LIMITS = { min: 3, max: 12, files: 4 };
+
 const ID = /^[A-Za-z][A-Za-z0-9_-]{0,47}$/; // Model-supplied identifiers are validated before use.
 
 /** Escape untrusted text for a quoted Mermaid label; structural characters are removed. */
@@ -69,9 +73,14 @@ export function validateGraph(raw, { paths, folders, lineLimits = new Map() }) {
     edges.push({ from: item.from, to: item.to, label: labelText(item.label || '', 40), basis: basis !== 'inferred' && !hasEvidence && !item.count ? 'inferred' : basis, count: Number.isInteger(item.count) ? item.count : null, evidence: hasEvidence ? { path: evidencePath, line } : null });
   }
   const tour = [];
-  for (const step of (Array.isArray(raw.tour) ? raw.tour : []).slice(0, 8)) { // A guided walk through the main flow, validated like everything else.
+  for (const step of (Array.isArray(raw.tour) ? raw.tour : []).slice(0, TOUR_LIMITS.max)) { // A guided walk through the main flow, validated like everything else.
     if (!step || !nodeIds.has(step.node) || typeof step.text !== 'string' || !step.text.trim() || tour.at(-1)?.node === step.node) { if (step) discarded.push('A tour step referred to a missing node or had no text.'); continue; }
-    tour.push({ node: step.node, text: step.text.replace(/[\x00-\x1f]/g, ' ').trim().slice(0, 280) });
+    const cited = (Array.isArray(step.files) ? step.files : []).filter(file => typeof file === 'string').map(file => file.replace(/^\/+|\/+$/g, ''));
+    const files = [...new Set(cited.filter(file => paths.has(file) || folders.has(file)))].slice(0, TOUR_LIMITS.files); // Only paths in this commit become supporting files.
+    if (cited.length > files.length) discarded.push(`A tour step cited ${cited.length - files.length} path${cited.length - files.length > 1 ? 's' : ''} not in this commit; ${cited.length - files.length > 1 ? 'they were' : 'it was'} removed.`);
+    const claimed = ['observed', 'documented', 'inferred'].includes(step.basis) ? step.basis : 'inferred';
+    const basis = claimed !== 'inferred' && !files.length ? 'inferred' : claimed; // A sourced claim needs at least one verified file.
+    tour.push({ node: step.node, stage: TOUR_STAGES.includes(step.stage) ? step.stage : 'other', text: step.text.replace(/[\x00-\x1f]/g, ' ').trim().slice(0, 280), files, basis });
   }
   const steps = new Set(tour.slice(1).map((step, index) => `${tour[index].node}>${step.node}`));
   edges.forEach(edge => { edge.flow = steps.has(`${edge.from}>${edge.to}`) || steps.has(`${edge.to}>${edge.from}`); }); // Edges along the tour carry the animated flow.
@@ -111,7 +120,7 @@ export function compileGraph(graph, { title = '' } = {}) {
   const used = new Set(graph.nodes.map(node => node.kind));
   const legend = Object.entries(KINDS).filter(([kind]) => used.has(kind)).map(([kind, style]) => ({ role: kind, label: style.label, fill: style.fill, stroke: style.stroke, count: graph.nodes.filter(node => node.kind === kind).length, dashed: Boolean(style.dashed) }));
   const edgeLegend = Object.entries(BASES).filter(([basis]) => graph.edges.some(edge => edge.basis === basis)).map(([basis, style]) => ({ basis, label: style.label, arrow: style.arrow, count: graph.edges.filter(edge => edge.basis === basis).length }));
-  const tour = (graph.tour || []).map(step => ({ id: ids.get(step.node), label: graph.nodes.find(node => node.id === step.node)?.label || '', text: step.text }));
+  const tour = (graph.tour || []).map(step => { const node = graph.nodes.find(item => item.id === step.node); return { id: ids.get(step.node), label: node?.label || '', text: step.text, stage: step.stage || 'other', files: step.files || [], basis: step.basis || 'inferred', path: node?.path || '' }; });
   const flowEdges = graph.edges.filter(edge => edge.flow).map(edge => [ids.get(edge.from), ids.get(edge.to)]);
   return { mermaid: lines.join('\n'), nodePaths, legend, edgeLegend, nodes: graph.nodes, edges: graph.edges, groups: graph.groups, tour, flowEdges };
 }

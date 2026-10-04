@@ -3,7 +3,7 @@
 // plus Copy all and Download. Files come from the analysis (instant) or the full archive (one GitHub request).
 // Repository text is always inserted with textContent.
 import { runAction, exportDiagramFor } from './extras.js';
-import { cloneCommand } from './knowledge.js';
+import { cloneCommand, engineeringPrompt, skillsMarkdown, hierarchyMermaid } from './knowledge.js';
 import { icon } from './icons.js';
 import { DEFAULT_EXCLUDE, SIZE_CHOICES, compileFilter, parsePatterns, isCredentialPath, isBinaryPath, statistics, sections, allText, asMarkdown, formatBytes, estimateTokens } from './extract-core.js';
 
@@ -40,10 +40,19 @@ function note() {
     : `Uses the ${result.files.length} files the analysis already read, out of ${result.coverage.listedFiles}. Instant, with no extra GitHub requests.`;
 }
 
-const CARDS = [['clone', 'Clone Repository', 'The git command for this exact commit', 'branch'], ['files', 'Project Files', 'Summary, statistics, structure, important files, contents', 'file'], ['diagrams', 'Project Diagrams', 'PNG, SVG, Mermaid, README picture and badge', 'dock-diagrams'], ['skills', 'Project Skills', 'Observed and recommended development skills', 'layers'], ['genius', 'Genius', 'Development prompt, blueprint, roadmap, and plans', 'spark'], ['context', 'AI / Developer Context', 'AI-ready context, developer, knowledge, and reconstruction packs', 'dock-export-project']];
+const CARDS = [['genius-pack', 'Genius Development Pack', 'The .gitarchitecture folder: architecture, findings, validated fixes, skills, prompt, roadmap, evidence', 'dock-agents'], ['clone', 'Clone Repository', 'The git command for this exact commit', 'branch'], ['files', 'Project Files', 'Summary, statistics, structure, important files, contents', 'file'], ['diagrams', 'Project Diagrams', 'PNG, SVG, Mermaid, README picture and badge', 'dock-diagrams'], ['skills', 'Project Skills', 'Observed and recommended development skills', 'layers'], ['genius', 'Genius', 'Development prompt, blueprint, roadmap, and plans', 'spark'], ['context', 'AI / Developer Context', 'AI-ready context, developer, knowledge, and reconstruction packs', 'dock-export-project']];
 function actionButton(label, handler, iconName) { const button = el('button', 'xp-action'); button.type = 'button'; if (iconName) button.append(icon(iconName)); button.append(document.createTextNode(label)); button.addEventListener('click', handler); return button; }
 function cardBody(id) {
   const { result } = api.state; const repo = result.repository; const body = el('div', 'xp-body');
+  if (id === 'genius-pack') {
+    const deep = result.deep; const base = `${repo.repo}-${repo.sha.slice(0, 7)}`;
+    const status = el('p', 'subtle', deep ? `Includes Deep Genius (${deep.provider} · ${deep.model}): ${deep.findings.length} findings, ${deep.solutions.filter(item => item.status === 'APPROVED').length} validated solutions, ${deep.unresolved.length} unresolved. Verified evidence and Genius inference are labeled throughout.` : 'Structural analysis only. Run Deep Genius from the Genius panel to add audit findings, validated solutions, and the extracted development pack.');
+    const pack = el('div', 'xp-actions'); pack.append(actionButton('Download Genius Development Pack (.zip)', () => runAction('genius-pack'), 'download'));
+    const prompt = el('div', 'xp-actions'); prompt.append(actionButton('Copy Development Prompt', () => api.copy(engineeringPrompt(result), 'Development prompt copied.'), 'link'), actionButton('Download Development Prompt', () => api.download(`${base}-DEVELOPMENT_PROMPT.md`, engineeringPrompt(result), 'text/markdown;charset=utf-8'), 'download'));
+    const skills = el('div', 'xp-actions'); skills.append(actionButton('Copy Skills', () => api.copy(skillsMarkdown(result), 'Development skills copied.'), 'link'), actionButton('Download Skills', () => api.download(`${base}-DEVELOPMENT_SKILLS.md`, skillsMarkdown(result), 'text/markdown;charset=utf-8'), 'download'));
+    const diagrams = el('div', 'xp-actions wrap'); [['Download Architecture Mermaid', 'ARCHITECTURE.mmd', () => result.diagrams.overview || result.diagrams.architecture], ['Download System Map Mermaid', 'SYSTEM_MAP.mmd', () => result.ai?.graph?.mermaid || `%% No AI system map was generated; component overview instead.\n${result.diagrams.overview || result.diagrams.architecture}`], ['Download Software Hierarchy', 'SOFTWARE_HIERARCHY.mmd', () => hierarchyMermaid(result.hierarchy.source.root)], ['Download Mind Map', 'REPOSITORY_MIND_MAP.mmd', () => result.diagrams.conceptMindmap || result.diagrams.mindmap]].forEach(([label, file, text]) => diagrams.append(actionButton(label, () => api.download(`${base}-${file}`, `${text()}\n`, 'text/plain;charset=utf-8'), 'code')));
+    body.append(status, pack, el('h4', 'xp-sub', 'Development prompt'), prompt, el('h4', 'xp-sub', 'Development skills'), skills, el('h4', 'xp-sub', 'Diagrams'), diagrams, el('p', 'fineprint', 'OVERVIEW, ARCHITECTURE, SYSTEM_MAP, SOFTWARE_HIERARCHY, REPOSITORY_MIND_MAP, CRITICAL_FILES, READING_ORDER, AUDIT_FINDINGS, VALIDATED_SOLUTIONS, DEVELOPMENT_SKILLS, DEVELOPMENT_PROMPT, APP_BLUEPRINT, IMPLEMENTATION_ROADMAP, AI_READY_CONTEXT, RECONSTRUCTION_GUIDE, PROJECT_KNOWLEDGE.json, EVIDENCE.json, and manifest.json. No credential is ever included.'));
+  }
   if (id === 'clone') {
     const command = cloneCommand(repo); const pre = el('pre', 'extract-pre clone-command'); pre.textContent = command;
     const row = el('div', 'xp-actions'); row.append(actionButton('Copy Clone Command', () => api.copy(command, 'Clone command copied.'), 'link'));
