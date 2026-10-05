@@ -7,6 +7,7 @@
 // Reports file, line, and credential type only. A real value is never printed. Exits 1 when anything is found.
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
 import { findSecrets } from '../public/secret-scan.js';
 
 const FORBIDDEN_FILE = /(^|\/)(\.env(\..+)?|id_rsa|id_ed25519|credentials\.json|secrets\.json)$|\.(pem|key|p12|pfx)$/i; // Secret-bearing files must never be tracked.
@@ -38,7 +39,7 @@ export function scanHistory() {
   return findings;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) { // Run as a command on any OS (Windows paths are not file:// URLs).
   const tree = scanTree(); const history = process.argv.includes('--history') ? scanHistory() : [];
   for (const item of tree) console.log(`tree    ${item.file}${item.line ? `:${item.line}` : ''}  ${item.type}`);
   for (const item of history) console.log(`history ${item.commit} ${item.file}  ${item.type}`);

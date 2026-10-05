@@ -9,7 +9,7 @@
 // embedded raster) and writes glyphs.json, which the footer reads to show the glyph instead of the monogram.
 import { readFile, writeFile, access } from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { NETWORKS } from '../public/social-dock.js';
 
 const DIRECTORY = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public', 'assets', 'brand', 'social');
@@ -35,7 +35,7 @@ export async function buildManifest(directory = DIRECTORY) {
   return { manifest: { version: 1, glyphs }, problems };
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) { // Run as a command on any OS (Windows paths are not file:// URLs).
   const { manifest, problems } = await buildManifest();
   for (const problem of problems) console.error(`Skipped ${problem}`);
   await writeFile(path.join(DIRECTORY, 'glyphs.json'), JSON.stringify(manifest, null, 2) + '\n');

@@ -1,6 +1,7 @@
 // Project: Git Architecture Diagram | Security and provenance: secret scanning, export redaction, provenance record, /api/version.
 import test from 'node:test'; import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs'; import { execFileSync } from 'node:child_process';
+import { readFileSync, readdirSync } from 'node:fs'; import { execFileSync, spawnSync } from 'node:child_process';
+const lines = file => readFileSync(file, 'utf8').split(/\r?\n/).map(line => line.trim()); // LF or CRLF, as Git checked the file out.
 import './support/no-autostart.mjs';
 import { createAppServer } from '../server.mjs'; import { createWorker } from '../worker.mjs';
 import { PROVENANCE } from '../src/provenance.mjs';
@@ -19,7 +20,7 @@ test('the provenance record is public, complete, identical in both copies, and h
   const file = JSON.parse(readFileSync('PROVENANCE.json', 'utf8')); assert.deepEqual(file, JSON.parse(JSON.stringify(PROVENANCE)));
   for (const key of ['project', 'creator', 'organization', 'canonicalRepository', 'canonicalWebsite', 'firstReleaseYear', 'license', 'provenanceVersion']) assert.ok(file[key], key);
   assert.equal(file.creator, 'Amine Saoud ibn al-Bashir'); assert.equal(file.organization, 'Pro_Amine LLC'); assert.equal(file.license, 'MIT'); assert.equal(file.firstReleaseYear, 2026);
-  assert.match(readFileSync('LICENSE', 'utf8'), /^MIT License\n/); assert.deepEqual(findSecrets(JSON.stringify(file)), []);
+  assert.match(readFileSync('LICENSE', 'utf8'), /^MIT License\r?\n/); assert.deepEqual(findSecrets(JSON.stringify(file)), []); // LICENSE may be checked out with CRLF on Windows; the file itself is not changed.
   const notice = readFileSync('NOTICE.md', 'utf8'); assert.match(notice, /Pro_Amine LLC/); assert.match(notice, /MIT/); for (const name of ['mermaid', 'DOMPurify', 'marked', 'fflate', 'IBM Plex']) assert.match(notice, new RegExp(name), name);
   const guide = readFileSync('PROVENANCE.md', 'utf8'); for (const id of Object.keys(file.identifiers)) assert.match(guide, new RegExp(id), id);
   assert.match(guide, /not a tracking/i);
@@ -64,8 +65,9 @@ test('exports replace credential-shaped values with a visible marker, and the Ge
 
 test('the repository is clean: no tracked secret-bearing file, no credential in the tree, strict ignore rules, least-privilege CI', () => {
   assert.deepEqual(scanTree(), []);
-  const tracked = execFileSync('git', ['ls-files'], { encoding: 'utf8' }).split('\n'); assert.ok(!tracked.some(path => /(^|\/)\.env$/.test(path))); assert.ok(tracked.includes('.env.example'));
-  const ignore = readFileSync('.gitignore', 'utf8').split('\n'); for (const rule of ['.env', '.env.*', '!.env.example', '*.pem', '*.key', '*.p12', '*.pfx', 'id_rsa', 'id_ed25519', 'credentials.json', 'secrets.json']) assert.ok(ignore.includes(rule), rule);
-  for (const line of readFileSync('.env.example', 'utf8').split('\n')) if (/(_KEY|_TOKEN|PASSWORD)=/.test(line)) assert.match(line, /=$/, `${line.split('=')[0]} must be an empty placeholder`);
-  const ci = readFileSync('.github/workflows/ci.yml', 'utf8'); assert.match(ci, /^permissions:\n {2}contents: read$/m); assert.ok(!/secrets\./.test(ci)); assert.match(ci, /npm run scan:secrets/); assert.match(ci, /persist-credentials: false/);
+  const tracked = execFileSync('git', ['ls-files'], { encoding: 'utf8' }).split(/\r?\n/).filter(Boolean); assert.ok(!tracked.some(path => /(^|\/)\.env$/.test(path)), 'a .env file is tracked by Git'); assert.ok(tracked.includes('.env.example'));
+  assert.equal(spawnSync('git', ['check-ignore', '-q', '.env']).status, 0, '.env must be ignored by Git'); // A local, ignored .env is allowed; its contents are never read.
+  const ignore = lines('.gitignore'); for (const rule of ['.env', '.env.*', '!.env.example', '*.pem', '*.key', '*.p12', '*.pfx', 'id_rsa', 'id_ed25519', 'credentials.json', 'secrets.json']) assert.ok(ignore.includes(rule), rule);
+  for (const line of lines('.env.example')) if (/(_KEY|_TOKEN|PASSWORD)=/.test(line)) assert.match(line, /=$/, `${line.split('=')[0]} must be an empty placeholder`);
+  const ci = readFileSync('.github/workflows/ci.yml', 'utf8').replace(/\r\n/g, '\n'); assert.match(ci, /^permissions:\n {2}contents: read$/m); assert.ok(!/secrets\./.test(ci)); assert.match(ci, /npm run scan:secrets/); assert.match(ci, /persist-credentials: false/);
 });

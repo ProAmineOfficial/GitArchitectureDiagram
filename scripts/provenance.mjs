@@ -8,6 +8,7 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
+import { pathToFileURL } from 'node:url';
 import { versionInfo, sourceDigest, SOURCE_PATTERN, cleanCommit } from '../src/provenance.mjs';
 import { VERSION } from '../src/github.mjs';
 
@@ -20,7 +21,7 @@ export async function buildIdentity() {
   return { commit, digest: files.length ? await sourceDigest(files.map(path => [path, readFileSync(path)])) : null };
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) { // Run as a command on any OS (Windows paths are not file:// URLs).
   const { commit, digest } = await buildIdentity();
   console.log(JSON.stringify(await versionInfo({ commit, digest, runtime: 'node' }), null, 2));
   if (process.argv.includes('--checksums')) {
