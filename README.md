@@ -602,7 +602,7 @@ Brand assets and their provenance are listed in [docs/BRAND.md](docs/BRAND.md).
 
 ## License
 
-MIT License. See [LICENSE](LICENSE) and [NOTICE.md](NOTICE.md).
+AGPL-3.0 License. See [LICENSE](LICENSE) and [NOTICE.md](NOTICE.md).
 
 Official builds can be verified with public provenance: [PROVENANCE.md](PROVENANCE.md) describes the stable identifiers, `PROVENANCE.json`, and the `/api/version` build fingerprint.
 
@@ -610,5 +610,5 @@ Official builds can be verified with public provenance: [PROVENANCE.md](PROVENAN
 
 ## Credits
 
-Built by **Amine Saoud ibn al-Bashir**  
+© 2026 Pro_Amine LLC · Created & Developed **Amine Saoud ibn al-Bashir**  
 **ProAmineOfficial / Pro_Amine LLC**
