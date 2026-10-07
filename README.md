@@ -7,7 +7,7 @@ Git Architecture Diagram transforms a GitHub repository into an interactive, dia
 Replace the GitHub hostname with your Git Architecture Diagram hostname and open the same repository path as an analysis workspace.
 
 Created by **Amine Saoud ibn al-Bashir** — **ProAmineOfficial / Pro_Amine LLC**.  
-Open source under the **MIT License**.
+Open source under the **AGPL-3.0 license**.
 
 ---
 
