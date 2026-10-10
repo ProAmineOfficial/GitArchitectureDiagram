@@ -6,7 +6,7 @@
 // Pure functions only, so the same rules are unit-tested in Node and used by the browser.
 
 export const DEFAULT_FILES = 32; // The file budget used when a link does not specify one.
-const PAGES = { '': 'home', examples: 'browse', browse: 'browse' }; // Application pages that are not repositories.
+const PAGES = { '': 'home', examples: 'browse', browse: 'browse', new: 'idea' }; // Application pages that are not repositories. GitHub reserves /new, so it never names an owner.
 const SEGMENT = /^[A-Za-z0-9_.-]+$/; // GitHub owner and repository name characters.
 
 /** Parse a GitHub-style line anchor such as #L12 or #L12-L20. */
@@ -28,7 +28,7 @@ const encodePath = value => value.split('/').filter(Boolean).map(encodeURICompon
 
 /**
  * Parse a workspace location.
- * @returns {{page: 'home'|'browse'} | {page: 'repo', owner: string, repo: string, kind: string, rest: string, repository: string, ref: string, scope: string, files: number|null, lines: object|null} | {page: 'invalid', reason: string}}
+ * @returns {{page: 'home'|'browse'|'idea'} | {page: 'repo', owner: string, repo: string, kind: string, rest: string, repository: string, ref: string, scope: string, files: number|null, lines: object|null} | {page: 'invalid', reason: string}}
  */
 export function parseRoute(pathname = '/', search = '', hash = '') {
   const parts = String(pathname).split('/').filter(Boolean).map(decode);

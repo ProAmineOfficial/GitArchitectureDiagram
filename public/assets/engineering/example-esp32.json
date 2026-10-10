@@ -1,0 +1,1306 @@
+{
+  "schema": "gad.project/1",
+  "id": "prj_example_esp32",
+  "title": "ESP32 sensor development board",
+  "summary": "A compact ESP32-WROOM-32E development board powered and programmed over USB-C, with an on-board BME280 environmental sensor, a status LED, a user button, and a Qwiic expansion connector. The firmware serves temperature, humidity, and pressure as JSON over Wi-Fi.",
+  "createdAt": "2026-10-10T12:00:00.000Z",
+  "updatedAt": "2026-10-10T12:00:00.000Z",
+  "origin": {
+    "mode": "example",
+    "idea": "Design a new ESP32 development board with Wi-Fi, sensors, power management, schematic, PCB, firmware and a complete engineering development pack.",
+    "repository": null
+  },
+  "domains": [
+    "embedded",
+    "electronics",
+    "software"
+  ],
+  "targets": [
+    {
+      "id": "esp32",
+      "kind": "mcu",
+      "name": "ESP32-WROOM-32E"
+    }
+  ],
+  "requirements": [
+    {
+      "id": "R1",
+      "text": "Use an ESP32 module with Wi-Fi and Bluetooth.",
+      "kind": "functional",
+      "source": "user",
+      "priority": "must"
+    },
+    {
+      "id": "R2",
+      "text": "Measure temperature, humidity, and pressure with an on-board sensor.",
+      "kind": "functional",
+      "source": "user",
+      "priority": "must"
+    },
+    {
+      "id": "R3",
+      "text": "Program and debug over one USB-C cable, with automatic reset into the bootloader.",
+      "kind": "functional",
+      "source": "ai-proposed",
+      "priority": "must"
+    },
+    {
+      "id": "R4",
+      "text": "Power from USB-C 5 V and regulate 3.3 V with headroom for Wi-Fi transmit peaks (at least 500 mA).",
+      "kind": "constraint",
+      "source": "user-confirmed",
+      "priority": "must"
+    },
+    {
+      "id": "R5",
+      "text": "Provide a status LED and a user button.",
+      "kind": "functional",
+      "source": "ai-proposed",
+      "priority": "should"
+    },
+    {
+      "id": "R6",
+      "text": "The firmware reads the sensor and serves the readings over Wi-Fi.",
+      "kind": "functional",
+      "source": "user",
+      "priority": "must"
+    },
+    {
+      "id": "R7",
+      "text": "Protect the USB data lines against electrostatic discharge.",
+      "kind": "non-functional",
+      "source": "ai-proposed",
+      "priority": "should"
+    },
+    {
+      "id": "R8",
+      "text": "Offer a 3.3 V Qwiic (I2C) expansion connector.",
+      "kind": "interface",
+      "source": "ai-proposed",
+      "priority": "should"
+    },
+    {
+      "id": "R9",
+      "text": "Board outline no larger than 55 × 28 mm on a 2-layer PCB.",
+      "kind": "constraint",
+      "source": "assumed",
+      "priority": "should"
+    },
+    {
+      "id": "R10",
+      "text": "Keep the module antenna keep-out area free of copper.",
+      "kind": "constraint",
+      "source": "ai-proposed",
+      "priority": "must"
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "A1",
+      "text": "No battery: the board runs from USB power only.",
+      "source": "assumed"
+    },
+    {
+      "id": "A2",
+      "text": "The Arduino framework on PlatformIO is acceptable for the first firmware.",
+      "source": "assumed"
+    }
+  ],
+  "questions": [
+    {
+      "id": "Q1",
+      "question": "Should the board run from a battery?",
+      "why": "A battery adds a charger, a power path, and changes the regulator choice.",
+      "default": "No battery; USB power only.",
+      "answer": null
+    },
+    {
+      "id": "Q2",
+      "question": "What supply voltage range must the board accept?",
+      "why": "It decides between an LDO and a buck regulator.",
+      "default": "USB 5 V only.",
+      "answer": "USB-C 5 V only."
+    }
+  ],
+  "components": [
+    {
+      "id": "C1",
+      "name": "ESP32-WROOM-32E module",
+      "kind": "hardware",
+      "description": "Wi-Fi/Bluetooth MCU module with 4 MB flash and PCB antenna.",
+      "satisfies": [
+        "R1",
+        "R10"
+      ],
+      "dependsOn": [
+        "C5"
+      ],
+      "partNumber": "ESP32-WROOM-32E-N4",
+      "source": "ai-proposed"
+    },
+    {
+      "id": "C2",
+      "name": "USB-C receptacle",
+      "kind": "hardware",
+      "description": "Power input and USB data, sink role with 5.1 kΩ CC pull-downs.",
+      "satisfies": [
+        "R3",
+        "R4"
+      ],
+      "dependsOn": [],
+      "partNumber": "USB4105-GF-A",
+      "source": "ai-proposed"
+    },
+    {
+      "id": "C3",
+      "name": "CP2102N USB-UART bridge",
+      "kind": "hardware",
+      "description": "USB to UART for flashing and the serial console.",
+      "satisfies": [
+        "R3"
+      ],
+      "dependsOn": [
+        "C2",
+        "C5"
+      ],
+      "partNumber": "CP2102N-A02-GQFN24",
+      "source": "ai-proposed"
+    },
+    {
+      "id": "C4",
+      "name": "Auto-reset circuit",
+      "kind": "hardware",
+      "description": "Two NPN transistors driving EN and GPIO0 from DTR/RTS.",
+      "satisfies": [
+        "R3"
+      ],
+      "dependsOn": [
+        "C3"
+      ],
+      "partNumber": "MMBT3904",
+      "source": "ai-proposed"
+    },
+    {
+      "id": "C5",
+      "name": "3.3 V regulator",
+      "kind": "hardware",
+      "description": "600 mA LDO from USB VBUS.",
+      "satisfies": [
+        "R4"
+      ],
+      "dependsOn": [
+        "C2"
+      ],
+      "partNumber": "AP2112K-3.3TRG1",
+      "source": "ai-proposed"
+    },
+    {
+      "id": "C6",
+      "name": "BME280 sensor",
+      "kind": "hardware",
+      "description": "Temperature, humidity, and pressure sensor on I2C (0x76).",
+      "satisfies": [
+        "R2"
+      ],
+      "dependsOn": [
+        "C5"
+      ],
+      "partNumber": "BME280",
+      "source": "ai-proposed"
+    },
+    {
+      "id": "C7",
+      "name": "Status LED",
+      "kind": "hardware",
+      "description": "Green LED with a 1 kΩ series resistor.",
+      "satisfies": [
+        "R5"
+      ],
+      "dependsOn": [],
+      "partNumber": null,
+      "source": "ai-proposed"
+    },
+    {
+      "id": "C8",
+      "name": "Buttons (EN, BOOT, USER)",
+      "kind": "hardware",
+      "description": "Three tactile switches to GND.",
+      "satisfies": [
+        "R3",
+        "R5"
+      ],
+      "dependsOn": [],
+      "partNumber": "PTS810 SJM 250 SMTR LFS",
+      "source": "ai-proposed"
+    },
+    {
+      "id": "C9",
+      "name": "Qwiic connector",
+      "kind": "hardware",
+      "description": "4-pin 1.0 mm JST SH connector: GND, 3V3, SDA, SCL.",
+      "satisfies": [
+        "R8"
+      ],
+      "dependsOn": [
+        "C5"
+      ],
+      "partNumber": "SM04B-SRSS-TB(LF)(SN)",
+      "source": "ai-proposed"
+    },
+    {
+      "id": "C10",
+      "name": "USB ESD protection",
+      "kind": "hardware",
+      "description": "TVS array on D+/D− next to the connector.",
+      "satisfies": [
+        "R7"
+      ],
+      "dependsOn": [
+        "C2"
+      ],
+      "partNumber": "USBLC6-2SC6",
+      "source": "ai-proposed"
+    },
+    {
+      "id": "C11",
+      "name": "Firmware",
+      "kind": "firmware",
+      "description": "Arduino firmware: sensor readout, Wi-Fi provisioning over serial, JSON endpoint.",
+      "satisfies": [
+        "R6",
+        "R5"
+      ],
+      "dependsOn": [
+        "C1",
+        "C6"
+      ],
+      "partNumber": null,
+      "source": "ai-proposed"
+    },
+    {
+      "id": "C12",
+      "name": "PCB",
+      "kind": "document",
+      "description": "2-layer 55 × 28 mm board specification for an EDA tool.",
+      "satisfies": [
+        "R9",
+        "R10"
+      ],
+      "dependsOn": [],
+      "partNumber": null,
+      "source": "ai-proposed"
+    }
+  ],
+  "interfaces": [
+    {
+      "id": "I1",
+      "from": "C2",
+      "to": "C10",
+      "kind": "usb",
+      "signals": [
+        "D+",
+        "D-"
+      ],
+      "voltage": 3.3,
+      "levelShifted": false,
+      "description": "USB data through the ESD array."
+    },
+    {
+      "id": "I2",
+      "from": "C10",
+      "to": "C3",
+      "kind": "usb",
+      "signals": [
+        "D+",
+        "D-"
+      ],
+      "voltage": 3.3,
+      "levelShifted": false,
+      "description": "Protected USB data to the bridge."
+    },
+    {
+      "id": "I3",
+      "from": "C2",
+      "to": "C5",
+      "kind": "power",
+      "signals": [
+        "VBUS"
+      ],
+      "voltage": 5,
+      "levelShifted": false,
+      "description": "5 V input to the regulator."
+    },
+    {
+      "id": "I4",
+      "from": "C5",
+      "to": "C1",
+      "kind": "power",
+      "signals": [
+        "3V3"
+      ],
+      "voltage": 3.3,
+      "levelShifted": false,
+      "description": "3.3 V rail."
+    },
+    {
+      "id": "I5",
+      "from": "C3",
+      "to": "C1",
+      "kind": "uart",
+      "signals": [
+        "TXD→RX0",
+        "RXD←TX0"
+      ],
+      "voltage": 3.3,
+      "levelShifted": false,
+      "description": "Flashing and console."
+    },
+    {
+      "id": "I6",
+      "from": "C3",
+      "to": "C4",
+      "kind": "gpio",
+      "signals": [
+        "DTR",
+        "RTS"
+      ],
+      "voltage": 3.3,
+      "levelShifted": false,
+      "description": "Modem lines for auto-reset."
+    },
+    {
+      "id": "I7",
+      "from": "C4",
+      "to": "C1",
+      "kind": "gpio",
+      "signals": [
+        "EN",
+        "GPIO0"
+      ],
+      "voltage": 3.3,
+      "levelShifted": false,
+      "description": "Reset and boot-mode control."
+    },
+    {
+      "id": "I8",
+      "from": "C1",
+      "to": "C6",
+      "kind": "i2c",
+      "signals": [
+        "SDA",
+        "SCL"
+      ],
+      "voltage": 3.3,
+      "levelShifted": false,
+      "description": "Sensor bus."
+    },
+    {
+      "id": "I9",
+      "from": "C1",
+      "to": "C9",
+      "kind": "i2c",
+      "signals": [
+        "SDA",
+        "SCL"
+      ],
+      "voltage": 3.3,
+      "levelShifted": false,
+      "description": "Expansion bus."
+    },
+    {
+      "id": "I10",
+      "from": "C1",
+      "to": "C7",
+      "kind": "gpio",
+      "signals": [
+        "LED_STATUS"
+      ],
+      "voltage": 3.3,
+      "levelShifted": false,
+      "description": "Status LED."
+    },
+    {
+      "id": "I11",
+      "from": "C8",
+      "to": "C1",
+      "kind": "gpio",
+      "signals": [
+        "EN",
+        "BOOT",
+        "USER"
+      ],
+      "voltage": 3.3,
+      "levelShifted": false,
+      "description": "Buttons."
+    },
+    {
+      "id": "I12",
+      "from": "C2",
+      "to": "C1",
+      "kind": "adc",
+      "signals": [
+        "VBUS_SENSE"
+      ],
+      "voltage": 3.3,
+      "levelShifted": false,
+      "description": "VBUS through a 100k/100k divider (2.5 V at 5 V)."
+    }
+  ],
+  "pinMap": [
+    {
+      "gpio": 0,
+      "signal": "BOOT_BUTTON",
+      "component": "C8",
+      "direction": "input",
+      "voltage": 3.3
+    },
+    {
+      "gpio": 1,
+      "signal": "UART0_TX",
+      "component": "C3",
+      "direction": "output",
+      "voltage": 3.3
+    },
+    {
+      "gpio": 3,
+      "signal": "UART0_RX",
+      "component": "C3",
+      "direction": "input",
+      "voltage": 3.3
+    },
+    {
+      "gpio": 13,
+      "signal": "USER_BUTTON",
+      "component": "C8",
+      "direction": "input",
+      "voltage": 3.3
+    },
+    {
+      "gpio": 21,
+      "signal": "I2C_SDA",
+      "component": "C6",
+      "direction": "bidirectional",
+      "voltage": 3.3
+    },
+    {
+      "gpio": 21,
+      "signal": "I2C_SDA",
+      "component": "C9",
+      "direction": "bidirectional",
+      "voltage": 3.3
+    },
+    {
+      "gpio": 22,
+      "signal": "I2C_SCL",
+      "component": "C6",
+      "direction": "output",
+      "voltage": 3.3
+    },
+    {
+      "gpio": 22,
+      "signal": "I2C_SCL",
+      "component": "C9",
+      "direction": "output",
+      "voltage": 3.3
+    },
+    {
+      "gpio": 25,
+      "signal": "LED_STATUS",
+      "component": "C7",
+      "direction": "output",
+      "voltage": 3.3
+    },
+    {
+      "gpio": 34,
+      "signal": "VBUS_SENSE",
+      "component": "C2",
+      "direction": "analog",
+      "voltage": 3.3
+    }
+  ],
+  "bom": [
+    {
+      "ref": "U1",
+      "component": "C1",
+      "partNumber": "ESP32-WROOM-32E-N4",
+      "description": "ESP32 Wi-Fi/Bluetooth module, 4 MB flash",
+      "quantity": 1
+    },
+    {
+      "ref": "J1",
+      "component": "C2",
+      "partNumber": "USB4105-GF-A",
+      "description": "USB-C receptacle",
+      "quantity": 1
+    },
+    {
+      "ref": "U2",
+      "component": "C3",
+      "partNumber": "CP2102N-A02-GQFN24",
+      "description": "USB to UART bridge",
+      "quantity": 1
+    },
+    {
+      "ref": "Q1,Q2",
+      "component": "C4",
+      "partNumber": "MMBT3904",
+      "description": "NPN transistor (auto-reset)",
+      "quantity": 2
+    },
+    {
+      "ref": "U3",
+      "component": "C5",
+      "partNumber": "AP2112K-3.3TRG1",
+      "description": "3.3 V 600 mA LDO",
+      "quantity": 1
+    },
+    {
+      "ref": "U4",
+      "component": "C6",
+      "partNumber": "BME280",
+      "description": "Environmental sensor",
+      "quantity": 1
+    },
+    {
+      "ref": "D1",
+      "component": "C7",
+      "partNumber": "",
+      "description": "Green LED 0603",
+      "quantity": 1
+    },
+    {
+      "ref": "SW1,SW2,SW3",
+      "component": "C8",
+      "partNumber": "PTS810 SJM 250 SMTR LFS",
+      "description": "Tactile switch",
+      "quantity": 3
+    },
+    {
+      "ref": "J2",
+      "component": "C9",
+      "partNumber": "SM04B-SRSS-TB(LF)(SN)",
+      "description": "Qwiic connector",
+      "quantity": 1
+    },
+    {
+      "ref": "U5",
+      "component": "C10",
+      "partNumber": "USBLC6-2SC6",
+      "description": "USB ESD protection",
+      "quantity": 1
+    }
+  ],
+  "diagrams": [
+    {
+      "id": "D1",
+      "title": "System architecture",
+      "kind": "architecture",
+      "mermaid": "flowchart LR\n  USB[\"USB-C J1\"] --> ESD[\"USBLC6 ESD\"]\n  ESD --> UART[\"CP2102N USB-UART\"]\n  USB --> LDO[\"AP2112K 3.3 V LDO\"]\n  LDO --> MCU[\"ESP32-WROOM-32E\"]\n  UART -->|\"TX/RX\"| MCU\n  UART -->|\"DTR/RTS\"| RST[\"Auto-reset Q1/Q2\"]\n  RST -->|\"EN/GPIO0\"| MCU\n  MCU -->|\"I2C\"| BME[\"BME280\"]\n  MCU -->|\"I2C\"| QW[\"Qwiic J2\"]\n  MCU --> LED[\"Status LED\"]\n  BTN[\"EN / BOOT / USER\"] --> MCU\n  MCU -.->|\"Wi-Fi JSON\"| NET[\"Phone or laptop\"]"
+    },
+    {
+      "id": "D2",
+      "title": "Power tree",
+      "kind": "power",
+      "mermaid": "flowchart TD\n  VBUS[\"USB-C VBUS 5 V\"] --> LDO[\"AP2112K-3.3, 600 mA\"]\n  VBUS --> DIV[\"100k/100k divider to GPIO34\"]\n  LDO --> R3V3[\"3V3 rail\"]\n  R3V3 --> MCU[\"ESP32 module, about 500 mA peak\"]\n  R3V3 --> CP[\"CP2102N\"]\n  R3V3 --> BME[\"BME280\"]\n  R3V3 --> QW[\"Qwiic 3V3\"]"
+    },
+    {
+      "id": "D3",
+      "title": "Firmware states",
+      "kind": "state",
+      "mermaid": "stateDiagram-v2\n  [*] --> Boot\n  Boot --> Provision: no saved Wi-Fi or USER held\n  Boot --> Connect: saved Wi-Fi\n  Provision --> Connect\n  Connect --> Serving: connected\n  Connect --> SerialOnly: timeout\n  Serving --> Serving: read sensor every 2 s\n  SerialOnly --> SerialOnly: read sensor every 2 s"
+    }
+  ],
+  "artifacts": [
+    {
+      "id": "F1",
+      "path": "firmware/platformio.ini",
+      "kind": "config",
+      "class": "native-source",
+      "language": "ini",
+      "tool": "PlatformIO",
+      "purpose": "PlatformIO build configuration for the ESP32 (Arduino framework).",
+      "content": "; PlatformIO project for the ESP32 sensor development board.\n; Build: pio run -e esp32dev    Upload: pio run -e esp32dev -t upload    Monitor: pio device monitor\n[env:esp32dev]\nplatform = espressif32\nboard = esp32dev\nframework = arduino\nmonitor_speed = 115200\nupload_speed = 921600\nlib_deps =\n    adafruit/Adafruit BME280 Library@^2.2.4\n    adafruit/Adafruit Unified Sensor@^1.1.14\nbuild_flags =\n    -D CORE_DEBUG_LEVEL=1\n",
+      "status": "syntax_checked",
+      "relatesTo": [
+        "C11",
+        "R6"
+      ],
+      "history": [
+        {
+          "at": "2026-10-10T12:00:00.000Z",
+          "by": "example",
+          "note": "Prepared example file."
+        }
+      ]
+    },
+    {
+      "id": "F2",
+      "path": "firmware/include/pins.h",
+      "kind": "source",
+      "class": "native-source",
+      "language": "c",
+      "tool": "PlatformIO",
+      "purpose": "Pin assignments shared by the firmware and the PCB specification.",
+      "content": "// Pin assignments for the ESP32 sensor development board (ESP32-WROOM-32E).\n// Keep this file identical to the pin map in docs/PCB_SPECIFICATION.md.\n#ifndef BOARD_PINS_H\n#define BOARD_PINS_H\n\n#define PIN_BOOT_BUTTON 0   // BOOT button to GND (strapping pin: released = normal boot)\n#define PIN_UART0_TX 1      // To CP2102N RXD (flashing and console)\n#define PIN_UART0_RX 3      // From CP2102N TXD\n#define PIN_USER_BUTTON 13  // User button to GND, internal pull-up\n#define PIN_I2C_SDA 21      // BME280 and Qwiic connector\n#define PIN_I2C_SCL 22      // BME280 and Qwiic connector\n#define PIN_LED_STATUS 25   // Green status LED through 1 kOhm to GND\n#define PIN_VBUS_SENSE 34   // USB VBUS through a 100k/100k divider (ADC1, input only)\n\n#endif  // BOARD_PINS_H\n",
+      "status": "structurally_checked",
+      "relatesTo": [
+        "C11"
+      ],
+      "history": [
+        {
+          "at": "2026-10-10T12:00:00.000Z",
+          "by": "example",
+          "note": "Prepared example file."
+        }
+      ]
+    },
+    {
+      "id": "F3",
+      "path": "firmware/include/config.h",
+      "kind": "source",
+      "class": "native-source",
+      "language": "c",
+      "tool": "PlatformIO",
+      "purpose": "Firmware settings (sensor address, timing, HTTP port).",
+      "content": "// Firmware settings for the ESP32 sensor development board.\n// Wi-Fi credentials are never compiled in: they are entered once over the serial console and kept in NVS.\n#ifndef BOARD_CONFIG_H\n#define BOARD_CONFIG_H\n\n#define BME280_I2C_ADDRESS 0x76        // SDO tied to GND on this board\n#define SENSOR_PERIOD_MS 2000UL        // How often the sensor is read\n#define HTTP_PORT 80                   // Readings are served at http://<board-ip>/readings\n#define VBUS_DIVIDER_RATIO 2.0f        // 100k/100k divider on PIN_VBUS_SENSE\n#define WIFI_CONNECT_TIMEOUT_MS 15000UL\n\n#endif  // BOARD_CONFIG_H\n",
+      "status": "structurally_checked",
+      "relatesTo": [
+        "C11"
+      ],
+      "history": [
+        {
+          "at": "2026-10-10T12:00:00.000Z",
+          "by": "example",
+          "note": "Prepared example file."
+        }
+      ]
+    },
+    {
+      "id": "F4",
+      "path": "firmware/src/main.cpp",
+      "kind": "source",
+      "class": "native-source",
+      "language": "cpp",
+      "tool": "PlatformIO",
+      "purpose": "Firmware: sensor readout, Wi-Fi provisioning over serial, JSON endpoint.",
+      "content": "// Firmware for the ESP32 sensor development board: reads a BME280 over I2C and serves the readings as JSON on Wi-Fi.\n// Wi-Fi credentials are entered over the serial console on first boot (or after holding USER for 3 s at start-up)\n// and stored in NVS with the Preferences library, so no credential is ever part of the source code.\n#include <Arduino.h>\n#include <Wire.h>\n#include <WiFi.h>\n#include <WebServer.h>\n#include <Preferences.h>\n#include <Adafruit_BME280.h>\n#include \"pins.h\"\n#include \"config.h\"\n\nstatic Adafruit_BME280 bme;\nstatic WebServer server(HTTP_PORT);\nstatic Preferences prefs;\nstatic bool sensorReady = false;\nstatic float temperatureC = NAN, humidityPct = NAN, pressureHpa = NAN;\nstatic unsigned long lastRead = 0;\n\n// Read one line from the serial console, echoing characters, until Enter.\nstatic String readLine(const char *prompt) {\n  Serial.print(prompt);\n  String line;\n  while (true) {\n    while (!Serial.available()) delay(10);\n    char c = Serial.read();\n    if (c == '\\r' || c == '\\n') { if (line.length()) break; else continue; }\n    line += c;\n    Serial.print(c);\n  }\n  Serial.println();\n  return line;\n}\n\n// Ask for Wi-Fi credentials and keep them in NVS.\nstatic void provisionWifi() {\n  Serial.println(\"Wi-Fi setup: enter the network name and passphrase.\");\n  String ssid = readLine(\"SSID: \");\n  String pass = readLine(\"Passphrase: \");\n  prefs.putString(\"ssid\", ssid);\n  prefs.putString(\"pass\", pass);\n}\n\nstatic bool connectWifi() {\n  String ssid = prefs.getString(\"ssid\", \"\");\n  if (!ssid.length()) return false;\n  WiFi.mode(WIFI_STA);\n  WiFi.begin(ssid.c_str(), prefs.getString(\"pass\", \"\").c_str());\n  unsigned long start = millis();\n  while (WiFi.status() != WL_CONNECTED && millis() - start < WIFI_CONNECT_TIMEOUT_MS) {\n    digitalWrite(PIN_LED_STATUS, !digitalRead(PIN_LED_STATUS));  // Blink while connecting\n    delay(250);\n  }\n  digitalWrite(PIN_LED_STATUS, WiFi.status() == WL_CONNECTED ? HIGH : LOW);\n  return WiFi.status() == WL_CONNECTED;\n}\n\nstatic float vbusVolts() {\n  return analogReadMilliVolts(PIN_VBUS_SENSE) / 1000.0f * VBUS_DIVIDER_RATIO;\n}\n\nstatic void handleReadings() {\n  String json = \"{\";\n  json += \"\\\"temperature_c\\\":\" + String(temperatureC, 2) + \",\";\n  json += \"\\\"humidity_pct\\\":\" + String(humidityPct, 1) + \",\";\n  json += \"\\\"pressure_hpa\\\":\" + String(pressureHpa, 1) + \",\";\n  json += \"\\\"vbus_v\\\":\" + String(vbusVolts(), 2) + \",\";\n  json += \"\\\"sensor_ok\\\":\" + String(sensorReady ? \"true\" : \"false\");\n  json += \"}\";\n  server.send(200, \"application/json\", json);\n}\n\nvoid setup() {\n  Serial.begin(115200);\n  pinMode(PIN_LED_STATUS, OUTPUT);\n  pinMode(PIN_USER_BUTTON, INPUT_PULLUP);\n  analogSetPinAttenuation(PIN_VBUS_SENSE, ADC_11db);\n  prefs.begin(\"board\", false);\n\n  Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL);\n  sensorReady = bme.begin(BME280_I2C_ADDRESS, &Wire);\n  if (!sensorReady) Serial.println(\"BME280 not found: check the sensor and the I2C pull-ups.\");\n\n  bool forceSetup = digitalRead(PIN_USER_BUTTON) == LOW;  // Hold USER at power-up to re-enter Wi-Fi setup\n  if (forceSetup || !prefs.getString(\"ssid\", \"\").length()) provisionWifi();\n  if (connectWifi()) {\n    Serial.print(\"Readings at http://\");\n    Serial.print(WiFi.localIP());\n    Serial.println(\"/readings\");\n  } else {\n    Serial.println(\"Wi-Fi not connected; readings stay on the serial console.\");\n  }\n  server.on(\"/readings\", handleReadings);\n  server.begin();\n}\n\nvoid loop() {\n  server.handleClient();\n  if (millis() - lastRead >= SENSOR_PERIOD_MS) {\n    lastRead = millis();\n    if (sensorReady) {\n      temperatureC = bme.readTemperature();\n      humidityPct = bme.readHumidity();\n      pressureHpa = bme.readPressure() / 100.0f;\n      Serial.printf(\"T=%.2f C  RH=%.1f %%  P=%.1f hPa  VBUS=%.2f V\\n\", temperatureC, humidityPct, pressureHpa, vbusVolts());\n    }\n  }\n}\n",
+      "status": "structurally_checked",
+      "relatesTo": [
+        "C11",
+        "R2",
+        "R5",
+        "R6"
+      ],
+      "history": [
+        {
+          "at": "2026-10-10T12:00:00.000Z",
+          "by": "example",
+          "note": "Prepared example file."
+        }
+      ]
+    },
+    {
+      "id": "F5",
+      "path": "docs/PCB_SPECIFICATION.md",
+      "kind": "specification",
+      "class": "specification",
+      "language": "markdown",
+      "tool": "KiCad or Altium (to be captured)",
+      "purpose": "Hardware specification to capture in an EDA tool.",
+      "content": "# PCB specification: ESP32 sensor development board\n\nStatus: **specification for an EDA tool** (KiCad or Altium). It is not a schematic or a layout, and nothing here has been reviewed by an engineer or built.\n\n## 1. Board summary\n\n| Item | Value |\n|---|---|\n| Module | ESP32-WROOM-32E-N4 (4 MB flash, PCB antenna) |\n| Size | 55 × 28 mm, 2 layers, 1.6 mm FR-4, 1 oz copper |\n| Power | USB-C 5 V (VBUS) → AP2112K-3.3 LDO → 3.3 V |\n| Programming | CP2102N USB-UART with DTR/RTS auto-reset (two MMBT3904) |\n| Sensor | Bosch BME280 on I2C, address 0x76 |\n| Expansion | Qwiic connector (I2C, 3.3 V), 2 × 10 pin headers at 2.54 mm |\n\n## 2. Power tree\n\n- USB-C VBUS (5 V) → USBLC6-2SC6 (ESD on D+/D−) and a 5.1 kΩ pull-down on each CC pin (sink role).\n- VBUS → AP2112K-3.3TRG1 (600 mA) → 3V3 rail. Input 10 µF, output 10 µF + 0.1 µF at the module.\n- ESP32 Wi-Fi transmit peaks reach about 500 mA: keep the 3V3 trace ≥ 0.5 mm and add a 22 µF bulk capacitor close to the module.\n- LDO dissipation at 5 V → 3.3 V and 0.5 A is about 0.85 W in bursts: give the SOT-23-5 a copper pour on both layers with vias (see risk K1).\n\n## 3. Pin map\n\n| GPIO | Signal | Connected to | Notes |\n|---|---|---|---|\n| 0 | BOOT_BUTTON | SW2 to GND, auto-reset Q2 | Strapping pin: must be high at reset for normal boot (10 kΩ pull-up inside the module) |\n| 1 | UART0_TX | CP2102N RXD | Flashing and console |\n| 3 | UART0_RX | CP2102N TXD | Flashing and console |\n| 13 | USER_BUTTON | SW3 to GND | Internal pull-up |\n| 21 | I2C_SDA | BME280 SDA, Qwiic | 4.7 kΩ pull-up to 3V3 |\n| 22 | I2C_SCL | BME280 SCL, Qwiic | 4.7 kΩ pull-up to 3V3 |\n| 25 | LED_STATUS | D1 through 1 kΩ | Active high |\n| 34 | VBUS_SENSE | 100 kΩ / 100 kΩ divider from VBUS | ADC1, input only |\n| EN | RESET | SW1 to GND, auto-reset Q1, 10 kΩ pull-up, 1 µF to GND | |\n\n## 4. Layout rules\n\n- Antenna keep-out: no copper, traces, or components under or within 15 mm in front of the module antenna; place the module at the board edge with the antenna overhanging or over a cut-out (ESP32-WROOM-32E datasheet, PCB layout section).\n- Continuous ground plane on the bottom layer; stitch with vias around the module's GND pads.\n- USB D+/D− as a 90 Ω differential pair, short and away from the antenna.\n- Decoupling capacitors within 2 mm of their supply pins.\n\n## 5. Manufacturing notes\n\n- Fabrication: JLCPCB/PCBWay standard 2-layer process, HASL lead-free, green solder mask.\n- Assembly: all parts on the top side; the module is the heaviest part and is placed last by hand if needed.\n- Test points on 3V3, VBUS, GND, EN, GPIO0, TXD, RXD.\n",
+      "status": "requires_physical_testing",
+      "relatesTo": [
+        "C12",
+        "R4",
+        "R9",
+        "R10"
+      ],
+      "history": [
+        {
+          "at": "2026-10-10T12:00:00.000Z",
+          "by": "example",
+          "note": "Prepared example file."
+        }
+      ]
+    },
+    {
+      "id": "F6",
+      "path": "hardware/bom.csv",
+      "kind": "bom",
+      "class": "interoperable",
+      "language": "csv",
+      "tool": null,
+      "purpose": "Bill of materials.",
+      "content": "Ref,Quantity,Part number,Description,Component\nU1,1,ESP32-WROOM-32E-N4,ESP32 Wi-Fi/Bluetooth module 4 MB flash,C1\nJ1,1,USB4105-GF-A,USB-C receptacle 16 pin,C2\nU2,1,CP2102N-A02-GQFN24,USB to UART bridge,C3\n\"Q1,Q2\",2,MMBT3904,NPN transistor for auto-reset,C4\nU3,1,AP2112K-3.3TRG1,3.3 V 600 mA LDO regulator,C5\nU4,1,BME280,Temperature humidity pressure sensor,C6\nD1,1,,Green LED 0603,C7\n\"SW1,SW2,SW3\",3,PTS810 SJM 250 SMTR LFS,Tactile switch (EN BOOT USER),C8\nJ2,1,SM04B-SRSS-TB(LF)(SN),Qwiic connector 4 pin 1.0 mm,C9\nU5,1,USBLC6-2SC6,USB ESD protection,C10\n",
+      "status": "syntax_checked",
+      "relatesTo": [
+        "C12"
+      ],
+      "history": [
+        {
+          "at": "2026-10-10T12:00:00.000Z",
+          "by": "example",
+          "note": "Prepared example file."
+        }
+      ]
+    },
+    {
+      "id": "F7",
+      "path": "docs/TEST_PLAN.md",
+      "kind": "test-plan",
+      "class": "specification",
+      "language": "markdown",
+      "tool": null,
+      "purpose": "How each requirement will be verified.",
+      "content": "# Test plan: ESP32 sensor development board\n\nEvery test below is **planned**: none has been run. Record results here as you run them.\n\n| Test | Verifies | Method | Tool | Procedure | Result |\n|---|---|---|---|---|---|\n| T1 | R6 | Build | PlatformIO | cd firmware && pio run -e esp32dev | Not run |\n| T2 | R4 | Bench test | Bench supply, oscilloscope | Power from USB-C; measure 3V3 during Wi-Fi transmit; ripple and droop must stay within 3.0–3.6 V | Not run |\n| T3 | R3 | Bench test | PlatformIO, USB-C cable | Upload firmware without pressing buttons; auto-reset must enter the bootloader | Not run |\n| T4 | R2 | Bench test | Reference thermometer/hygrometer | Compare readings after 10 minutes of warm-up | Not run |\n| T5 | R10 | Inspection | EDA tool | Check the antenna keep-out area on all copper layers | Not run |\n| T6 | R7 | Review | EDA tool | USBLC6 placed next to J1, D+/D− routed through it | Not run |\n| T7 | R1, R6 | Bench test | Phone or laptop on the same Wi-Fi | Open http://board-ip/readings; JSON updates every 2 s | Not run |\n| T8 | R5 | Bench test | — | LED blinks while connecting; holding USER at power-up enters Wi-Fi setup | Not run |\n| T9 | R8 | Inspection | Qwiic cable, known Qwiic sensor | Pin order GND, 3V3, SDA, SCL; device appears on an I2C scan | Not run |\n| T10 | R9 | Inspection | EDA tool | Board outline 55 × 28 mm, two layers | Not run |\n",
+      "status": "structurally_checked",
+      "relatesTo": [
+        "T1",
+        "T2",
+        "T3"
+      ],
+      "history": [
+        {
+          "at": "2026-10-10T12:00:00.000Z",
+          "by": "example",
+          "note": "Prepared example file."
+        }
+      ]
+    },
+    {
+      "id": "F8",
+      "path": "README.md",
+      "kind": "documentation",
+      "class": "conceptual",
+      "language": "markdown",
+      "tool": null,
+      "purpose": "Project overview.",
+      "content": "# ESP32 sensor development board\n\nAn example engineering project from Git Architecture Diagram's \"Start from an Idea\" workspace. The design, firmware, and documents are proposals: they have structural and rule checks (see the validation report) but have not been built, compiled, or tested.\n\n- firmware/: PlatformIO project (Arduino framework). Build with `pio run -e esp32dev`.\n- docs/PCB_SPECIFICATION.md: the hardware specification to capture in an EDA tool.\n- hardware/bom.csv: bill of materials.\n- docs/TEST_PLAN.md: how each requirement will be verified.\n",
+      "status": "structurally_checked",
+      "relatesTo": [],
+      "history": [
+        {
+          "at": "2026-10-10T12:00:00.000Z",
+          "by": "example",
+          "note": "Prepared example file."
+        }
+      ]
+    }
+  ],
+  "validationPlan": [
+    {
+      "id": "T1",
+      "title": "Firmware builds",
+      "verifies": [
+        "R6"
+      ],
+      "method": "build",
+      "tool": "PlatformIO",
+      "procedure": "cd firmware && pio run -e esp32dev"
+    },
+    {
+      "id": "T2",
+      "title": "3V3 rail under Wi-Fi transmit",
+      "verifies": [
+        "R4"
+      ],
+      "method": "bench-test",
+      "tool": "Oscilloscope",
+      "procedure": "Measure 3V3 droop during Wi-Fi bursts; stay within 3.0–3.6 V."
+    },
+    {
+      "id": "T3",
+      "title": "Automatic bootloader entry",
+      "verifies": [
+        "R3"
+      ],
+      "method": "bench-test",
+      "tool": "PlatformIO",
+      "procedure": "Upload without pressing any button."
+    },
+    {
+      "id": "T4",
+      "title": "Sensor accuracy",
+      "verifies": [
+        "R2"
+      ],
+      "method": "bench-test",
+      "tool": "Reference instruments",
+      "procedure": "Compare with references after warm-up."
+    },
+    {
+      "id": "T5",
+      "title": "Antenna keep-out",
+      "verifies": [
+        "R10"
+      ],
+      "method": "inspection",
+      "tool": "EDA tool",
+      "procedure": "Check every copper layer under and in front of the antenna."
+    },
+    {
+      "id": "T6",
+      "title": "ESD protection placement",
+      "verifies": [
+        "R7"
+      ],
+      "method": "review",
+      "tool": "EDA tool",
+      "procedure": "USBLC6 next to J1 with D+/D− routed through it."
+    },
+    {
+      "id": "T7",
+      "title": "Readings over Wi-Fi",
+      "verifies": [
+        "R1",
+        "R6"
+      ],
+      "method": "bench-test",
+      "tool": "Browser on the same network",
+      "procedure": "Open http://board-ip/readings and watch the values update."
+    },
+    {
+      "id": "T8",
+      "title": "LED and button",
+      "verifies": [
+        "R5"
+      ],
+      "method": "bench-test",
+      "tool": null,
+      "procedure": "LED blinks while connecting; holding USER at power-up enters Wi-Fi setup."
+    },
+    {
+      "id": "T9",
+      "title": "Qwiic pin order and bus",
+      "verifies": [
+        "R8"
+      ],
+      "method": "inspection",
+      "tool": "Qwiic sensor",
+      "procedure": "GND, 3V3, SDA, SCL; device found by an I2C scan."
+    },
+    {
+      "id": "T10",
+      "title": "Board outline",
+      "verifies": [
+        "R9"
+      ],
+      "method": "inspection",
+      "tool": "EDA tool",
+      "procedure": "55 × 28 mm, two layers."
+    }
+  ],
+  "risks": [
+    {
+      "id": "K1",
+      "text": "LDO dissipation reaches about 0.85 W during Wi-Fi bursts.",
+      "severity": "medium",
+      "mitigation": "Copper pour with vias under the regulator; move to a buck regulator if the board gets warm in T2."
+    },
+    {
+      "id": "K2",
+      "text": "An enclosure or nearby copper can detune the PCB antenna.",
+      "severity": "medium",
+      "mitigation": "Respect the keep-out (T5) and test range in the final enclosure."
+    },
+    {
+      "id": "K3",
+      "text": "GPIO0 is a strapping pin shared with the BOOT button and the auto-reset circuit.",
+      "severity": "low",
+      "mitigation": "Keep the module's pull-up and avoid other loads on GPIO0."
+    }
+  ],
+  "milestones": [
+    {
+      "id": "M1",
+      "title": "Schematic capture from the specification",
+      "deliverables": [
+        "F5",
+        "F6"
+      ],
+      "dependsOn": []
+    },
+    {
+      "id": "M2",
+      "title": "PCB layout and design review",
+      "deliverables": [
+        "F5"
+      ],
+      "dependsOn": [
+        "M1"
+      ]
+    },
+    {
+      "id": "M3",
+      "title": "Firmware bring-up",
+      "deliverables": [
+        "F1",
+        "F2",
+        "F3",
+        "F4"
+      ],
+      "dependsOn": []
+    },
+    {
+      "id": "M4",
+      "title": "Prototype bench validation",
+      "deliverables": [
+        "F7"
+      ],
+      "dependsOn": [
+        "M2",
+        "M3"
+      ]
+    }
+  ],
+  "validation": {
+    "schema": "gad.validation/1",
+    "generatedAt": "2026-10-10T12:00:00.000Z",
+    "engineVersion": "0.1.0",
+    "summary": {
+      "pass": 22,
+      "warn": 1,
+      "fail": 0,
+      "notRun": 3
+    },
+    "checks": [
+      {
+        "limitation": "",
+        "recommendation": "",
+        "id": "V1-REQUIRED",
+        "tier": 1,
+        "title": "Required project fields are present",
+        "target": "project",
+        "tool": "genius-engine structure check",
+        "status": "pass",
+        "evidence": "schema, id, title, origin, requirements, components, and artifacts are present.",
+        "tierName": "Schema and structure"
+      },
+      {
+        "limitation": "",
+        "recommendation": "",
+        "id": "V1-UNIQUE-IDS",
+        "tier": 1,
+        "title": "Every ID is unique across the project",
+        "target": "project",
+        "tool": "genius-engine structure check",
+        "status": "pass",
+        "evidence": "66 IDs, no duplicates.",
+        "tierName": "Schema and structure"
+      },
+      {
+        "limitation": "",
+        "recommendation": "",
+        "id": "V1-REFERENCES",
+        "tier": 1,
+        "title": "Every reference points to an existing item",
+        "target": "project",
+        "tool": "genius-engine structure check",
+        "status": "pass",
+        "evidence": "All requirement, component, interface, pin, BOM, test, and artifact references resolve.",
+        "tierName": "Schema and structure"
+      },
+      {
+        "limitation": "",
+        "recommendation": "",
+        "id": "V2-SATISFIED",
+        "tier": 2,
+        "title": "Every must/should requirement is assigned to a component",
+        "target": "project",
+        "tool": "genius-engine traceability check",
+        "status": "pass",
+        "evidence": "10 requirements, each assigned to at least one component.",
+        "tierName": "Requirements traceability"
+      },
+      {
+        "limitation": "",
+        "recommendation": "",
+        "id": "V2-VERIFIED",
+        "tier": 2,
+        "title": "Every must/should requirement has a planned verification",
+        "target": "project",
+        "tool": "genius-engine traceability check",
+        "status": "pass",
+        "evidence": "10 requirements, each covered by the validation plan.",
+        "tierName": "Requirements traceability"
+      },
+      {
+        "limitation": "",
+        "recommendation": "",
+        "id": "V3-CYCLES",
+        "tier": 3,
+        "title": "Component dependencies have no cycles",
+        "target": "project",
+        "tool": "genius-engine consistency check",
+        "status": "pass",
+        "evidence": "12 components, acyclic dependency graph.",
+        "tierName": "Dependency and interface consistency"
+      },
+      {
+        "limitation": "",
+        "recommendation": "",
+        "id": "V3-LOGIC-LEVELS",
+        "tier": 3,
+        "title": "Signals into the MCU stay within 3.3 V logic",
+        "target": "project",
+        "tool": "genius-engine consistency check",
+        "status": "pass",
+        "evidence": "No signal interface to the MCU exceeds its logic level.",
+        "tierName": "Dependency and interface consistency"
+      },
+      {
+        "limitation": "",
+        "recommendation": "",
+        "id": "V3-BOM",
+        "tier": 3,
+        "title": "Every hardware part with a part number is in the BOM",
+        "target": "project",
+        "tool": "genius-engine consistency check",
+        "status": "pass",
+        "evidence": "9 hardware parts, all present in the BOM.",
+        "tierName": "Dependency and interface consistency"
+      },
+      {
+        "limitation": "",
+        "recommendation": "",
+        "tier": 4,
+        "target": "F1",
+        "id": "V4-F1-INI",
+        "title": "firmware/platformio.ini is a well-formed INI file",
+        "tool": "genius-engine INI parser",
+        "status": "pass",
+        "evidence": "Sections: env:esp32dev.",
+        "tierName": "Syntax and static checks"
+      },
+      {
+        "limitation": "A structure scan, not a compiler: types, symbols, and library APIs are checked only by the build (tier 5).",
+        "recommendation": "",
+        "tier": 4,
+        "target": "F2",
+        "id": "V4-F2-C",
+        "title": "firmware/include/pins.h: balanced structure and resolvable local includes",
+        "tool": "genius-engine C/C++ structure scan",
+        "status": "pass",
+        "evidence": "Brackets and preprocessor blocks balance; every local #include is generated.",
+        "tierName": "Syntax and static checks"
+      },
+      {
+        "limitation": "A structure scan, not a compiler: types, symbols, and library APIs are checked only by the build (tier 5).",
+        "recommendation": "",
+        "tier": 4,
+        "target": "F3",
+        "id": "V4-F3-C",
+        "title": "firmware/include/config.h: balanced structure and resolvable local includes",
+        "tool": "genius-engine C/C++ structure scan",
+        "status": "pass",
+        "evidence": "Brackets and preprocessor blocks balance; every local #include is generated.",
+        "tierName": "Syntax and static checks"
+      },
+      {
+        "limitation": "A structure scan, not a compiler: types, symbols, and library APIs are checked only by the build (tier 5).",
+        "recommendation": "",
+        "tier": 4,
+        "target": "F4",
+        "id": "V4-F4-C",
+        "title": "firmware/src/main.cpp: balanced structure and resolvable local includes",
+        "tool": "genius-engine C/C++ structure scan",
+        "status": "pass",
+        "evidence": "Brackets and preprocessor blocks balance; every local #include is generated.",
+        "tierName": "Syntax and static checks"
+      },
+      {
+        "limitation": "Document content is reviewed by people; only presence and encoding are checked.",
+        "recommendation": "",
+        "tier": 4,
+        "target": "F5",
+        "id": "V4-F5-TEXT",
+        "title": "docs/PCB_SPECIFICATION.md is a readable document",
+        "tool": "genius-engine file check",
+        "status": "pass",
+        "evidence": "49 lines.",
+        "tierName": "Syntax and static checks"
+      },
+      {
+        "limitation": "",
+        "recommendation": "",
+        "tier": 4,
+        "target": "F6",
+        "id": "V4-F6-CSV",
+        "title": "hardware/bom.csv is a consistent CSV table",
+        "tool": "genius-engine CSV parser",
+        "status": "pass",
+        "evidence": "Every row has the header's column count.",
+        "tierName": "Syntax and static checks"
+      },
+      {
+        "limitation": "Document content is reviewed by people; only presence and encoding are checked.",
+        "recommendation": "",
+        "tier": 4,
+        "target": "F7",
+        "id": "V4-F7-TEXT",
+        "title": "docs/TEST_PLAN.md is a readable document",
+        "tool": "genius-engine file check",
+        "status": "pass",
+        "evidence": "17 lines.",
+        "tierName": "Syntax and static checks"
+      },
+      {
+        "limitation": "Document content is reviewed by people; only presence and encoding are checked.",
+        "recommendation": "",
+        "tier": 4,
+        "target": "F8",
+        "id": "V4-F8-TEXT",
+        "title": "README.md is a readable document",
+        "tool": "genius-engine file check",
+        "status": "pass",
+        "evidence": "9 lines.",
+        "tierName": "Syntax and static checks"
+      },
+      {
+        "limitation": "The workspace runs the real Mermaid parser when it renders the diagram.",
+        "recommendation": "",
+        "id": "V4-D1-MERMAID",
+        "tier": 4,
+        "target": "D1",
+        "title": "Diagram \"System architecture\": known type, balanced brackets",
+        "tool": "genius-engine Mermaid scan",
+        "status": "pass",
+        "evidence": "Structure looks valid.",
+        "tierName": "Syntax and static checks"
+      },
+      {
+        "limitation": "The workspace runs the real Mermaid parser when it renders the diagram.",
+        "recommendation": "",
+        "id": "V4-D2-MERMAID",
+        "tier": 4,
+        "target": "D2",
+        "title": "Diagram \"Power tree\": known type, balanced brackets",
+        "tool": "genius-engine Mermaid scan",
+        "status": "pass",
+        "evidence": "Structure looks valid.",
+        "tierName": "Syntax and static checks"
+      },
+      {
+        "limitation": "The workspace runs the real Mermaid parser when it renders the diagram.",
+        "recommendation": "",
+        "id": "V4-D3-MERMAID",
+        "tier": 4,
+        "target": "D3",
+        "title": "Diagram \"Firmware states\": known type, balanced brackets",
+        "tool": "genius-engine Mermaid scan",
+        "status": "pass",
+        "evidence": "Structure looks valid.",
+        "tierName": "Syntax and static checks"
+      },
+      {
+        "limitation": "Build verification needs PlatformIO and the ESP32 toolchain on your machine or a trusted build agent.",
+        "recommendation": "Run: cd firmware && pio run -e esp32dev",
+        "id": "V5-PLATFORMIO-BUILD",
+        "tier": 5,
+        "target": "F1",
+        "title": "Firmware builds with PlatformIO",
+        "tool": "PlatformIO (not available to the engine)",
+        "status": "not_run",
+        "evidence": "The engine does not compile generated code on its servers.",
+        "tierName": "Build verification"
+      },
+      {
+        "limitation": "The engine records the plan; results appear here only after a tool or a person reports them.",
+        "recommendation": "Run the planned tests with the named tools.",
+        "id": "V6-PLANNED",
+        "tier": 6,
+        "target": "project",
+        "title": "Planned tests and simulations",
+        "tool": "none (planned)",
+        "status": "not_run",
+        "evidence": "6 planned: T1 build, T2 bench-test, T3 bench-test, T4 bench-test, T7 bench-test, T8 bench-test.",
+        "tierName": "Simulation and test execution"
+      },
+      {
+        "limitation": "",
+        "recommendation": "",
+        "id": "V7-PINS",
+        "tier": 7,
+        "target": "project",
+        "title": "Pin constants in the firmware match the pin map",
+        "tool": "genius-engine source/spec comparison",
+        "status": "pass",
+        "evidence": "10 pin assignments match the firmware constants.",
+        "tierName": "Artifact and source consistency"
+      },
+      {
+        "limitation": "",
+        "recommendation": "",
+        "id": "V7-BOARD",
+        "tier": 7,
+        "target": "F1",
+        "title": "PlatformIO board matches the classic ESP32 target",
+        "tool": "genius-engine source/spec comparison",
+        "status": "pass",
+        "evidence": "board = esp32dev.",
+        "tierName": "Artifact and source consistency"
+      },
+      {
+        "limitation": "",
+        "recommendation": "",
+        "id": "V7-BOM-FILE",
+        "tier": 7,
+        "target": "F6",
+        "title": "BOM file lists every BOM part number",
+        "tool": "genius-engine source/spec comparison",
+        "status": "pass",
+        "evidence": "10 rows found in hardware/bom.csv.",
+        "tierName": "Artifact and source consistency"
+      },
+      {
+        "limitation": "",
+        "recommendation": "Make sure the attached circuit does not force this pin to the wrong level during reset.",
+        "id": "V8-ESP32-01",
+        "tier": 8,
+        "target": "project",
+        "tool": "genius-engine ESP32 rule pack",
+        "status": "warn",
+        "title": "Strapping pins are safe at reset",
+        "evidence": "GPIO0 (BOOT_BUTTON): GPIO0 selects the boot mode: it must be high at reset for normal boot (low enters download mode).",
+        "tierName": "Domain-specific checks"
+      },
+      {
+        "limitation": "",
+        "recommendation": "Review the schematic and layout in an EDA tool, then bench-test a prototype (power, programming, every interface).",
+        "id": "V10-PHYSICAL",
+        "tier": 10,
+        "target": "project",
+        "title": "Engineering review and physical testing",
+        "tool": "people and laboratory equipment",
+        "status": "not_run",
+        "evidence": "Generated hardware designs are specifications until an engineer reviews them and prototypes are built and measured.",
+        "tierName": "Human review and physical testing"
+      }
+    ],
+    "artifactStatus": {
+      "F1": "syntax_checked",
+      "F2": "structurally_checked",
+      "F3": "structurally_checked",
+      "F4": "structurally_checked",
+      "F5": "requires_physical_testing",
+      "F6": "syntax_checked",
+      "F7": "structurally_checked",
+      "F8": "structurally_checked"
+    }
+  },
+  "provenance": {
+    "engine": "genius-engineering-engine",
+    "engineVersion": "0.1.0",
+    "provider": null,
+    "model": null,
+    "generatedAt": "2026-10-10T12:00:00.000Z",
+    "example": true
+  },
+  "changes": [
+    {
+      "at": "2026-10-10T12:00:00.000Z",
+      "by": "example",
+      "summary": "Prepared example project; validated by the Genius Engineering Engine validators."
+    }
+  ]
+}

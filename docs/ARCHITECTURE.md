@@ -46,6 +46,9 @@ flowchart TD
 | `public/brand.js` | Local brand assets with fallbacks, official icon swap, footer reveal |
 | `src/service.mjs` | Orchestration, credential isolation, saved public analyses through a store, sessions (Node only) |
 | `src/store.mjs` | Analysis stores: memory, and a bounded file store (one atomic JSON file per commit-keyed entry); the Node server uses the file store, the Worker uses the platform cache |
+| `src/engineering.mjs` | Make Any Product with Genius AI: validates engineering requests, removes the visitor key, relays plans from the private Genius Engineering Engine, runs each model call through `callProviderJSON`, and returns the project. See [ENGINEERING.md](ENGINEERING.md). |
+| `public/engineering.js` | The public `gad.project/1` format: format check, status labels, Markdown views, dependency diagram, Development Pack layout |
+| `public/idea.js` | The Start from an Idea workspace: idea, questions, project tabs, file editing, validation view, Development Pack, project import and export |
 | `server.mjs` / `worker.mjs` | HTTP routing, origin/access/rate checks, NDJSON streaming, SPA fallback for every `/owner/repo/...` path |
 | `public/route.js` | Pure mapping between GitHub-shaped paths and analysis requests; permalinks |
 | `public/app.js` | Workspace state, history, views, tree, inspector, Genius panel |
@@ -74,11 +77,13 @@ flowchart TD
 
 `POST /api/genius/agent` — JSON `agent` (1A–3C or `core`), `stage`, `repository`, full `commit`, `scope`, `payload` (bounded evidence and prior team outputs), `provider`, `apiKey`, `model`. Returns the schema-conformed `output`, `usage`, `model`, and `attempts`. Provider failures return HTTP 502 with `error`, `kind`, `retryable`, and `suggestion`. The browser runs the orchestrator and verifies every citation against the analysis it holds.
 
+`GET /api/engineering/status` — `{ connected }`: whether the operator configured the private Genius Engineering Engine. `POST /api/engineering/run` — clarify, design, or regenerate; NDJSON `progress` events, then `result` (`{ project, validation, usage }`) or `error`. `POST /api/engineering/validate` — engine checks only, no key. Without an engine both POST routes answer 503 before streaming. Details in [ENGINEERING.md](ENGINEERING.md).
+
 `GET /api/version` — public provenance: project, version, commit (when the host provides it), `sourceDigest`, `fingerprint`, provenance ID, organization, creator, repository, website, license. Recompute with `npm run provenance`.
 
 `GET /api/health` — version, runtime limits, provider identifiers, and the public system-map allowance. There is no instance password: every API route is public, same-origin, and rate-limited, and a web request only ever uses the provider key sent with it.
 
-Both runtimes allow 20 API requests per client address per minute (90 for Deep Genius agent calls, which are short and bounded at three in flight); the Node server runs up to 3 analyses at once, the Worker 2 per isolate with 48 GitHub requests per run. Request bodies are capped at 20 KB (64 KB for `/api/ask`).
+Both runtimes allow 20 API requests per client address per minute (90 for Deep Genius agent calls, which are short and bounded at three in flight); the Node server runs up to 3 analyses at once, the Worker 2 per isolate with 48 GitHub requests per run. Request bodies are capped at 20 KB (64 KB for `/api/ask`, 2.6 MB for the engineering routes, which carry a whole project). Engineering requests have their own bucket of 20 per minute.
 
 ## Hosted build
 
