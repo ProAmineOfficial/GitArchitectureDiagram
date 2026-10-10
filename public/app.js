@@ -50,11 +50,17 @@ function setMode(mode) { const input = document.querySelector(`[name=analysis-mo
 // ——— Pages and routing ———
 const HOME_TITLE = 'Git Architecture Diagram | AI Diagram Generator & Genius AI'; // Same text as <title> in index.html.
 function showPage(page) {
-  const bar = $('.command-bar'); if (page === 'home') $('#hero-slot').append(bar); else if (bar.parentElement !== $('#main')) $('#main').prepend(bar); bar.classList.toggle('tucked', page === 'repo'); // Home centers the input; a repository page tucks it away.
-  $('#welcome').hidden = page !== 'home'; $('#browse-view').hidden = page !== 'browse'; $('#workspace').hidden = page !== 'repo';
-  $('#workspace-nav').toggleAttribute('aria-current', page !== 'browse'); $('#browse-nav').toggleAttribute('aria-current', page === 'browse');
+  const bar = $('.command-bar'); if (page === 'home') $('#hero-slot').append(bar); else if (bar.parentElement !== $('#main')) $('#main').prepend(bar); bar.classList.toggle('tucked', page === 'repo'); bar.hidden = page === 'idea'; // Home centers the input; a repository page tucks it away; the idea workspace has its own form.
+  $('#welcome').hidden = page !== 'home'; $('#browse-view').hidden = page !== 'browse'; $('#workspace').hidden = page !== 'repo'; $('#idea-view').hidden = page !== 'idea';
+  $('#workspace-nav').toggleAttribute('aria-current', page === 'home' || page === 'repo'); $('#browse-nav').toggleAttribute('aria-current', page === 'browse');
   if (page === 'browse') { document.title = 'Browse examples · Git Architecture Diagram'; renderBrowse(); }
   if (page === 'home') document.title = HOME_TITLE; // Keep the search title from index.html when returning to the home page.
+  if (page === 'idea') openIdea();
+}
+let ideaWorkspace = null; // Make Any Product with Genius AI: loaded on the first visit to /new, so the repository workspace never depends on it.
+async function openIdea() {
+  ideaWorkspace ||= import('./idea.js').then(module => module.setupIdeaWorkspace({ credentials, aiConfigured, toast, openSettings: () => $('#settings').showModal() }));
+  try { await (await ideaWorkspace).show(); } catch { ideaWorkspace = null; status('The idea workspace could not be loaded. Reload the page and try again.', { error: true }); }
 }
 const keyOf = (pathname = location.pathname, search = location.search) => pathname.replace(/\/+$/, '') + search;
 

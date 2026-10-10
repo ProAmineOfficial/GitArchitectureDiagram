@@ -28,6 +28,7 @@ export const PROVENANCE = Object.freeze({
     'GAD-EXPORT-PACK-001': 'Export Project 2.0: .gitarchitecture pack, prompts, skills, reconstruction packs, project extract, secret redaction',
     'GAD-WORKSPACE-UI-001': 'Workspace interface: browser application, routing, diagrams, highlights, styles',
     'GAD-BRAND-001': 'Official Pro_Amine brand integration: footer, social dock, product icon',
+    'GAD-ENGINEERING-001': 'Make Any Product with Genius AI: the gad.project/1 format, the Start from an Idea workspace, the interface to the private Genius Engineering Engine, and the labeled example project',
   }),
 });
 

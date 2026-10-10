@@ -22,6 +22,18 @@ On the local Node server, private reports do not enter the shared public cache. 
 
 On the local Node server, public structural reports are saved on the server's disk (the `.cache/analysis` folder, or `GAD_CACHE_DIR`) by repository, commit, scope, file budget, and analyzer version, for up to seven days, at most 400 entries and 300 MB. They contain the public files that were read; a saved report never describes a different commit. Set `GAD_CACHE_DIR=off` to keep them in memory only (ten minutes, twelve entries). Private reports, credentials, and AI output requested with a visitor's key are never saved. Opted-in public system maps made with the operator's key are saved under their own prefix. Refresh bypasses saved reports.
 
+## Make Any Product with Genius AI
+
+A project made in **Start from an Idea** lives in its browser tab and in the files you export. It is not saved in browser storage, on the server, or in the shared analysis cache.
+
+Each generation request sends your idea or current project, your answers, and your provider key to this server. The server then:
+
+1. Removes the key and sends the rest to the operator's Genius Engineering Engine, a separate private service.
+2. Sends the model call to your chosen provider with your key.
+3. Returns the result to your tab.
+
+The engine receives the idea, the project, and the model output, never your key. Neither the server nor the engine stores or logs them. Re-validation sends only the project and never involves a key. Opening the example or importing a project file sends nothing anywhere, beyond loading the example file from this site.
+
 ## What is and is not verified
 
 GitHub file bytes are checked against their Git blob SHA. Source links are pinned to the resolved commit. The tree and the source-read budgets are reported separately. Tests and build manifests are checked for **presence**, not successful execution or quality.

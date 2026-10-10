@@ -137,6 +137,46 @@
       <div id="starter-examples" class="example-grid"></div>
     </section>
 
+    <section id="idea-view" class="idea-view" hidden aria-labelledby="idea-title">
+      <div class="idea-heading">
+        <span class="glass-icon"><span data-icon="bulb"></span></span>
+        <div>
+          <p class="idea-kicker">Make Any Product with Genius AI · Primary path</p>
+          <h1 id="idea-title">Start from an Idea</h1>
+          <p>Describe what you want to build. Genius AI asks what it needs to know, then proposes requirements, an architecture, diagrams, engineering files, and a validation report that you can edit and export.</p>
+        </div>
+      </div>
+      <p id="idea-engine" class="idea-engine">Checking the Genius Engineering Engine…</p>
+      <form id="idea-form" class="idea-form">
+        <label class="sr-only" for="idea-text">Your product idea</label>
+        <textarea id="idea-text" rows="5" maxlength="4000" spellcheck="true" placeholder="Example: an ESP32 development board with USB-C, a temperature and humidity sensor, a status LED, and a Qwiic connector, programmable over USB."></textarea>
+        <div class="idea-form-actions">
+          <button id="idea-run" class="primary-button" type="submit"><span data-icon="spark"></span><span>Start with Genius AI</span></button>
+          <button id="idea-example" class="quiet-button" type="button">Open the ESP32 example</button>
+          <button id="idea-import" class="quiet-button" type="button">Import a project file</button>
+          <input id="idea-file" type="file" accept=".json,application/json" hidden>
+        </div>
+        <p class="idea-muted">Generation uses the AI provider key in API settings, held only in this tab. Your idea and project go to this site's server, its Genius Engineering Engine, and your AI provider for each request; this site does not store them. The engine never receives your key.</p>
+      </form>
+      <p id="idea-progress" class="idea-progress" role="status" aria-live="polite" hidden></p>
+      <section id="idea-questions" class="idea-card" hidden aria-labelledby="idea-questions-title">
+        <h2 id="idea-questions-title">A few questions before the design</h2>
+        <p class="idea-muted">Answer what you know. Anything left blank becomes a recorded assumption, using the default shown.</p>
+        <div id="idea-question-list" class="idea-question-list"></div>
+        <h3>Requirements so far</h3>
+        <div id="idea-requirements-preview"></div>
+        <div class="idea-actions"><button id="idea-design" class="primary-button" type="button">Design the project</button><button id="idea-skip" class="quiet-button" type="button">Use the defaults</button></div>
+      </section>
+      <section id="idea-project" class="idea-card" hidden aria-labelledby="idea-project-title">
+        <p id="idea-banner" class="idea-banner" hidden></p>
+        <h2 id="idea-project-title"></h2>
+        <p id="idea-project-summary" class="idea-muted"></p>
+        <div id="idea-badges" class="idea-badges"></div>
+        <div id="idea-tabs" class="idea-tabs" role="tablist" aria-label="Project views"></div>
+        <div id="idea-panel" class="idea-panel" role="tabpanel" aria-label="Project view"></div>
+      </section>
+    </section>
+
     <section id="browse-view" class="browse-view" hidden>
       <div class="catalog-heading"><h1>Browse examples</h1><p>Saved snapshots of real public repositories. Opening one runs a fresh analysis at the saved commit, so what you see is live, not a stored picture.</p></div>
       <div class="catalog-toolbar">

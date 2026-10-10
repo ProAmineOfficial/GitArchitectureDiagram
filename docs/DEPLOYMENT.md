@@ -111,6 +111,7 @@ Remove `HOST=127.0.0.1` from a copied `.env` or change it to `HOST=0.0.0.0` when
 | `GENIUS_MODEL` | Explicit provider model ID; no default model or price is assumed. |
 | `PUBLIC_ORIGIN` | Canonical externally visible origin used for browser request validation. |
 | `HOST`, `PORT` | Listening interface and port; local defaults are `127.0.0.1:3000`. `PORT` may also be a socket or pipe path supplied by a hosting runner. |
+| `GENIUS_ENGINE_URL`, `GENIUS_ENGINE_TOKEN` | Optional: connect Make Any Product with Genius AI to the private Genius Engineering Engine (HTTPS URL; token of 32+ characters, identical to the engine's `ENGINE_TOKEN`). Without them, the idea workspace shows the labeled example only. See [ENGINEERING.md](ENGINEERING.md). |
 | `GAD_COMMIT` | Optional: the deployed commit SHA, reported by `/api/version` when the host does not keep `.git`. Not a secret. |
 | `GIT_ARCHITECTURE_DIAGRAM_AUTOSTART` | Set to `0` only to import `server.mjs` without opening a listener (tests). Leave unset in production. |
 
