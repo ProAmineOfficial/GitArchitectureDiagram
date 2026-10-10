@@ -55,6 +55,9 @@ const server = createAppServer({ fetchImpl: createGitHubFetch({ 'acme/shop': { d
 let base; let browser; const errors = [];
 test.before(async () => { await new Promise(resolve => server.listen(0, '127.0.0.1', resolve)); base = `http://127.0.0.1:${server.address().port}`; browser = await chromium.launch(); });
 test.after(async () => { await browser?.close(); server.close(); rmSync(dir, { recursive: true, force: true }); });
+// The page writes LF line endings; the Windows system clipboard stores text with CRLF, so Chromium on Windows reads it
+// back as CRLF. Normalize before comparing, so the assertion checks the content the application wrote on every platform.
+const readClipboard = target => target.evaluate(() => navigator.clipboard.readText()).then(text => text.replace(/\r\n/g, '\n'));
 async function open(path = '/acme/shop', { viewport = { width: 1440, height: 940 }, reducedMotion = 'no-preference', colorScheme = 'dark' } = {}) {
   const context = await browser.newContext({ viewport, acceptDownloads: true, reducedMotion, colorScheme }); await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   const page = await context.newPage(); page.on('pageerror', error => errors.push(error.message));
@@ -138,7 +141,7 @@ test('Export Project 2.0: Genius Development Pack, prompt, skills, and Mermaid d
   assert.match(zip.suggestedFilename(), /gitarchitecture\.zip$/); const entries = unzipSync(readFileSync(await zip.path()));
   for (const name of ['OVERVIEW.md', 'ARCHITECTURE.md', 'SYSTEM_MAP.mmd', 'AUDIT_FINDINGS.md', 'DEVELOPMENT_PROMPT.md', 'DEVELOPMENT_SKILLS.md', 'EVIDENCE.json', 'manifest.json']) assert.ok(entries[`.gitarchitecture/${name}`], name);
   assert.equal(JSON.parse(strFromU8(entries['.gitarchitecture/manifest.json'])).deepGenius.ran, false);
-  await page.click('text=Copy Development Prompt'); assert.match(await page.evaluate(() => navigator.clipboard.readText()), /## Known verified problems[\s\S]*## Do not break/);
+  await page.click('text=Copy Development Prompt'); assert.match(await readClipboard(page), /## Known verified problems[\s\S]*## Do not break/);
   const [skills] = await Promise.all([page.waitForEvent('download'), page.click('text=Download Skills')]); assert.match(readFileSync(await skills.path(), 'utf8'), /## Observed development skills[\s\S]*## Recommended development skills/);
   const [system] = await Promise.all([page.waitForEvent('download'), page.click('text=Download System Map Mermaid')]); assert.match(readFileSync(await system.path(), 'utf8'), /^%% No AI system map/);
   await page.context().close();

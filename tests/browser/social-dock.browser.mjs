@@ -32,6 +32,8 @@ const liftOf = transform => { const values = transform?.match(/matrix\(([^)]+)\)
 const transforms = page => page.$$eval('.social-link', links => links.map(link => getComputedStyle(link).transform));
 // Wait for a CSS transform transition to settle instead of sleeping a fixed time; slow CI machines can start transitions late.
 const settleScale = (page, selector, expected) => page.waitForFunction(({ selector, expected }) => { const transform = getComputedStyle(document.querySelector(selector)).transform; const values = transform && transform !== 'none' ? transform.match(/matrix\(([^)]+)\)/)?.[1].split(',').map(Number) : null; const scale = values ? Math.hypot(values[0], values[1]) : 1; return Math.abs(scale - expected) < 0.005; }, { selector, expected }, { timeout: 5000 });
+// Wait until a computed style property reaches an exact value (for example a tooltip's opacity after its 200 ms fade).
+const settleStyle = (page, selector, property, expected) => page.waitForFunction(({ selector, property, expected }) => getComputedStyle(document.querySelector(selector))[property] === expected, { selector, property, expected }, { timeout: 5000 });
 
 test('exactly eight links, in order, with the exact URLs, new-tab safety, and accessible names', async () => {
   const page = await open();
@@ -58,6 +60,7 @@ test('glass buttons magnify like a dock: 1.28 under the pointer, 1.12 and 1.04 f
   const scales = (await transforms(page)).map(scaleOf).map(value => Math.round(value * 100) / 100);
   assert.deepEqual(scales, [1, 1.04, 1.12, 1.28, 1.12, 1.04, 1, 1]);
   const lifts = (await transforms(page)).map(liftOf); assert.equal(Math.round(lifts[3]), -6); assert.equal(Math.round(lifts[2]), -2); assert.equal(Math.round(lifts[0]), 0);
+  await settleStyle(page, '.social-link[data-network=facebook] .social-tip', 'opacity', '1'); await settleStyle(page, '.social-link[data-network=x] .social-tip', 'opacity', '0'); // The tooltip fades on its own transition; slower machines can still be mid-fade when the scale has settled.
   assert.equal(await page.$eval('.social-link[data-network=facebook] .social-tip', tip => getComputedStyle(tip).opacity), '1'); assert.equal(await page.$eval('.social-link[data-network=x] .social-tip', tip => getComputedStyle(tip).opacity), '0');
   assert.match(await page.$eval('.social-link', link => getComputedStyle(link).transition), /220ms cubic-bezier\(0\.22, 1, 0\.36, 1\)|0\.22s cubic-bezier\(0\.22, 1, 0\.36, 1\)/);
   await page.mouse.move(5, 5); await settleScale(page, '.social-link[data-network=facebook]', 1); await settleScale(page, '.social-link[data-network=instagram]', 1); assert.deepEqual((await transforms(page)).map(scaleOf).map(Math.round), [1, 1, 1, 1, 1, 1, 1, 1], 'leaving the dock restores every item');
