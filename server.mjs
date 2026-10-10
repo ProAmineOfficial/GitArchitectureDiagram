@@ -19,6 +19,10 @@ import { discoverModels, testConnection } from './src/model-registry.mjs'; // Tw
 import { runGeniusAgent } from './src/genius-agent.mjs'; // One Deep Genius agent call per request.
 import { ProviderError } from './src/provider-errors.mjs'; // Classified provider failures carry a stable kind for the interface.
 import { versionInfo, sourceDigest, SOURCE_PATTERN, cleanCommit } from './src/provenance.mjs'; // Public provenance and a non-secret build fingerprint.
+import { defaultAnalysisStore } from './src/store.mjs'; // Durable, commit-keyed saved analyses for public repositories.
+let defaultStore = null; // Created on first use, so importing the server never touches the disk.
+const sharedStore = () => (defaultStore ||= defaultAnalysisStore({ root: ROOT, log: message => console.info('[cache]', message) })); // GAD_CACHE_DIR chooses the folder; "off" keeps memory only.
+const prefixed = (store, prefix) => store && { get: key => store.get(prefix + key), put: (key, value) => store.put(prefix + key, value) }; // Saved public system maps share the store under their own prefix.
 const CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"; // Keep repository content from loading arbitrary scripts or remote assets.
 function json(response, status, data) { response.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); response.end(JSON.stringify(data)); } // Return compact uncached API responses.
 async function body(request, limit = 20000) { let text = ''; for await (const chunk of request) { text += chunk; if (Buffer.byteLength(text) > limit) throw new AppError(413, 'The request is too large.'); } try { return JSON.parse(text); } catch { throw new AppError(400, 'Expected a JSON request.'); } } // Bound and parse incoming JSON.
@@ -48,7 +52,7 @@ async function staticAsset(url, response, method) { // Serve only public files a
   let data; try { data = await readFile(file); } catch { if (!appRoute || relative.startsWith('assets/')) throw new AppError(404, 'Asset not found.'); data = await readFile(path.join(ROOT, 'public', 'index.html')); response.writeHead(200, { 'Content-Type': MIME['.html'], 'Cache-Control': 'no-cache' }); response.end(method === 'HEAD' ? undefined : data); return; } // Real files win; otherwise repository paths get the workspace.
   response.writeHead(200, { 'Content-Type': MIME[path.extname(file)], 'Cache-Control': vendor || relative.startsWith('assets/') ? 'public, max-age=86400' : 'no-cache' }); response.end(method === 'HEAD' ? undefined : data); // Cache immutable installed dependencies more aggressively than application files.
 } // End static asset serving.
-export function createAppServer({ fetchImpl = fetch } = {}) { // Export the actual server; tests may inject a GitHub/provider transport.
+export function createAppServer({ fetchImpl = fetch, analysisStore } = {}) { // Export the actual server; tests may inject a GitHub/provider transport and a store.
   return http.createServer(async (request, response) => { // Handle the small application API and its frontend.
     response.setHeader('Content-Security-Policy', CSP); response.setHeader('X-Content-Type-Options', 'nosniff'); response.setHeader('Referrer-Policy', 'no-referrer'); response.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()'); // Apply browser protections before every response.
     try { // Convert all request failures into bounded user-facing errors.
@@ -69,7 +73,7 @@ export function createAppServer({ fetchImpl = fetch } = {}) { // Export the actu
         const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), 180000); response.on('close', () => { if (!response.writableEnded) controller.abort(); }); // Cancel work when the browser leaves or the run deadline expires.
         response.writeHead(200, { 'Content-Type': 'application/x-ndjson', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no' }); // Stream progress without buffering it behind a proxy.
         const emit = data => { if (!response.destroyed) response.write(JSON.stringify(data) + '\n'); }; // Write one complete progress event per line.
-        try { const result = await runAnalysis(input, { signal: controller.signal, progress: event => emit({ type: 'progress', ...event }), allowEnvAI: false, fetchImpl }); emit({ type: 'result', result }); } catch (error) { emit({ type: 'error', message: error instanceof AppError ? error.message : 'Analysis failed unexpectedly. Please try again.', status: error.status || 500 }); } finally { active--; clearTimeout(timer); response.end(); } // Preserve completion, error, and resource-release behavior.
+        try { const store = analysisStore || await sharedStore(); const result = await runAnalysis(input, { signal: controller.signal, progress: event => emit({ type: 'progress', ...event }), allowEnvAI: false, fetchImpl, analysisStore: store, aiStore: prefixed(store, 'ai|') }); emit({ type: 'result', result }); } catch (error) { emit({ type: 'error', message: error instanceof AppError ? error.message : 'Analysis failed unexpectedly. Please try again.', status: error.status || 500 }); } finally { active--; clearTimeout(timer); response.end(); } // Preserve completion, error, and resource-release behavior.
         return; // Finish the streamed analysis response.
       } // End API routing.
       if (!['GET', 'HEAD'].includes(request.method)) throw new AppError(405, 'Method not allowed.'); await staticAsset(url, response, request.method); // Serve the regular browser application.

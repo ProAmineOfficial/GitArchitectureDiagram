@@ -13,7 +13,7 @@ npm run build
 
 The build creates `dist/server/index.js` and `dist/client`, with an `ASSETS` binding and Node compatibility declared in `dist/server/wrangler.json`. The existing Site must be published from the same reviewed GitHub source commit. Future changes must update this repository and republish that Site; an arbitrary GitHub push alone does not trigger a Sites deployment.
 
-The hosted Worker accepts up to 40 files per run and does not retain report/session caches. Evidence search runs in the browser using already-read files. Optional AI runs only with the key a visitor enters for that request (or, for opted-in public system maps, the operator's key). No provider API key is bundled into browser assets.
+The hosted Worker accepts up to 40 files per run, saves public reports in Cloudflare's cache by commit, and keeps no session map. Evidence search runs in the browser using already-read files. Optional AI runs only with the key a visitor enters for that request (or, for opted-in public system maps, the operator's key). No provider API key is bundled into browser assets.
 
 When a Worker serves both the generated address and a custom domain, set `PUBLIC_ORIGINS` to a comma-separated list of their exact HTTPS origins. Keep `PUBLIC_ORIGIN` as the primary origin. Without `PUBLIC_ORIGINS`, the Worker uses `PUBLIC_ORIGIN` as before. The local Node server continues to use its single `PUBLIC_ORIGIN`.
 
@@ -131,7 +131,7 @@ The second link automatically starts analysis. Names containing dots and scoped 
 
 ## Operating limits
 
-For the local Node deployment, caches and sessions live in process memory and are not synchronized across replicas. Use one instance initially, or sticky routing if you run more than one. Restarting the process clears all reports and invalidates evidence-search sessions. Add a durable job queue and an access-controlled shared store before scaling beyond this design.
+For the local Node deployment, saved public reports live on disk in `.cache/analysis` (set `GAD_CACHE_DIR` to another folder, or `off` for memory only) and survive restarts; if the folder is not writable the server logs one line and uses memory. Evidence-search sessions live in process memory: restarting the process invalidates them, and they are not synchronized across replicas. Use one instance initially, or sticky routing if you run more than one. Add a durable job queue and an access-controlled shared store before scaling beyond this design.
 
 The Node server's limiter uses the direct socket address and does not trust arbitrary forwarded IP headers. Behind a proxy, clients may share that address; configure gateway limits or a deliberate trusted-proxy implementation before serving a large public audience. The Worker uses the platform's `CF-Connecting-IP` header and bounds concurrent analysis per isolate; this is not a global distributed quota. Rotate provider credentials through the host's secret settings. Disable request-body logging in the reverse proxy.
 
