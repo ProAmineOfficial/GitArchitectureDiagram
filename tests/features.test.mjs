@@ -8,7 +8,7 @@ import { explainWithAI } from '../src/ai.mjs';
 import { analyzeSnapshot } from '../src/genius.mjs';
 import { runAnalysis } from '../src/service.mjs';
 import { createWorker } from '../worker.mjs';
-import { files, entries, commitSHA, githubFixture } from './fixtures.mjs';
+import { files, entries, commitSHA, githubFixture, isGitHubHost } from './fixtures.mjs';
 
 const repo = { fullName: 'ProAmineOfficial/NanoKit-ESP32', sha: '17834db850daec9b450239069c4aa2e758bf0644', branch: 'main', defaultBranch: 'main', refKind: 'branch', scope: 'examples_on_platformio/ultrasonic_distance', htmlUrl: 'https://github.com/ProAmineOfficial/NanoKit-ESP32' };
 
@@ -89,7 +89,7 @@ test('the AI architecture graph is validated against the commit before it become
   assert.deepEqual(Object.values(ai.graph.nodePaths).map(item => item.path).sort(), [first.path, second.path].sort());
   assert.ok(ai.graphNotes.some(note => note.includes('does-not-exist')));
   const fixture = githubFixture({ name: 'ai-graph' });
-  const full = await runAnalysis({ repository: 'acme/ai-graph', maxFiles: 4, ai: true, apiKey: 'k', model: 'test-model' }, { env: {}, cachePublic: false, fetchImpl: (url, options) => (String(url).startsWith('https://api.github.com') ? fixture.fetchImpl(url, options) : fetchImpl(url, options)) });
+  const full = await runAnalysis({ repository: 'acme/ai-graph', maxFiles: 4, ai: true, apiKey: 'k', model: 'test-model' }, { env: {}, cachePublic: false, fetchImpl: (url, options) => (isGitHubHost(url) ? fixture.fetchImpl(url, options) : fetchImpl(url, options)) });
   assert.equal(full.ai.diagrams.architecture, full.ai.graph.mermaid); assert.match(full.guide, /Interpreted component graph/);
 });
 

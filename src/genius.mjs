@@ -1,6 +1,6 @@
 // Copyright © 2026 Pro_Amine LLC
 // Created & Developed by Amine Saoud ibn al-Bashir
-// Git Architecture Diagram · SPDX-License-Identifier: MIT · Provenance ID: GAD-GENIUS-PIPELINE-001
+// Git Architecture Diagram · SPDX-License-Identifier: AGPL-3.0-only · Provenance ID: GAD-GENIUS-PIPELINE-001
 // Project: Git Architecture Diagram | Component: Genius | Author: Amine Saoud ibn al-Bashir.
 // Description: Generate reproducible architecture, evidence, documentation checks, and engineering guides.
 import { mindmapColor } from '../public/diagram-colors.js'; // Share the actual rendered folder palette with exported legends.
@@ -119,7 +119,7 @@ export function analyzeSnapshot(snapshot, files, coverage) { // Build the real G
   const named = overview.components.filter(item => item.name !== '.').slice(0, 4).map(item => `${item.name} (${item.kind === 'examples' && item.projects ? item.projects + ' projects' : item.files + (item.files === 1 ? ' file' : ' files')})`); // Describe structure, not just counts.
   result.structure = named.length ? `The scope is organized into ${overview.components.filter(item => item.name !== '.').length} top-level folders${overview.hiddenComponents ? ` (${overview.hiddenComponents} summarized)` : ''}, chiefly ${named.join(', ')}. ${edges.length ? `${edges.length} located import/include references connect the files read.` : 'No local import/include references were located in the files read.'}${overview.externalCount ? ` ${overview.externalCount} external module${overview.externalCount > 1 ? 's are' : ' is'} imported.` : ''}` : ''; // Structural sentence for the Genius panel.
   result.summary = `${snapshot.fullName} contains ${coverage.listedFiles} listed files in this scope. Genius read ${coverage.readFiles} of ${coverage.eligibleFiles} eligible text files, located ${edges.length} local import/include references, and found ${documented.length} documented Mermaid diagrams.`; // Summarize only measured evidence.
-  if (coverage.treeTruncated) result.warnings.push('GitHub returned a partial tree, or the 12,000-entry display limit was reached. Counts describe the retained listing.'); // Disclose partial inventories.
+  if (coverage.treeTruncated) result.warnings.push(coverage.treeRecovered ? 'GitHub truncated this very large tree; it was recovered only in part, or the 12,000-entry display limit was reached. Counts describe the retained listing.' : 'GitHub returned a partial tree, or the 12,000-entry display limit was reached. Counts describe the retained listing.'); // Disclose partial inventories.
   if (coverage.unsampledFiles) result.warnings.push(`${coverage.unsampledFiles} eligible files were not read. Increase the file budget or narrow the folder scope.`); // Disclose omitted source evidence.
   result.warnings.push('Dependency extraction is lexical and best-effort; it does not prove runtime calls, dynamic imports, or successful builds.'); // State the analyzer's actual capability boundary.
   return result; // Return a complete report suitable for UI, CLI, and export.

@@ -1,6 +1,6 @@
 // Copyright © 2026 Pro_Amine LLC
 // Created & Developed by Amine Saoud ibn al-Bashir
-// Git Architecture Diagram · SPDX-License-Identifier: MIT · Provenance ID: GAD-PROVENANCE-CORE-001
+// Git Architecture Diagram · SPDX-License-Identifier: AGPL-3.0-only · Provenance ID: GAD-PROVENANCE-CORE-001
 // Project: Git Architecture Diagram | Component: Syntax checks | Author: Amine Saoud ibn al-Bashir.
 import { readdir } from 'node:fs/promises'; // Enumerate project source without walking dependencies.
 import { execFileSync } from 'node:child_process'; // Invoke Node's parser directly without shell interpolation.

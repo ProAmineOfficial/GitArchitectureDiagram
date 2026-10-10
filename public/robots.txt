@@ -1,0 +1,7 @@
+# Git Architecture Diagram: https://gitarchitecturediagram.com
+# All public pages may be crawled. The JSON API is not a page, so it is excluded.
+User-agent: *
+Allow: /
+Disallow: /api/
+
+Sitemap: https://gitarchitecturediagram.com/sitemap.xml

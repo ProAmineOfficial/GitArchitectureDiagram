@@ -6,8 +6,10 @@ Git Architecture Diagram transforms a GitHub repository into an interactive, dia
 
 Replace the GitHub hostname with your Git Architecture Diagram hostname and open the same repository path as an analysis workspace.
 
+Git Architecture Diagram is an AI architecture diagram generator for GitHub repositories. It produces architecture diagrams, System Maps, Mermaid diagrams, a software hierarchy, and a repository mind map, all pinned to the analyzed commit. **Genius AI** is its integrated AI engineering engine: with your own AI provider key, Genius AI adds AI-powered repository analysis, grounded answers with verified citations, and development packs.
+
 Created & Developed by **Amine Saoud ibn al-Bashir** — **ProAmineOfficial / Pro_Amine LLC**.  
-Open source under the **AGPL-3.0 license**.
+Open source under the **GNU AGPL-3.0-only** license.
 
 ---
 
@@ -397,17 +399,17 @@ Export formats can include:
 
 ### Genius development outputs
 
-Genius can generate:
+Genius prepares development prompts for an AI coding agent. Each prompt is assembled from the analyzed repository's evidence and stamped with its commit; the plan itself is written by the agent you give it to, not by Git Architecture Diagram.
 
 - Development Prompt
 - Build Similar App
-- MVP Plan
-- Frontend Plan
-- Backend Plan
-- API Plan
-- Database Plan
-- App Blueprint
-- Implementation Roadmap
+- MVP Plan prompt
+- Frontend Plan prompt
+- Backend Plan prompt
+- API Plan prompt
+- Database Plan prompt
+- App Blueprint (assembled from evidence)
+- Implementation Roadmap (template from evidence)
 
 ### AI / Developer Context
 
@@ -602,7 +604,7 @@ Brand assets and their provenance are listed in [docs/BRAND.md](docs/BRAND.md).
 
 ## License
 
-AGPL-3.0 License. See [LICENSE](LICENSE) and [NOTICE.md](NOTICE.md).
+GNU Affero General Public License v3.0 only (AGPL-3.0-only). See [LICENSE](LICENSE) and [NOTICE.md](NOTICE.md). Versions published up to and including commit `765f42c` (2026-10-05) were released under the MIT License and remain available under MIT.
 
 Official builds can be verified with public provenance: [PROVENANCE.md](PROVENANCE.md) describes the stable identifiers, `PROVENANCE.json`, and the `/api/version` build fingerprint.
 

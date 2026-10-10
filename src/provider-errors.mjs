@@ -1,6 +1,6 @@
 // Copyright © 2026 Pro_Amine LLC
 // Created & Developed by Amine Saoud ibn al-Bashir
-// Git Architecture Diagram · SPDX-License-Identifier: MIT · Provenance ID: GAD-PROVIDER-LAYER-001
+// Git Architecture Diagram · SPDX-License-Identifier: AGPL-3.0-only · Provenance ID: GAD-PROVIDER-LAYER-001
 // Project: Git Architecture Diagram | Component: Provider calls, error classification, and retries | Author: Amine Saoud ibn al-Bashir.
 // One place decides what a provider failure means for the user. Transient 408, 429, and 5xx responses are retried at
 // most three attempts in total, honoring Retry-After and otherwise backing off exponentially with jitter. Quota

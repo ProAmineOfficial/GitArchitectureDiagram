@@ -1,6 +1,6 @@
 // Copyright © 2026 Pro_Amine LLC
 // Created & Developed by Amine Saoud ibn al-Bashir
-// Git Architecture Diagram · SPDX-License-Identifier: MIT · Provenance ID: GAD-PROVENANCE-CORE-001
+// Git Architecture Diagram · SPDX-License-Identifier: AGPL-3.0-only · Provenance ID: GAD-PROVENANCE-CORE-001
 // Project: Git Architecture Diagram | Component: Analysis service | Author: Amine Saoud ibn al-Bashir.
 import { randomUUID } from 'node:crypto'; // Create unguessable ephemeral analysis-session identifiers.
 import { AppError, GitHubReader, parseRepository, ingest, VERSION } from './github.mjs'; // Use the verified GitHub ingestion layer.
@@ -9,7 +9,8 @@ import { buildGeniusHierarchy } from './hierarchy.mjs'; // Produce real structur
 import { explainWithAI } from './ai.mjs'; // Add model interpretation only when explicitly requested.
 import { PROVIDERS } from './providers.mjs'; // Keep provider credentials isolated by their configured identity.
 import { errorInfo } from './provider-errors.mjs'; // Display-safe provider failure details for the interface.
-const publicCache = new Map(); const sessions = new Map(); // Keep bounded, process-local caches without any persisted credentials.
+import { createMemoryStore } from './store.mjs'; // Saved public analyses: in memory by default; the Node server passes a durable store.
+const memoryAnalyses = createMemoryStore(); const sessions = new Map(); // The default analysis store (process-local) and ephemeral sessions; neither ever holds credentials.
 const TTL = 10 * 60 * 1000; // Expire retained analysis contents after ten minutes.
 function prune(map, limit = 12) { for (const [key, item] of map) if (item.expires < Date.now()) map.delete(key); while (map.size >= limit) map.delete(map.keys().next().value); } // Bound both lifetime and retained report count.
 const aiCache = new Map(); const budget = { day: '', used: 0 }; // Saved public system maps and today's model-call count (per process or isolate).
@@ -19,8 +20,10 @@ export function publicAIStatus(env = process.env) { // Describe the operator's o
   return { enabled, remainingToday: enabled ? Math.max(0, limit - budget.used) : 0, dailyLimit: enabled ? limit : 0, provider: enabled ? PROVIDERS[provider].name : null, model: enabled ? env.GENIUS_MODEL : null };
 } // End public AI status.
 function takePublicBudget(env) { const status = publicAIStatus(env); if (!status.remainingToday) return false; budget.used++; return true; } // Count only real model calls, never saved maps.
+/** The saved-analysis key. A different commit, scope, budget, or analyzer version is always a different entry. */
+export function analysisKey(snapshot, maxFiles) { return `analysis|${snapshot.fullName}|${snapshot.sha}|${snapshot.scope || ''}|${maxFiles}|${VERSION}`; }
 export function getSession(id) { const item = sessions.get(id); if (!item || item.expires < Date.now()) { sessions.delete(id); throw new AppError(404, 'This analysis session expired. Analyze the repository again.'); } return item.result; } // Retrieve ephemeral source evidence for in-session searches.
-export async function runAnalysis(input, { signal, progress = () => {}, env = process.env, fetchImpl = fetch, allowEnvAI = false, cachePublic = true, retainSession = true, maxGitHubRequests = Infinity, aiStore = null } = {}) { // Orchestrate the same pipeline for HTTP and CLI use.
+export async function runAnalysis(input, { signal, progress = () => {}, env = process.env, fetchImpl = fetch, allowEnvAI = false, cachePublic = true, retainSession = true, maxGitHubRequests = Infinity, aiStore = null, analysisStore = memoryAnalyses } = {}) { // Orchestrate the same pipeline for HTTP and CLI use.
   if (!input || typeof input !== 'object') throw new AppError(400, 'A repository analysis request is required.'); // Validate the request shape.
   const target = parseRepository(input.repository); const maxFiles = Number(input.maxFiles ?? 32); // Parse the repository and requested read budget.
   if (!Number.isInteger(maxFiles) || maxFiles < 1 || maxFiles > 120) throw new AppError(400, 'The file budget must be an integer between 1 and 120.'); // Reject unbounded analysis requests.
@@ -29,10 +32,11 @@ export async function runAnalysis(input, { signal, progress = () => {}, env = pr
   const reader = new GitHubReader({ token: token || env.GITHUB_TOKEN || '', signal, fetchImpl, maxRequests: maxGitHubRequests }); // Allow an optional server token only under snapshot visibility checks.
   progress({ stage: 'Resolving repository', detail: target.fullName }); // Begin truthful streaming progress.
   const snapshot = await reader.snapshot(target, { ref: input.ref, scope: input.scope, suppliedToken: Boolean(token) }); // Pin all subsequent reads to one commit.
-  const key = `${snapshot.fullName}|${snapshot.sha}|${snapshot.scope}|${maxFiles}|${VERSION}`; prune(publicCache); prune(sessions); // Key shared caching by commit and analysis options.
-  let result; const cached = cachePublic && !snapshot.private && input.refresh !== true && publicCache.get(key); // Never put private results in the shared cache.
-  if (cached && cached.expires >= Date.now()) { result = structuredClone(cached.result); result.repository = snapshot; progress({ stage: 'Opening saved analysis', detail: snapshot.sha.slice(0, 10) }); } // Reuse the same commit's evidence while preserving the newly requested reference.
-  else { const { files, coverage } = await ingest(snapshot, reader, maxFiles, progress, { discover: discoverReferences }); progress({ stage: 'Genius is mapping the project', detail: `${files.length} files read` }); result = analyzeSnapshot(snapshot, files, coverage); if (cachePublic && !snapshot.private) publicCache.set(key, { result: structuredClone(result), expires: Date.now() + TTL }); } // Build and optionally cache a factual structural report.
+  const key = analysisKey(snapshot, maxFiles); prune(sessions); // One immutable entry per repository, commit, scope, file budget, and analyzer version.
+  const shared = cachePublic && !snapshot.private; // Private repositories are never saved, in memory or on disk.
+  let result; const cached = shared && input.refresh !== true ? await analysisStore?.get(key).catch(() => null) : null; // A store failure is a cache miss.
+  if (cached) { result = cached; result.repository = snapshot; progress({ stage: 'Opening saved analysis', detail: snapshot.sha.slice(0, 10) }); } // Reuse the same commit's evidence while preserving the newly requested reference.
+  else { const { files, coverage } = await ingest(snapshot, reader, maxFiles, progress, { discover: discoverReferences }); progress({ stage: 'Genius is mapping the project', detail: `${files.length} files read` }); result = analyzeSnapshot(snapshot, files, coverage); if (shared) await analysisStore?.put(key, result).catch(() => {}); } // Build and optionally save a factual structural report.
   if (input.ai === true) { // Spend model resources only after an explicit AI request.
     const provider = input.provider || env.GENIUS_PROVIDER || 'openai'; if (!Object.hasOwn(PROVIDERS, provider)) throw new AppError(400, 'Unknown AI provider.'); const sameProvider = provider === (env.GENIUS_PROVIDER || 'openai'); // Validate the provider before choosing a key.
     const publicMode = !input.apiKey && !allowEnvAI && sameProvider && !snapshot.private && publicAIStatus(env).enabled; // The site's own key, for public repositories, when the operator opted in.

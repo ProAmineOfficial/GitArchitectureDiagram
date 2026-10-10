@@ -1,6 +1,6 @@
 // Copyright © 2026 Pro_Amine LLC
 // Created & Developed by Amine Saoud ibn al-Bashir
-// Git Architecture Diagram · SPDX-License-Identifier: MIT · Provenance ID: GAD-WORKSPACE-UI-001
+// Git Architecture Diagram · SPDX-License-Identifier: AGPL-3.0-only · Provenance ID: GAD-WORKSPACE-UI-001
 // Project: Git Architecture Diagram | Component: View dock | Author: Amine Saoud ibn al-Bashir.
 // A centered dock of view icons with proximity magnification: each icon scales by its horizontal distance from the
 // pointer along one continuous curve, and rises in proportion. Only transforms change, so layout never reflows.

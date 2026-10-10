@@ -55,6 +55,9 @@ const server = createAppServer({ fetchImpl: createGitHubFetch({ 'acme/shop': { d
 let base; let browser; const errors = [];
 test.before(async () => { await new Promise(resolve => server.listen(0, '127.0.0.1', resolve)); base = `http://127.0.0.1:${server.address().port}`; browser = await chromium.launch(); });
 test.after(async () => { await browser?.close(); server.close(); rmSync(dir, { recursive: true, force: true }); });
+// The page writes LF line endings; the Windows system clipboard stores text with CRLF, so Chromium on Windows reads it
+// back as CRLF. Normalize before comparing, so the assertion checks the content the application wrote on every platform.
+const readClipboard = target => target.evaluate(() => navigator.clipboard.readText()).then(text => text.replace(/\r\n/g, '\n'));
 async function open(path = '/acme/shop', { viewport = { width: 1440, height: 940 }, reducedMotion = 'no-preference', colorScheme = 'dark' } = {}) {
   const context = await browser.newContext({ viewport, acceptDownloads: true, reducedMotion, colorScheme }); await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   const page = await context.newPage(); page.on('pageerror', error => errors.push(error.message));
@@ -138,7 +141,7 @@ test('Export Project 2.0: Genius Development Pack, prompt, skills, and Mermaid d
   assert.match(zip.suggestedFilename(), /gitarchitecture\.zip$/); const entries = unzipSync(readFileSync(await zip.path()));
   for (const name of ['OVERVIEW.md', 'ARCHITECTURE.md', 'SYSTEM_MAP.mmd', 'AUDIT_FINDINGS.md', 'DEVELOPMENT_PROMPT.md', 'DEVELOPMENT_SKILLS.md', 'EVIDENCE.json', 'manifest.json']) assert.ok(entries[`.gitarchitecture/${name}`], name);
   assert.equal(JSON.parse(strFromU8(entries['.gitarchitecture/manifest.json'])).deepGenius.ran, false);
-  await page.click('text=Copy Development Prompt'); assert.match(await page.evaluate(() => navigator.clipboard.readText()), /## Known verified problems[\s\S]*## Do not break/);
+  await page.click('text=Copy Development Prompt'); assert.match(await readClipboard(page), /## Known verified problems[\s\S]*## Do not break/);
   const [skills] = await Promise.all([page.waitForEvent('download'), page.click('text=Download Skills')]); assert.match(readFileSync(await skills.path(), 'utf8'), /## Observed development skills[\s\S]*## Recommended development skills/);
   const [system] = await Promise.all([page.waitForEvent('download'), page.click('text=Download System Map Mermaid')]); assert.match(readFileSync(await system.path(), 'utf8'), /^%% No AI system map/);
   await page.context().close();
@@ -153,7 +156,9 @@ test('the official footer: content, links, assets, themes, and every width', asy
   assert.deepEqual(await page.$$eval('.footer-card, .footer-copyright', nodes => nodes.map(node => getComputedStyle(node).getPropertyValue('--ft-delay').trim())), ['0ms', '150ms', '300ms', '450ms'], 'Fade In Up stagger');
   const mark = page.locator('.topbar .brand-icon img.brand-mark'); assert.equal(await mark.count(), 1); await page.waitForFunction(() => document.querySelector('.topbar .brand-mark').naturalWidth > 0); const box = await mark.boundingBox(); assert.ok(box.width >= 30 && box.width <= 36, `header icon ${box.width}px`);
   assert.equal(await page.evaluate(() => document.querySelector('.topbar .brand-icon').nextElementSibling.textContent.trim()), 'Git Architecture Diagram', 'the icon sits immediately before the product name');
-  assert.deepEqual(await page.$$eval('link[rel=icon]', links => links.map(link => link.getAttribute('href'))), ['/favicon.ico', '/assets/brand/icons/gad-icon-32.png', '/assets/brand/icons/gad-icon-16.png', '/assets/brand/icons/gad-icon-48.png']);
+  assert.deepEqual(await page.$$eval('link[rel=icon]', links => links.map(link => link.getAttribute('href'))), ['/favicon.ico', '/assets/brand/icons/gad-icon-32.png', '/assets/brand/icons/gad-icon-16.png', '/assets/brand/icons/gad-icon-48.png', '/assets/brand/icons/gad-icon-96.png', '/assets/brand/icons/gad-icon-192.png']);
+  assert.equal(await page.title(), 'Git Architecture Diagram | AI Diagram Generator & Genius AI'); // The search title survives the home-page script.
+  const vision = await page.$eval('.brand-card', card => { const cta = card.querySelector('.footer-cta').getBoundingClientRect(); const heading = card.querySelector('.genius-vision h4').getBoundingClientRect(); const box = card.getBoundingClientRect(); return { gap: heading.top - cta.bottom, inside: card.querySelector('.genius-vision').getBoundingClientRect().bottom <= box.bottom + 0.5 }; }); assert.ok(vision.gap >= 24 && vision.gap <= 30 && vision.inside, `Genius AI note spacing ${vision.gap}px`); // About 24-30px below the button, inside the card.
   for (const href of ['/favicon.ico', '/assets/brand/icons/gad-icon-16.png', '/assets/brand/icons/gad-icon-96.png', '/assets/brand/icons/gad-icon-180.png', '/assets/brand/git-architecture-diagram-icon-pro.png']) assert.equal((await page.request.get(base + href)).status(), 200, href); assert.ok(!/all rights reserved/i.test(await footer.textContent())); assert.equal(await page.locator('text=Built by').count(), 0);
   const links = await footer.locator('a').evaluateAll(anchors => anchors.map(anchor => ({ href: anchor.getAttribute('href'), target: anchor.target, rel: anchor.rel, label: anchor.getAttribute('aria-label') })));
   for (const href of ['https://proamine.tech/', 'https://proamine.tech/about-us/', 'https://proamine.tech/contact-us/', 'https://proamine.tech/product/nanokit-integrated-esp32-board-development-2/', 'https://proamine.tech/what-is-the-umt-platform/', 'https://github.com/ProAmineOfficial', 'https://www.linkedin.com/company/pro-amine-llc/', '/']) assert.ok(links.some(link => link.href === href), href);

@@ -1,6 +1,6 @@
 // Copyright © 2026 Pro_Amine LLC
 // Created & Developed by Amine Saoud ibn al-Bashir
-// Git Architecture Diagram · SPDX-License-Identifier: MIT · Provenance ID: GAD-WORKSPACE-UI-001
+// Git Architecture Diagram · SPDX-License-Identifier: AGPL-3.0-only · Provenance ID: GAD-WORKSPACE-UI-001
 // Project: Git Architecture Diagram | Component: Repository workspace | Author: Amine Saoud ibn al-Bashir.
 // Routing, analysis runs, and the three-panel workspace. Repository-derived text is always inserted with
 // textContent (never innerHTML) except the sanitized guide, and every source link is pinned to the analyzed commit.
@@ -48,12 +48,13 @@ function analysisMode() { return document.querySelector('[name=analysis-mode]:ch
 function setMode(mode) { const input = document.querySelector(`[name=analysis-mode][value=${mode}]`); if (input) input.checked = true; $('#use-ai').checked = mode === 'genius'; updateCostNote(); }
 
 // ——— Pages and routing ———
+const HOME_TITLE = 'Git Architecture Diagram | AI Diagram Generator & Genius AI'; // Same text as <title> in index.html.
 function showPage(page) {
   const bar = $('.command-bar'); if (page === 'home') $('#hero-slot').append(bar); else if (bar.parentElement !== $('#main')) $('#main').prepend(bar); bar.classList.toggle('tucked', page === 'repo'); // Home centers the input; a repository page tucks it away.
   $('#welcome').hidden = page !== 'home'; $('#browse-view').hidden = page !== 'browse'; $('#workspace').hidden = page !== 'repo';
   $('#workspace-nav').toggleAttribute('aria-current', page !== 'browse'); $('#browse-nav').toggleAttribute('aria-current', page === 'browse');
   if (page === 'browse') { document.title = 'Browse examples · Git Architecture Diagram'; renderBrowse(); }
-  if (page === 'home') document.title = 'Git Architecture Diagram';
+  if (page === 'home') document.title = HOME_TITLE; // Keep the search title from index.html when returning to the home page.
 }
 const keyOf = (pathname = location.pathname, search = location.search) => pathname.replace(/\/+$/, '') + search;
 

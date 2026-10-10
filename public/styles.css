@@ -1,6 +1,6 @@
 /* Copyright © 2026 Pro_Amine LLC
    Created & Developed by Amine Saoud ibn al-Bashir
-   Git Architecture Diagram · SPDX-License-Identifier: MIT · Provenance ID: GAD-WORKSPACE-UI-001 */
+   Git Architecture Diagram · SPDX-License-Identifier: AGPL-3.0-only · Provenance ID: GAD-WORKSPACE-UI-001 */
 /* Git Architecture Diagram: graphite glass, clear source hierarchy, and restrained motion. */
 :root{color-scheme:dark;--bg:#0c1018;--surface:rgba(23,30,43,.9);--surface2:#1d2738;--surface3:#29354a;--text:#f0f4fb;--muted:#a4b1c4;--line:#ffffff16;--accent:#9ccaff;--accent-ink:#101f36;--purple:#c4b3ff;--danger:#ffabab;--shadow:0 18px 45px #0002;--glass:linear-gradient(145deg,#ffffff24,#ffffff04);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,sans-serif;font-synthesis:none}
 :root[data-theme=light]{color-scheme:light;--bg:#f3f6fc;--surface:rgba(255,255,255,.92);--surface2:#eaf0f9;--surface3:#dce7f6;--text:#162238;--muted:#536780;--line:#203b611f;--accent:#225fa9;--accent-ink:#fff;--purple:#6850b5;--danger:#a9293c;--shadow:0 18px 45px #34547a0c;--glass:linear-gradient(145deg,#fff,#dfeafb)}
@@ -542,6 +542,14 @@ ul.hier,ul.hier ul{list-style:none;margin:0;padding:0}ul.hier ul{margin-left:20p
 @media(max-width:760px){.footer-social{--dock-size:40px;--dock-gap:8px;display:flex;overflow-x:auto;overscroll-behavior-x:contain;scroll-snap-type:x mandatory;scroll-padding-inline:6px;scrollbar-width:none;padding:10px 6px 8px;max-width:100%}.footer-social::-webkit-scrollbar{display:none}.footer-social>li{flex:none;scroll-snap-align:start}.footer-social>li:first-child{margin-left:auto}.footer-social>li:last-child{margin-right:auto}.social-tip{display:none}.eco-card .social-dock{justify-items:stretch}.eco-card .social-dock .footer-social{justify-content:flex-start}
 .footer-cards{grid-template-columns:1fr;width:calc(100% - 32px)}.footer-identity{width:calc(100% - 32px)}.eco-card{order:0;display:flex;align-items:stretch}.footer-card{padding:18px;border-radius:22px}.footer-nav a{font-size:15px}.site-footer{margin-top:48px;padding-top:40px}.footer-copyright{margin-top:32px}.footer-copyright p{font-size:12.5px}}
 @media(prefers-reduced-motion:reduce){.footer-reveal .footer-card,.footer-reveal .footer-copyright,.footer-card,.footer-copyright{opacity:1;animation:none!important;transform:none;transition:none}.footer-card:hover,.footer-card:hover .brand-media img,.footer-cta:hover,.footer-nav a:hover{transform:none}.social-link,.social-link:hover,.social-link.is-active{transform:none!important;transition:background .2s ease,color .2s ease,box-shadow .2s ease}.social-tip{transition:opacity .15s ease;transform:translate(-50%,0)!important}}
+/* Pro_Amine card: "Make Any Product with Genius AI" note below the call to action. It reuses the footer tokens, so both themes follow automatically. */
+/* The card's 14px flex gap plus this 12px margin gives about 26px between the button and the heading. */
+.genius-vision{display:flex;flex-direction:column;gap:6px;margin-top:12px;min-width:0}
+.genius-vision h4{margin:0;font-size:15.5px;font-weight:600;letter-spacing:-.1px;line-height:1.4;color:var(--ft-text)}
+.footer-card .genius-vision p{font-size:12.5px;line-height:1.6;color:var(--ft-muted);overflow-wrap:break-word}
+.footer-card .genius-vision .genius-vision-lede{color:var(--ft-text-2)}
+.footer-card .genius-vision .genius-vision-tagline{margin-top:2px;font-weight:600;letter-spacing:.1px;color:var(--ft-text-2)}
+@media(max-width:760px){.footer-card .genius-vision p{font-size:12.5px;line-height:1.7}.genius-vision h4{font-size:15px}}
 /* Header product mark: the official Git Architecture Diagram icon, padded inside its container. */
 .brand-icon.official{width:36px;height:36px;padding:2px;border:0;border-radius:9px;background:transparent;overflow:visible}.brand-mark{width:100%;height:100%;object-fit:contain;display:block}
 @media(max-width:720px){.brand-icon.official{width:30px;height:30px;padding:1px;border-radius:8px}}

@@ -25,7 +25,7 @@ function resolveCommit(dir, ref) { // Resolve a branch, tag, or commit prefix th
  * @param {Record<string, {dir: string, description?: string, private?: boolean}>} repositories keyed by "owner/repo"
  * @param {object} options fallback fetch for non-GitHub URLs, request log, and scripted failures
  */
-export function createGitHubFetch(repositories, { fallback, log = [], failures = {}, requests = [] } = {}) {
+export function createGitHubFetch(repositories, { fallback, log = [], failures = {}, requests = [], truncateTreesOver = Infinity, raw = true } = {}) {
   const byLowerName = new Map(Object.entries(repositories).map(([name, repo]) => [name.toLowerCase(), { name, ...repo }]));
   return async function emulatedFetch(input, init = {}) {
     const url = new URL(typeof input === 'string' ? input : input.url);
@@ -36,6 +36,12 @@ export function createGitHubFetch(repositories, { fallback, log = [], failures =
       if (!repo || kind !== 'legacy.tar.gz') return new Response('Not Found', { status: 404 });
       const bytes = git(repo.dir, ['archive', '--format=tar.gz', `--prefix=${owner}-${name}-${sha.slice(0, 7)}/`, sha], 'buffer');
       return new Response(bytes, { status: 200, headers: { 'Content-Type': 'application/x-gzip', 'Content-Length': String(bytes.length) } });
+    }
+    if (url.hostname === 'raw.githubusercontent.com' && raw) { // Serve raw file bytes at a commit, the way GitHub's raw content host does.
+      const [, owner, name, ref, ...rest] = url.pathname.split('/'); const repo = byLowerName.get(`${decodeURIComponent(owner)}/${decodeURIComponent(name)}`.toLowerCase());
+      const scripted = failures[`raw:${decodeURIComponent(owner)}/${decodeURIComponent(name)}`.toLowerCase()]; if (scripted) { const result = typeof scripted === 'function' ? scripted(url) : scripted; if (result) return result; }
+      if (!repo || repo.private) return new Response('404: Not Found', { status: 404, headers: { 'Content-Type': 'text/plain; charset=utf-8' } }); // Private content is never served anonymously.
+      try { const bytes = git(repo.dir, ['show', `${ref}:${rest.map(decodeURIComponent).join('/')}`], 'buffer'); return new Response(bytes, { status: 200, headers: { 'Content-Type': 'text/plain; charset=utf-8' } }); } catch { return new Response('404: Not Found', { status: 404, headers: { 'Content-Type': 'text/plain; charset=utf-8' } }); }
     }
     if (url.hostname !== 'api.github.com') { if (!fallback) throw new TypeError(`Unexpected outbound request to ${url.hostname}`); return fallback(input, init); }
     log.push(url.pathname + url.search);
@@ -52,7 +58,13 @@ export function createGitHubFetch(repositories, { fallback, log = [], failures =
     let part;
     if ((part = rest.match(/^\/commits\/(.+)$/))) { const ref = decodeURIComponent(part[1]); const sha = resolveCommit(repo.dir, ref); if (!sha) return jsonResponse(ref.includes('/') ? 422 : 404, { message: 'No commit found for SHA: ' + ref }); const tree = git(repo.dir, ['rev-parse', `${sha}^{tree}`]).trim(); const date = git(repo.dir, ['show', '-s', '--format=%cI', sha]).trim(); return jsonResponse(200, { sha, commit: { tree: { sha: tree }, committer: { date } } }); }
     if ((part = rest.match(/^\/git\/matching-refs\/(heads|tags)\/(.*)$/))) { const prefix = `refs/${part[1]}/${decodeURIComponent(part[2])}`; return jsonResponse(200, refsOf(repo.dir).filter(item => item.ref.startsWith(prefix)).map(item => ({ ref: item.ref, object: { sha: item.sha, type: 'commit' } }))); }
-    if ((part = rest.match(/^\/git\/trees\/([0-9a-f]{40})$/))) { const lines = git(repo.dir, ['ls-tree', '-r', '-t', '-l', '-z', part[1]]).split('\0').filter(Boolean); const tree = lines.map(line => { const [meta, path] = line.split('\t'); const [mode, type, sha, size] = meta.split(/\s+/); return { path, mode, type, sha, ...(type === 'blob' ? { size: Number(size) } : {}) }; }); return jsonResponse(200, { sha: part[1], tree, truncated: false }); }
+    if ((part = rest.match(/^\/git\/trees\/([0-9a-f]{40})$/))) { // Recursive only with ?recursive=1, like GitHub; optionally truncated to emulate very large trees.
+      const recursive = url.searchParams.get('recursive') === '1';
+      const lines = git(repo.dir, ['ls-tree', ...(recursive ? ['-r', '-t'] : []), '-l', '-z', part[1]]).split('\0').filter(Boolean);
+      const tree = lines.map(line => { const [meta, path] = line.split('\t'); const [mode, type, sha, size] = meta.split(/\s+/); return { path, mode, type, sha, ...(type === 'blob' ? { size: Number(size) } : {}) }; });
+      const truncated = recursive && tree.length > truncateTreesOver;
+      return jsonResponse(200, { sha: part[1], tree: truncated ? tree.slice(0, truncateTreesOver) : tree, truncated });
+    }
     if ((part = rest.match(/^\/git\/blobs\/([0-9a-f]{40})$/))) { const bytes = git(repo.dir, ['cat-file', 'blob', part[1]], 'buffer'); return jsonResponse(200, { sha: part[1], size: bytes.length, encoding: 'base64', content: bytes.toString('base64').replace(/(.{60})/g, '$1\n') }); }
     if ((part = rest.match(/^\/tarball\/(.+)$/))) { const sha = resolveCommit(repo.dir, decodeURIComponent(part[1])); if (!sha) return jsonResponse(404, { message: 'Not Found' }); return new Response(null, { status: 302, headers: { Location: `https://codeload.github.com/${repo.name}/legacy.tar.gz/${sha}`, 'x-ratelimit-remaining': '4998' } }); }
     if ((part = rest.match(/^\/contents\/(.+)$/))) { const ref = url.searchParams.get('ref') || 'HEAD'; const file = decodeURIComponent(part[1]); try { const bytes = git(repo.dir, ['show', `${ref}:${file}`], 'buffer'); return jsonResponse(200, { type: 'file', path: file, encoding: 'base64', content: bytes.toString('base64').replace(/(.{60})/g, '$1\n') }); } catch { return jsonResponse(404, { message: 'Not Found' }); } }

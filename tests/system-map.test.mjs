@@ -2,7 +2,7 @@
 import test from 'node:test'; import assert from 'node:assert/strict';
 import { validateGraph, compileGraph } from '../src/graph.mjs';
 import { runAnalysis, publicAIStatus } from '../src/service.mjs';
-import { githubFixture, files } from './fixtures.mjs';
+import { githubFixture, files, isGitHubHost } from './fixtures.mjs';
 
 const inventory = { paths: new Set(['README.md', 'drivers/x.inf']), folders: new Set(['drivers']), lineLimits: new Map([['README.md', 40], ['drivers/x.inf', 30]]) };
 const raw = { groups: [{ id: 'win', label: 'Windows driver' }], nodes: [
@@ -35,7 +35,7 @@ test('the guided tour keeps valid steps in order and marks the edges along it as
 });
 
 const report = graph => ({ overview: 'A fixture service.', components: [], relationships: [], recommendations: [], limitations: [], graph });
-function provider(counter) { return async (url, options) => { if (String(url).startsWith('https://api.github.com')) return counter.github(url, options); counter.ai++; const body = JSON.parse(options.body); assert.equal(body.text.format.schema.properties.graph.properties.tour.type, 'array'); return Response.json({ status: 'completed', model: 'site-model', output: [{ content: [{ type: 'output_text', text: JSON.stringify(report({ groups: [], nodes: [{ id: 'user', label: 'Visitor', detail: '', kind: 'actor', group: '', path: '' }, { id: 'main', label: 'Main module', detail: '', kind: 'entry', group: '', path: files[0].path }], edges: [{ from: 'user', to: 'main', label: 'runs', basis: 'inferred', evidencePath: '', evidenceLine: 0 }], tour: [{ node: 'user', text: 'Starts here.' }, { node: 'main', text: 'Then here.' }] })) }] }] }); }; }
+function provider(counter) { return async (url, options) => { if (isGitHubHost(url)) return counter.github(url, options); counter.ai++; const body = JSON.parse(options.body); assert.equal(body.text.format.schema.properties.graph.properties.tour.type, 'array'); return Response.json({ status: 'completed', model: 'site-model', output: [{ content: [{ type: 'output_text', text: JSON.stringify(report({ groups: [], nodes: [{ id: 'user', label: 'Visitor', detail: '', kind: 'actor', group: '', path: '' }, { id: 'main', label: 'Main module', detail: '', kind: 'entry', group: '', path: files[0].path }], edges: [{ from: 'user', to: 'main', label: 'runs', basis: 'inferred', evidencePath: '', evidenceLine: 0 }], tour: [{ node: 'user', text: 'Starts here.' }, { node: 'main', text: 'Then here.' }] })) }] }] }); }; }
 const siteEnv = { GENIUS_PUBLIC_AI: '1', OPENAI_API_KEY: 'site-key', GENIUS_MODEL: 'site-model', GENIUS_PUBLIC_DAILY_LIMIT: '2' };
 
 test('public system maps use the site key once per commit and then serve the saved map', async () => {

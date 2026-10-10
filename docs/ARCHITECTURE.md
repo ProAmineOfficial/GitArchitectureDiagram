@@ -26,7 +26,7 @@ flowchart TD
 
 | Module | Responsibility |
 | --- | --- |
-| `src/github.mjs` | Validate inputs; resolve tree/blob refs through `git/matching-refs` (slash branches, tags, SHAs); pin one commit; read the tree and SHA-verified blobs; rate-limit, permission, HTML, and transient-failure handling; evidence-following ingestion |
+| `src/github.mjs` | Validate inputs; resolve tree/blob refs through `git/matching-refs` (slash branches, tags, SHAs); pin one commit; read the tree (recovering subtrees when GitHub truncates a very large one, within a request budget) and blobs. Public files are read from `raw.githubusercontent.com` at the commit SHA without credentials and verified against the Git blob SHA; the REST blob API is the fallback and the only path for private repositories. Evidence-following ingestion is sequential and deterministic, with raw-only prefetch on Node. Coverage reports measured requests (`api`, `raw`, `rawFallbacks`, `treeRequests`, `prefetchUnused`) |
 | `src/overview.mjs` | Reference discovery (imports, manifest entry points), component overview, reading order |
 | `src/graph.mjs` | Validate a structured graph against the commit's paths and excerpt lines; compile it to Mermaid with one shape and color per kind and one line style per evidence basis |
 | `src/genius.mjs` | Lexical import/include extraction, file-level graph, mind map, authored-diagram discovery (`.md`, `.mmd`), guide |
@@ -44,7 +44,8 @@ flowchart TD
 | `public/genius-agents.js`, `public/genius-core.js` | Nine agents in three teams plus Genius Core; the orchestrator (concurrency 3, at most two revise-and-revalidate loops, UNRESOLVED kept with both positions) |
 | `public/deep-genius.js` | Deep Genius panel section, confirmation, agent results, and the Process view |
 | `public/brand.js` | Local brand assets with fallbacks, official icon swap, footer reveal |
-| `src/service.mjs` | Orchestration, credential isolation, public cache (Node only), sessions (Node only) |
+| `src/service.mjs` | Orchestration, credential isolation, saved public analyses through a store, sessions (Node only) |
+| `src/store.mjs` | Analysis stores: memory, and a bounded file store (one atomic JSON file per commit-keyed entry); the Node server uses the file store, the Worker uses the platform cache |
 | `server.mjs` / `worker.mjs` | HTTP routing, origin/access/rate checks, NDJSON streaming, SPA fallback for every `/owner/repo/...` path |
 | `public/route.js` | Pure mapping between GitHub-shaped paths and analysis requests; permalinks |
 | `public/app.js` | Workspace state, history, views, tree, inspector, Genius panel |

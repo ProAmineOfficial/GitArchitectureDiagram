@@ -1,6 +1,6 @@
 // Copyright © 2026 Pro_Amine LLC
 // Created & Developed by Amine Saoud ibn al-Bashir
-// Git Architecture Diagram · SPDX-License-Identifier: MIT · Provenance ID: GAD-PROVENANCE-CORE-001
+// Git Architecture Diagram · SPDX-License-Identifier: AGPL-3.0-only · Provenance ID: GAD-PROVENANCE-CORE-001
 // Project: Git Architecture Diagram | Component: GitHub reader | Author: Amine Saoud ibn al-Bashir.
 // Features: immutable snapshots, bounded text ingestion, private-token isolation, and explicit coverage.
 import { Buffer } from 'node:buffer'; // Make Git blob verification portable to the hosted Node-compatible runtime.
@@ -12,6 +12,45 @@ const SKIP = /(^|\/)(node_modules|vendor|dist|build|\.git|\.pio|coverage|__pycac
 const SECRET = /(^|\/)(\.env(?:\..*)?|.*(?:credential|secret|password|private[_-]?key).*|id_rsa|id_ed25519)$|\.(pem|p12|pfx|key)$/i; // Exclude likely credential files from ingestion.
 const TEXT = /\.(m?[jc]?[jt]sx?|py|pyi|c|cc|cpp|cxx|h|hpp|ino|rs|go|java|kt|kts|cs|rb|php|swift|vue|svelte|md|mdx|mmd|mermaid|rst|txt|json|toml|ini|cfg|conf|properties|ya?ml|sh|bat|cmd|ps1|reg|inf|ld|s|asm|v|sv|vhdl?|cmake|gradle|html|css|sql|proto|graphql)$/i; // Recognize useful textual files.
 const PROJECT_MARKER = /(^|\/)(package\.json|platformio\.ini|pyproject\.toml|setup\.py|Cargo\.toml|go\.mod|CMakeLists\.txt|pom\.xml|build\.gradle(\.kts)?|library\.(json|properties))$/i; // Files that mark the root of a buildable project.
+// ——— Reading Engine 2.0 limits ———
+const RAW_HOST = 'raw.githubusercontent.com'; // GitHub's raw content host; addressed by commit SHA, so content cannot change under a pinned analysis.
+const RAW_TIMEOUT_MS = 15000; // Per-file deadline for raw reads; the API fallback has its own 25-second deadline.
+const RAW_FAILURE_LIMIT = 3; // After three consecutive raw failures, read the rest of the run through the API.
+const MAX_BLOB_BYTES = 96000; // Largest single text file analyzed (unchanged from 1.1.0).
+const MAX_TREE_REQUESTS = 40; // Extra tree listings allowed when GitHub truncates a recursive tree.
+const MAX_TREE_ENTRIES = 200000; // Stop recovering a truncated tree beyond this many entries (memory bound).
+export const MAX_RETAINED_ENTRIES = 12000; // Entries kept for browsing, selection, and the response (unchanged display limit).
+export const INGEST_CONCURRENCY = 4; // Files read at the same time; results are applied in a fixed order, so the same commit gives the same report.
+/** Git's blob identity: SHA-1 over "blob <length>\0<bytes>". */
+export function gitBlobSha(bytes) { return createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex'); }
+/** Read a response body up to `limit` bytes; larger bodies are rejected without being buffered. */
+export async function boundedBytes(response, limit) {
+  const chunks = []; let total = 0;
+  if (!response.body) return Buffer.alloc(0);
+  for await (const chunk of response.body) {
+    total += chunk.length;
+    if (total > limit) { throw new AppError(413, 'The upstream response exceeded the read limit.'); }
+    chunks.push(Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
+}
+/** Normalize one GitHub tree entry, prefixing the path of the subtree it was listed from. */
+function treeEntry(entry, prefix = '') {
+  return { path: prefix ? `${prefix}/${entry.path}` : entry.path, type: entry.type, size: entry.size ?? 0, sha: entry.sha, mode: entry.mode };
+}
+const TREE_TYPES = new Set(['blob', 'tree', 'commit']); // Files, folders, and submodule pointers.
+function addTreeEntry(found, entry, prefix) { if (TREE_TYPES.has(entry.type)) { const item = treeEntry(entry, prefix); found.set(item.path, item); } } // Later listings replace earlier ones for the same path.
+/**
+ * Keep at most `limit` entries, shallow levels first, then restore path order.
+ * GitHub lists trees in path order, so cutting the list off would drop whole late folders (often src/);
+ * keeping shallow entries first preserves the top-level structure of very large repositories.
+ */
+export function retainEntries(entries, limit) {
+  if (entries.length <= limit) return entries;
+  const depth = path => path.split('/').length;
+  const kept = [...entries].sort((a, b) => depth(a.path) - depth(b.path) || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0)).slice(0, limit);
+  return kept.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+}
 export const safeTextPath = path => !SKIP.test(path) && !SECRET.test(path) && (TEXT.test(path) || /(^|\/)(Dockerfile|Makefile|CMakeLists.txt|LICENSE)$/i.test(path)); // Select inspectable source and documentation.
 export const encodePath = value => value.split('/').map(encodeURIComponent).join('/'); // Encode repository paths without losing their hierarchy.
 export function parseRepository(input) { // Accept a GitHub URL or owner/repository shorthand.
@@ -52,7 +91,17 @@ export function rateLimitMessage(info, retryAfter, authenticated) { // Tell the 
   return `GitHub's API rate limit was reached.${when} ${authenticated ? 'Your token\'s allowance is exhausted; wait for the reset.' : 'Wait for the reset. The site operator can raise this allowance with a server-side GITHUB_TOKEN.'}`; // Give the actionable fix.
 } // End rate-limit messaging.
 export class GitHubReader { // Keep credentials and network controls local to one analysis.
-  constructor({ token = '', signal, fetchImpl = fetch, maxRequests = Infinity } = {}) { this.token = token; this.signal = signal; this.fetchImpl = (...args) => fetchImpl(...args); this.maxRequests = maxRequests; this.requests = 0; } // Call native fetch as a standalone function; binding it to this reader breaks the Workers runtime.
+  constructor({ token = '', signal, fetchImpl = fetch, maxRequests = Infinity, raw = true, maxTreeRequests = MAX_TREE_REQUESTS } = {}) {
+    this.token = token; this.signal = signal; this.maxRequests = maxRequests; this.requests = 0; // Every network call (API or raw) counts toward the hosted request budget.
+    this.fetchImpl = (...args) => fetchImpl(...args); // Call native fetch as a standalone function; binding it to this reader breaks the Workers runtime.
+    this.raw = raw; // Read public blobs from GitHub's raw content host, pinned to the commit, before falling back to the API.
+    this.maxTreeRequests = maxTreeRequests; // Upper bound on extra tree listings when GitHub truncates a recursive tree.
+    this.rawFailures = 0; // Consecutive raw failures; after RAW_FAILURE_LIMIT the reader stops trying raw reads for this run.
+    this.stats = { api: 0, raw: 0, rawFallbacks: 0, treeRequests: 0 }; // Measured request counts, reported in coverage.
+  }
+  budget() { // Count one network call against the request budget, or stop before exceeding it.
+    if (++this.requests > this.maxRequests) throw new AppError(429, 'The hosted GitHub request budget was reached. Narrow the folder scope and analyze again.'); // Preserve a partial report before exceeding hosting request limits.
+  }
   async get(route) { // Read a fixed-host GitHub REST resource with one retry for transient failures.
     for (let attempt = 0; ; attempt++) { // At most two network attempts per resource.
       try { return await this.request(route); } // Most requests succeed on the first attempt.
@@ -60,7 +109,7 @@ export class GitHubReader { // Keep credentials and network controls local to on
     } // End retry loop.
   } // End API reading.
   async request(route) { // Perform one bounded GitHub REST request.
-    if (++this.requests > this.maxRequests) throw new AppError(429, 'The hosted GitHub request budget was reached. Narrow the folder scope and analyze again.'); // Preserve a partial report before exceeding hosting request limits.
+    this.budget(); this.stats.api++; // Count the call before sending it.
     const headers = { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': `GitArchitectureDiagram/${VERSION}` }; // Identify the API contract and application.
     if (this.token) headers.Authorization = `Bearer ${this.token}`; // Send the optional token only to GitHub.
     const signal = this.signal ? AbortSignal.any([this.signal, AbortSignal.timeout(25000)]) : AbortSignal.timeout(25000); // Apply both whole-run and individual request deadlines.
@@ -96,6 +145,72 @@ export class GitHubReader { // Keep credentials and network controls local to on
     for (let count = Math.min(tail.length, 6); count >= 1; count--) { const name = tail.slice(0, count).join('/'); if (candidates.some(item => item.ref === name)) continue; try { return { ref: name, kind: 'ref', segments: count, commit: await this.get(`${route}/commits/${encodeURIComponent(name)}`) }; } catch (error) { if (![404, 422].includes(error.status)) throw error; } } // Fall back to bounded probing for refs the listing did not return.
     throw new AppError(404, `No branch, tag, or commit named "${first}" was found. Check the URL or enter the branch under Options.`); // Explain unsupported or missing references.
   } // End tree-ref resolution.
+  /**
+   * Read the full tree of one commit. GitHub truncates recursive listings of very large trees; when that happens,
+   * recoverTree() lists the requested scope subtree by subtree. `incomplete` stays true if anything was left out.
+   */
+  async readTree(route, rootSha, scope = '') {
+    const first = await this.get(`${route}/git/trees/${rootSha}?recursive=1`); this.stats.treeRequests++;
+    const tree = { found: new Map(), incomplete: false, recovered: false, allowance: 0 };
+    for (const entry of first.tree || []) addTreeEntry(tree.found, entry, '');
+    if (first.truncated) {
+      tree.recovered = true;
+      // Recovery budget: never spend the requests a hosted analysis needs for its files.
+      tree.allowance = Number.isFinite(this.maxRequests) ? Math.min(this.maxTreeRequests, Math.floor((this.maxRequests - this.requests) / 3)) : this.maxTreeRequests;
+      await this.recoverTree(route, rootSha, scope, tree);
+    }
+    tree.entries = [...tree.found.values()].sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+    return tree;
+  }
+  /**
+   * List `scope` completely after a truncated recursive listing: walk to it one level at a time (keeping each level's
+   * direct entries, which include project manifests), then list it recursively where GitHub allows and one level at a
+   * time where it does not. Bounded by tree.allowance requests and MAX_TREE_ENTRIES entries.
+   */
+  async recoverTree(route, rootSha, scope, tree) {
+    tree.listings ||= new Map(); // Identical folders share one tree SHA; list each SHA once.
+    const list = async (sha, recursive) => { // One extra tree listing, or null when the allowance is spent.
+      const key = `${sha}|${recursive}`;
+      if (tree.listings.has(key)) return tree.listings.get(key);
+      if (tree.allowance <= 0) return null;
+      tree.allowance--; this.stats.treeRequests++;
+      const listing = await this.get(`${route}/git/trees/${sha}${recursive ? '?recursive=1' : ''}`);
+      tree.listings.set(key, listing);
+      return listing;
+    };
+    try {
+      let sha = rootSha; let prefix = '';
+      for (const segment of scope ? scope.split('/') : []) {
+        const level = await list(sha, false);
+        if (!level) { tree.incomplete = true; return; }
+        const direct = (level.tree || []).filter(entry => !entry.path.includes('/'));
+        direct.forEach(entry => addTreeEntry(tree.found, entry, prefix));
+        const next = direct.find(entry => entry.path === segment);
+        if (!next || next.type !== 'tree') return; // A file (or a missing name) ends the walk; snapshot() decides what it means.
+        sha = next.sha; prefix = prefix ? `${prefix}/${segment}` : segment;
+      }
+      // The root is already known to be truncated, so it starts one level at a time; other folders try a recursive listing first.
+      const queue = [{ sha, prefix, truncated: sha === rootSha, ancestors: [sha] }]; // `ancestors` guards against cycles, which real Git trees cannot contain.
+      while (queue.length) {
+        if (tree.found.size >= MAX_TREE_ENTRIES) { tree.incomplete = true; return; }
+        const folder = queue.shift();
+        if (!folder.truncated) {
+          const deep = await list(folder.sha, true);
+          if (!deep) { tree.incomplete = true; return; }
+          if (!deep.truncated) { (deep.tree || []).forEach(entry => addTreeEntry(tree.found, entry, folder.prefix)); continue; }
+        }
+        const level = await list(folder.sha, false);
+        if (!level) { tree.incomplete = true; return; }
+        for (const entry of (level.tree || []).filter(item => !item.path.includes('/'))) {
+          addTreeEntry(tree.found, entry, folder.prefix);
+          if (entry.type === 'tree' && !folder.ancestors.includes(entry.sha)) queue.push({ sha: entry.sha, prefix: folder.prefix ? `${folder.prefix}/${entry.path}` : entry.path, truncated: false, ancestors: [...folder.ancestors, entry.sha] });
+        }
+      }
+    } catch (error) {
+      if (error.status === 408 || this.signal?.aborted) throw error; // Cancellation still cancels.
+      tree.incomplete = true; // Any other failure keeps what was listed and reports the tree as partial.
+    }
+  }
   async snapshot(target, { ref = '', scope = '', suppliedToken = false } = {}) { // Resolve a repository target to one immutable commit.
     const route = `/repos/${encodeURIComponent(target.owner)}/${encodeURIComponent(target.repo)}`; // Build the validated API repository prefix.
     const metadata = await this.get(route); // Read visibility and the default branch.
@@ -108,21 +223,47 @@ export class GitHubReader { // Keep credentials and network controls local to on
       commit = await this.get(`${route}/commits/${encodeURIComponent(revision)}`); // Resolve exactly one commit before reading its tree.
       if (refKind === 'explicit' && commit.sha?.startsWith(revision.toLowerCase())) refKind = 'commit'; // Record that the visitor pinned a commit.
     } // End revision selection.
-    const listing = await this.get(`${route}/git/trees/${commit.commit.tree.sha}?recursive=1`); // Fetch the immutable repository tree.
-    const all = listing.tree.filter(entry => ['blob', 'tree', 'commit'].includes(entry.type)).map(entry => ({ path: entry.path, type: entry.type, size: entry.size ?? 0, sha: entry.sha, mode: entry.mode })); // Keep compact factual metadata.
+    const tree = await this.readTree(route, commit.commit.tree.sha, selectedScope); // Fetch the immutable repository tree, recovering subtrees when GitHub truncates it.
+    let all = tree.entries; // Compact factual metadata: path, type, size, blob SHA, mode.
     let focus = ''; const focused = selectedScope && all.find(entry => entry.path === selectedScope); // A blob URL selects a file to open, not a one-file analysis.
     if (focused?.type === 'blob') { focus = selectedScope; const parts = selectedScope.split('/').slice(0, -1); selectedScope = parts.join('/'); for (let depth = parts.length; depth >= 0; depth--) { const folder = parts.slice(0, depth).join('/'); if (all.some(entry => entry.type === 'blob' && PROJECT_MARKER.test(entry.path) && entry.path.split('/').slice(0, -1).join('/') === folder)) { selectedScope = folder; break; } } } // Analyze the file inside its nearest project folder (manifest), else its own folder.
+    if (tree.recovered && focus && selectedScope !== focus) { await this.recoverTree(route, commit.commit.tree.sha, selectedScope, tree); all = [...tree.found.values()].sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0)); } // A file URL moved the scope to its project folder: list that folder too.
     const scoped = all.filter(entry => !selectedScope || entry.path === selectedScope || entry.path.startsWith(`${selectedScope}/`)); // Restrict analysis and browsing to the requested scope.
     if (selectedScope && !scoped.length) throw new AppError(404, `"${selectedScope}" does not exist at ${revision}. Check the folder name or choose another branch.`); // Reject empty or mistyped scopes.
-    const entries = scoped.slice(0, 12000); // Bound retained tree size for large repositories.
-    return { route, owner: target.owner, repo: target.repo, fullName: metadata.full_name, description: metadata.description || '', private: metadata.private, branch: revision, refKind, defaultBranch: metadata.default_branch, sha: commit.sha, scope: selectedScope, focus, entries, treeTruncated: Boolean(listing.truncated) || scoped.length > entries.length, listedEntries: scoped.length, htmlUrl: `https://github.com/${metadata.full_name}`, committedAt: commit.commit.committer?.date ?? null }; // Report truncation explicitly.
+    const entries = retainEntries(scoped, MAX_RETAINED_ENTRIES); // Bound retained tree size; keep shallow levels first so large repositories still show their whole top-level structure.
+    return { route, owner: target.owner, repo: target.repo, fullName: metadata.full_name, description: metadata.description || '', private: metadata.private, branch: revision, refKind, defaultBranch: metadata.default_branch, sha: commit.sha, scope: selectedScope, focus, entries, treeTruncated: tree.incomplete || scoped.length > entries.length, treeRecovered: tree.recovered, listedEntries: scoped.length, htmlUrl: `https://github.com/${metadata.full_name}`, committedAt: commit.commit.committer?.date ?? null }; // Report truncation explicitly.
   } // End immutable snapshot construction.
   async blob(snapshot, entry) { // Fetch and verify one small textual Git blob.
+    if (this.rawEligible(snapshot)) { // Raw reads apply only to public repositories pinned to a full commit SHA.
+      const file = await this.rawBlob(snapshot, entry); // Returns null when the API should be used instead.
+      if (file) return file;
+      this.stats.rawFallbacks++; // The verified API read below replaces a failed or unverifiable raw read.
+    }
+    return this.apiBlob(snapshot, entry);
+  }
+  rawEligible(snapshot) { return Boolean(this.raw) && !snapshot.private && this.rawFailures < RAW_FAILURE_LIMIT && /^[0-9a-f]{40}$/.test(snapshot.sha || ''); } // Public, commit-pinned, and the circuit breaker has not tripped.
+  async rawBlob(snapshot, entry) { // One raw read at the commit; verified against the Git blob SHA, never sent with credentials.
+    const url = `https://${RAW_HOST}/${encodeURIComponent(snapshot.owner)}/${encodeURIComponent(snapshot.repo)}/${snapshot.sha}/${encodePath(entry.path)}`; // Commit-pinned: the content cannot drift with a branch.
+    this.budget(); this.stats.raw++; // Raw reads count toward the hosted request budget too.
+    const signal = this.signal ? AbortSignal.any([this.signal, AbortSignal.timeout(RAW_TIMEOUT_MS)]) : AbortSignal.timeout(RAW_TIMEOUT_MS); // Whole-run and per-request deadlines.
+    let response;
+    try { response = await this.fetchImpl(url, { headers: { 'User-Agent': `GitArchitectureDiagram/${VERSION}` }, signal, redirect: 'manual' }); } // No Authorization header: raw reads are for public content only.
+    catch (error) { if (this.signal?.aborted) throw new AppError(408, 'GitHub reading was cancelled.'); this.rawFailures++; return null; } // A network failure falls back to the API.
+    if (response.status !== 200) { await response.body?.cancel().catch(() => {}); this.rawFailures++; return null; } // Redirects, 404s, and rate limits fall back to the API.
+    let bytes;
+    try { bytes = await boundedBytes(response, MAX_BLOB_BYTES); }
+    catch (error) { if (error.status === 413) throw new AppError(413, 'Binary or oversized file excluded from text analysis.'); this.rawFailures++; return null; } // Oversized content is excluded exactly as on the API path.
+    if (bytes.includes(0)) throw new AppError(413, 'Binary or oversized file excluded from text analysis.'); // NUL bytes mean binary content.
+    if (gitBlobSha(bytes) !== entry.sha) { this.rawFailures++; return null; } // Unverifiable content is never used; the API read decides.
+    this.rawFailures = 0; // A verified read resets the circuit breaker.
+    return { path: entry.path, sha: entry.sha, content: bytes.toString('utf8'), size: bytes.length };
+  }
+  async apiBlob(snapshot, entry) { // The REST blob endpoint: base64 content addressed by the immutable blob SHA.
     const data = await this.get(`${snapshot.route}/git/blobs/${entry.sha}`); // Avoid branch drift by using the immutable blob SHA.
     if (data.encoding !== 'base64') throw new AppError(422, 'Unsupported GitHub blob encoding.'); // Require a predictable byte representation.
     const bytes = Buffer.from(data.content, 'base64'); // Decode the exact stored bytes.
-    if (bytes.length > 96000 || bytes.includes(0)) throw new AppError(413, 'Binary or oversized file excluded from text analysis.'); // Avoid binary payloads and large text reads.
-    const sha = createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex'); // Recreate the Git object identity.
+    if (bytes.length > MAX_BLOB_BYTES || bytes.includes(0)) throw new AppError(413, 'Binary or oversized file excluded from text analysis.'); // Avoid binary payloads and large text reads.
+    const sha = gitBlobSha(bytes); // Recreate the Git object identity.
     if (sha !== entry.sha) throw new AppError(502, 'GitHub blob integrity verification failed.'); // Refuse inconsistent evidence.
     return { path: entry.path, sha, content: bytes.toString('utf8'), size: bytes.length }; // Return evidence without any credential fields.
   } // End verified blob reading.
@@ -154,16 +295,58 @@ function pickDiverse(ranked, count, counts = new Map(), boosts = new Map()) { //
   while (remaining.length && chosen.length < count) { remaining.sort((a, b) => value(b) - value(a) || a.path.localeCompare(b.path)); const entry = remaining.shift(); chosen.push(entry); counts.set(directoryOf(entry.path), (counts.get(directoryOf(entry.path)) || 0) + 1); } // Greedy selection with a diversity penalty.
   return chosen; // Return in reading order.
 } // End diverse selection.
-export async function ingest(snapshot, reader, maxFiles, progress = () => {}, { discover } = {}) { // Read files sequentially, following references discovered in files already read.
-  const selection = selectFiles(snapshot, maxFiles); const files = []; const skipped = []; let bytes = 0; // Initialize actual evidence and skip accounting.
-  const pool = new Map(selection.ranked.map(entry => [entry.path, entry])); const boosts = new Map(); const counts = new Map(); const reasons = new Map(); // Track candidates, discovered priority, and why each file was chosen.
-  const next = () => pickDiverse([...pool.values()], 1, new Map(counts), boosts)[0]; // Choose the single best remaining candidate.
+/**
+ * Read up to `maxFiles` files, following references discovered in files already read.
+ * Selection is strictly sequential (each choice sees the imports found so far), so the same commit and options always
+ * select the same files. For speed, when reads are cheap (public repository, raw reads on, no hosted request budget),
+ * the next `concurrency` most likely candidates are fetched ahead of time. A prefetched file that is never selected is
+ * discarded and counted in coverage.requests.prefetchUnused; it never affects the report.
+ */
+export async function ingest(snapshot, reader, maxFiles, progress = () => {}, { discover, concurrency = INGEST_CONCURRENCY } = {}) {
+  const selection = selectFiles(snapshot, maxFiles); const files = []; const skipped = []; let bytes = 0; // Actual evidence and skip accounting.
+  const pool = new Map(selection.ranked.map(entry => [entry.path, entry])); const boosts = new Map(); const counts = new Map(); const reasons = new Map(); // Candidates, discovered priority, and why each file was chosen.
+  const next = () => pickDiverse([...pool.values()], 1, new Map(counts), boosts)[0]; // The single best remaining candidate.
+  const width = Math.max(1, Math.min(8, Number(concurrency) || 1)); // At most eight reads in flight.
+  const prefetch = width > 1 && typeof reader.rawEligible === 'function' && !snapshot.private && !Number.isFinite(reader.maxRequests ?? Infinity); // Never spend a hosted budget or API quota on speculation.
+  const inflight = new Map(); // path → settled-result promise for reads started ahead of selection.
+  const settle = promise => promise.then(value => (value ? { value } : { miss: true }), error => ({ error })); // Never leaves an unhandled rejection.
+  const topUp = () => { // Keep the best remaining candidates in flight. Prefetch uses raw reads only, never the API.
+    if (!prefetch || !reader.rawEligible(snapshot)) return;
+    for (const entry of pickDiverse([...pool.values()], width, new Map(counts), boosts)) if (!inflight.has(entry.path) && entry.size + bytes <= 900000) inflight.set(entry.path, settle(reader.rawBlob(snapshot, entry)));
+  };
+  const read = async entry => { // A prefetched raw result when there is one; otherwise the normal raw-then-API read.
+    const early = inflight.get(entry.path); inflight.delete(entry.path);
+    if (!early) return settle(reader.blob(snapshot, entry));
+    const outcome = await early;
+    if (!outcome.miss) return outcome;
+    reader.stats.rawFallbacks++; // The raw read failed or could not be verified; the API decides.
+    return settle(reader.apiBlob(snapshot, entry));
+  };
   while (files.length + skipped.length < maxFiles && pool.size) { // Fill the requested file budget.
+    topUp();
     const entry = next(); pool.delete(entry.path); counts.set(directoryOf(entry.path), (counts.get(directoryOf(entry.path)) || 0) + 1); // Claim the candidate.
-    if (bytes + entry.size > 900000) { skipped.push({ path: entry.path, reason: 'Total byte budget' }); continue; } // Keep memory and downstream model input bounded.
-    progress({ stage: 'Reading source', detail: entry.path, read: files.length, total: maxFiles }); // Stream honest file-reading progress.
-    try { const file = await reader.blob(snapshot, entry); bytes += file.size; file.reason = reasons.get(entry.path) || (entry.path === snapshot.focus ? 'Opened from the URL' : 'Ranked by path'); files.push(file); if (discover) for (const hint of discover(file, snapshot) || []) { if (!pool.has(hint.path)) continue; boosts.set(hint.path, Math.max(boosts.get(hint.path) || 0, hint.weight)); if (!reasons.has(hint.path)) reasons.set(hint.path, hint.reason); } } // Follow imports and manifest entry points from verified content.
-    catch (error) { if ([401, 403, 408, 429].includes(error.status)) { const rest = pickDiverse([...pool.values()], Math.max(0, maxFiles - files.length - skipped.length - 1), new Map(counts), boosts); skipped.push({ path: entry.path, reason: error.message }, ...rest.map(item => ({ path: item.path, reason: error.message }))); break; } skipped.push({ path: entry.path, reason: error.message }); } // Preserve partial evidence while reporting upstream limits.
-  } // End bounded ingestion.
-  return { files, coverage: { readFiles: files.length, eligibleFiles: selection.eligible, listedFiles: snapshot.entries.filter(entry => entry.type === 'blob').length, maxFiles, bytes, treeTruncated: snapshot.treeTruncated, skipped, unsampledFiles: Math.max(0, selection.eligible - files.length), followedReferences: files.filter(file => /^(Imported|Declared|Built)/.test(file.reason)).length, rateLimit: reader.rateLimit || null } }; // Describe exactly what the analyzer saw.
+    if (bytes + entry.size > 900000) { skipped.push({ path: entry.path, reason: 'Total byte budget' }); inflight.delete(entry.path); continue; } // Keep memory and downstream model input bounded.
+    progress({ stage: 'Reading source', detail: entry.path, read: files.length, total: maxFiles }); // Honest file-reading progress.
+    const outcome = await read(entry);
+    if (outcome.value) {
+      const file = outcome.value; bytes += file.size;
+      file.reason = reasons.get(entry.path) || (entry.path === snapshot.focus ? 'Opened from the URL' : 'Ranked by path');
+      files.push(file);
+      if (discover) for (const hint of discover(file, snapshot) || []) { // Follow imports and manifest entry points from verified content.
+        if (!pool.has(hint.path)) continue;
+        boosts.set(hint.path, Math.max(boosts.get(hint.path) || 0, hint.weight));
+        if (!reasons.has(hint.path)) reasons.set(hint.path, hint.reason);
+      }
+      continue;
+    }
+    const error = outcome.error;
+    if ([401, 403, 408, 429].includes(error.status)) { // Upstream limits end reading; partial evidence is kept.
+      const rest = pickDiverse([...pool.values()], Math.max(0, maxFiles - files.length - skipped.length - 1), new Map(counts), boosts);
+      skipped.push({ path: entry.path, reason: error.message }, ...rest.map(item => ({ path: item.path, reason: error.message })));
+      break;
+    }
+    skipped.push({ path: entry.path, reason: error.message });
+  }
+  const requests = reader.stats ? { ...reader.stats, prefetchUnused: inflight.size } : null; // Measured GitHub requests: API calls, raw reads, raw-to-API fallbacks, tree listings, unused prefetches.
+  return { files, coverage: { readFiles: files.length, eligibleFiles: selection.eligible, listedFiles: snapshot.entries.filter(entry => entry.type === 'blob').length, maxFiles, bytes, treeTruncated: snapshot.treeTruncated, treeRecovered: Boolean(snapshot.treeRecovered), skipped, unsampledFiles: Math.max(0, selection.eligible - files.length), followedReferences: files.filter(file => /^(Imported|Declared|Built)/.test(file.reason)).length, rateLimit: reader.rateLimit || null, requests } }; // Describe exactly what the analyzer saw.
 } // End ingestion.

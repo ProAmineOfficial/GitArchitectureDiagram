@@ -19,11 +19,34 @@ const CORE = ['server.mjs', 'worker.mjs', 'cli.mjs', ...readdirSync('src').filte
 test('the provenance record is public, complete, identical in both copies, and holds no secrets', () => {
   const file = JSON.parse(readFileSync('PROVENANCE.json', 'utf8')); assert.deepEqual(file, JSON.parse(JSON.stringify(PROVENANCE)));
   for (const key of ['project', 'creator', 'organization', 'canonicalRepository', 'canonicalWebsite', 'firstReleaseYear', 'license', 'provenanceVersion']) assert.ok(file[key], key);
-  assert.equal(file.creator, 'Amine Saoud ibn al-Bashir'); assert.equal(file.organization, 'Pro_Amine LLC'); assert.equal(file.license, 'MIT'); assert.equal(file.firstReleaseYear, 2026);
-  assert.match(readFileSync('LICENSE', 'utf8'), /^MIT License\r?\n/); assert.deepEqual(findSecrets(JSON.stringify(file)), []); // LICENSE may be checked out with CRLF on Windows; the file itself is not changed.
-  const notice = readFileSync('NOTICE.md', 'utf8'); assert.match(notice, /Pro_Amine LLC/); assert.match(notice, /MIT/); for (const name of ['mermaid', 'DOMPurify', 'marked', 'fflate', 'IBM Plex']) assert.match(notice, new RegExp(name), name);
+  assert.equal(file.creator, 'Amine Saoud ibn al-Bashir'); assert.equal(file.organization, 'Pro_Amine LLC'); assert.equal(file.license, 'AGPL-3.0-only'); assert.equal(file.firstReleaseYear, 2026);
+  // LICENSE holds the GNU AGPL v3 text; Windows checkouts may use CRLF, so line endings are not compared.
+  assert.match(readFileSync('LICENSE', 'utf8'), /^\s*GNU AFFERO GENERAL PUBLIC LICENSE\s+Version 3, 19 November 2007/);
+  assert.deepEqual(findSecrets(JSON.stringify(file)), []);
+  const notice = readFileSync('NOTICE.md', 'utf8');
+  assert.match(notice, /Pro_Amine LLC/);
+  assert.match(notice, /AGPL-3\.0-only/);
+  assert.match(notice, /765f42c/, 'NOTICE records which earlier versions were released under MIT');
+  for (const name of ['mermaid', 'DOMPurify', 'marked', 'fflate', 'IBM Plex']) assert.match(notice, new RegExp(name), name);
   const guide = readFileSync('PROVENANCE.md', 'utf8'); for (const id of Object.keys(file.identifiers)) assert.match(guide, new RegExp(id), id);
   assert.match(guide, /not a tracking/i);
+});
+
+test('every project-owned license declaration says AGPL-3.0-only', async () => {
+  const expected = 'AGPL-3.0-only';
+  // The old identifier is assembled at run time so this test file does not match its own search.
+  const oldHeader = 'SPDX-License-Identifier: ' + 'MIT';
+  assert.equal(JSON.parse(readFileSync('package.json', 'utf8')).license, expected, 'package.json');
+  assert.equal(JSON.parse(readFileSync('package-lock.json', 'utf8')).packages[''].license, expected, 'package-lock.json root package');
+  assert.equal(PROVENANCE.license, expected, 'src/provenance.mjs and PROVENANCE.json');
+  const { versionInfo } = await import('../src/provenance.mjs');
+  assert.equal((await versionInfo()).license, expected, 'GET /api/version');
+  for (const path of CORE) {
+    const head = readFileSync(path, 'utf8').split('\n').slice(0, 4).join('\n');
+    assert.ok(head.includes(`SPDX-License-Identifier: ${expected}`), `${path} header`);
+  }
+  for (const path of [...CORE, 'PROVENANCE.md', 'NOTICE.md', 'README.md', 'AGENTS.md']) assert.ok(!readFileSync(path, 'utf8').includes(oldHeader), `${path} still declares the old license`);
+  assert.match(readFileSync('README.md', 'utf8'), /AGPL-3\.0-only/);
 });
 
 test('every core module carries the copyright header and a documented provenance ID', () => {
@@ -39,7 +62,7 @@ test('GET /api/version returns the public fingerprint, and npm run provenance re
   const server = createAppServer(); await new Promise(resolve => server.listen(0, '127.0.0.1', resolve)); t.after(() => new Promise(resolve => server.close(resolve)));
   const response = await fetch(`http://127.0.0.1:${server.address().port}/api/version`); assert.equal(response.status, 200); const body = await response.json();
   assert.equal(body.project, 'Git Architecture Diagram'); assert.equal(body.version, JSON.parse(readFileSync('package.json', 'utf8')).version); assert.equal(body.commit, 'abcdef1234567');
-  assert.match(body.fingerprint, /^sha256:[0-9a-f]{64}$/); assert.match(body.sourceDigest, /^sha256:[0-9a-f]{64}$/); assert.equal(body.provenanceId, 'GAD-PROVENANCE-CORE-001'); assert.equal(body.license, 'MIT');
+  assert.match(body.fingerprint, /^sha256:[0-9a-f]{64}$/); assert.match(body.sourceDigest, /^sha256:[0-9a-f]{64}$/); assert.equal(body.provenanceId, 'GAD-PROVENANCE-CORE-001'); assert.equal(body.license, 'AGPL-3.0-only');
   assert.equal(body.sourceDigest, `sha256:${(await buildIdentity()).digest}`, 'the deployed digest can be recomputed from a checkout');
   assert.deepEqual(findSecrets(JSON.stringify(body)), []); assert.ok(!/(_KEY|TOKEN|password)/i.test(JSON.stringify(body)));
   const worker = await (await createWorker().fetch(new Request('https://example.test/api/version'), {})).json(); assert.equal(worker.runtime, 'worker'); assert.match(worker.fingerprint, /^sha256:[0-9a-f]{64}$/);

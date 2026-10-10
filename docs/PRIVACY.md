@@ -16,11 +16,11 @@ Only interface preferences are saved in `localStorage`: the color theme and whet
 
 A server-wide GitHub token cannot disclose a private repository: a private repository is refused unless the caller supplied their own token, which only the local command-line tool can do. Never paste credentials into the repository URL, a query parameter, or a public issue.
 
-On the hosted Worker, neither public nor private reports enter a persistent report cache or server session map. Evidence search uses the source already held in the browser tab.
+On the hosted Worker, public structural reports are saved in Cloudflare's data-center cache by repository, commit, scope, file budget, and analyzer version, so an identical request can reuse them. Private reports are never saved, and there is no server session map. Evidence search uses the source already held in the browser tab.
 
 On the local Node server, private reports do not enter the shared public cache. They remain in their browser tab and in the server's bounded session map for evidence search. Sessions have a ten-minute access lifetime and unguessable IDs. Expired entries are cleaned up on subsequent requests; a process restart clears memory. Treat session IDs and downloaded source/documentation as sensitive. This initial version does not provide multi-user accounts or persistent encrypted storage.
 
-On the local Node server, public structural reports are cached in memory by repository, commit, scope, and file budget for ten minutes, with at most twelve retained entries. AI output is not inserted into this shared cache. Refresh bypasses the public cache.
+On the local Node server, public structural reports are saved on the server's disk (the `.cache/analysis` folder, or `GAD_CACHE_DIR`) by repository, commit, scope, file budget, and analyzer version, for up to seven days, at most 400 entries and 300 MB. They contain the public files that were read; a saved report never describes a different commit. Set `GAD_CACHE_DIR=off` to keep them in memory only (ten minutes, twelve entries). Private reports, credentials, and AI output requested with a visitor's key are never saved. Opted-in public system maps made with the operator's key are saved under their own prefix. Refresh bypasses saved reports.
 
 ## What is and is not verified
 

@@ -1,6 +1,6 @@
 // Copyright © 2026 Pro_Amine LLC
 // Created & Developed by Amine Saoud ibn al-Bashir
-// Git Architecture Diagram · SPDX-License-Identifier: MIT · Provenance ID: GAD-BRAND-001
+// Git Architecture Diagram · SPDX-License-Identifier: AGPL-3.0-only · Provenance ID: GAD-BRAND-001
 // Project: Git Architecture Diagram | Component: Social dock glyph manifest.
 // Put each network's official monochrome SVG, downloaded from that network's brand resources, in
 // public/assets/brand/social/<network>.svg (telegram, tiktok, youtube, facebook, instagram, github, x, linkedin), then run

@@ -57,6 +57,9 @@ async function open(viewport = { width: 1440, height: 940 }) {
   await tab.goto(`${base}/acme/shop`); await tab.waitForSelector('#workspace:not([hidden]) #diagram-content svg', { timeout: 30000 }); await tab.waitForTimeout(1700);
   return tab;
 }
+// The page writes LF line endings; the Windows system clipboard stores text with CRLF, so Chromium on Windows reads it
+// back as CRLF. Normalize before comparing, so the assertion checks the content the application wrote on every platform.
+const readClipboard = target => target.evaluate(() => navigator.clipboard.readText()).then(text => text.replace(/\r\n/g, '\n'));
 const download = async (action) => { const [file] = await Promise.all([page.waitForEvent('download'), action()]); const path = await file.path(); return { name: file.suggestedFilename(), text: readFileSync(path, 'utf8'), file: path }; };
 const openExport = async group => { await page.click('#export-toggle'); await page.click(`[data-group-tab="${group}"]`); };
 
@@ -137,8 +140,8 @@ test('the 0.7 workspace', async t => {
     await page.keyboard.press('Escape'); await page.click('[data-view=extract]'); await page.waitForSelector('#extract-output .extract-card');
     assert.deepEqual(await page.locator('#extract-output .extract-card h3').allTextContents(), ['Summary', 'Statistics', 'Directory structure', 'Important files', 'File contents']);
     assert.match(await page.textContent('#extract-output .extract-pre'), /Source: files read by the analysis/);
-    await page.locator('.extract-card', { hasText: 'Directory structure' }).locator('text=Copy').click(); assert.match(await page.evaluate(() => navigator.clipboard.readText()), /^Directory structure:\nshop\//);
-    await page.click('#extract-output >> text=Copy all'); const all = await page.evaluate(() => navigator.clipboard.readText()); for (const part of ['SUMMARY', 'STATISTICS', 'IMPORTANT FILES', 'FILES CONTENT', 'FILE: server/index.js']) assert.ok(all.includes(part), part);
+    await page.locator('.extract-card', { hasText: 'Directory structure' }).locator('text=Copy').click(); assert.match(await readClipboard(page), /^Directory structure:\nshop\//);
+    await page.click('#extract-output >> text=Copy all'); const all = await readClipboard(page); for (const part of ['SUMMARY', 'STATISTICS', 'IMPORTANT FILES', 'FILES CONTENT', 'FILE: server/index.js']) assert.ok(all.includes(part), part);
     const md = await download(() => page.click('#extract-output >> text=Download .md')); assert.match(md.name, /extract\.md$/); assert.match(md.text, /### server\/index\.js/);
   });
   await t.test('Project extract: the entire repository through the server, with include/exclude filters', async () => {
@@ -157,6 +160,7 @@ test('the 0.7 workspace', async t => {
     assert.equal(await page.locator('#view-dock .dock-sep').count(), 2);
     await page.click('#view-dock [data-view=hierarchy]'); await page.waitForTimeout(400); assert.equal(await page.getAttribute('#view-dock [data-view=hierarchy]', 'aria-selected'), 'true'); // Colors transition over 250 ms.
     await page.waitForFunction(() => getComputedStyle(document.querySelector('#view-dock [data-view=hierarchy] .dock-icon')).backgroundColor === 'rgb(212, 137, 26)', null, { timeout: 3000 }); // Amber once the color transition settles.
+    await page.waitForFunction(() => getComputedStyle(document.querySelector('#view-dock [aria-selected=true] .dock-dot')).backgroundColor === 'rgb(212, 137, 26)', null, { timeout: 3000 }); // The dot fades in on its own transition; wait for it to settle.
     assert.equal(await page.locator('#view-dock [aria-selected=true] .dock-dot').evaluate(dot => getComputedStyle(dot).backgroundColor), 'rgb(212, 137, 26)');
   });
   await t.test('Dock: proximity magnification, neighbors, and reset on leave', async () => {
@@ -183,18 +187,18 @@ test('the 0.7 workspace', async t => {
     await page.click('#view-dock [data-view=extract]'); await page.waitForSelector('.xp-card');
     assert.deepEqual(await page.locator('.xp-card summary strong').allTextContents(), ['Genius Development Pack', 'Clone Repository', 'Project Files', 'Project Diagrams', 'Project Skills', 'Genius', 'AI / Developer Context']);
     assert.equal(await page.textContent('#extract-run'), 'Export Project');
-    await page.click('.xp-card[data-card=clone] summary'); await page.click('text=Copy Clone Command'); assert.equal(await page.evaluate(() => navigator.clipboard.readText()), `git clone https://github.com/acme/shop.git\ncd shop\ngit checkout ${sha}`);
+    await page.click('.xp-card[data-card=clone] summary'); await page.click('text=Copy Clone Command'); assert.equal(await readClipboard(page), `git clone https://github.com/acme/shop.git\ncd shop\ngit checkout ${sha}`);
     await page.click('.xp-card[data-card=diagrams] summary'); const row = page.locator('.xp-diagram-row[data-view=hierarchy]');
     const svg = await download(() => row.locator('text=SVG').click()); assert.match(svg.name, /hierarchy\.svg$/); assert.match(svg.text, /<svg/);
     const png = await download(() => row.locator('text=PNG').click()); assert.match(png.name, /hierarchy\.png$/);
     const mmd = await download(() => page.locator('.xp-diagram-row[data-view=mindmap]').locator('text=Mermaid file').click()); assert.match(mmd.text, /^mindmap/);
-    await page.locator('.xp-diagram-row[data-view=architecture]').locator('text=Copy Mermaid').click(); assert.match(await page.evaluate(() => navigator.clipboard.readText()), /^flowchart/);
+    await page.locator('.xp-diagram-row[data-view=architecture]').locator('text=Copy Mermaid').click(); assert.match(await readClipboard(page), /^flowchart/);
     await page.click('.xp-card[data-card=context] summary'); const pack = await download(() => page.click('text=Developer Pack (.zip)')); assert.match(pack.name, /developer-pack\.zip$/); assert.equal(pack.text.slice(0, 2), 'PK');
     const names = execFileSync('unzip', ['-Z1', pack.file], { encoding: 'utf8' }); for (const name of ['system-map.md', 'software-hierarchy.md', 'development-prompt.md', 'evidence.json']) assert.match(names, new RegExp(name.replace('.', '\\.')));
     await page.click('.xp-card[data-card=genius] summary'); await page.click('text=MVP Plan…'); assert.equal(await page.inputValue('#doc-mode'), 'mvp'); await page.keyboard.press('Escape');
   });
   await t.test('Permalinks carry the selected view, and opening one restores it', async () => {
-    await page.click('#view-dock [data-view=hierarchy]'); await page.click('#share'); const link = await page.evaluate(() => navigator.clipboard.readText());
+    await page.click('#view-dock [data-view=hierarchy]'); await page.click('#share'); const link = await readClipboard(page);
     assert.match(link, /[?&]view=hierarchy/); assert.doesNotMatch(link, /token|key=/i);
     await page.goto(link); await page.waitForSelector('#workspace:not([hidden])'); await page.waitForTimeout(1200); assert.equal(await page.getAttribute('#view-dock [data-view=hierarchy]', 'aria-selected'), 'true');
   });

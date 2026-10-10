@@ -1,6 +1,6 @@
 // Copyright © 2026 Pro_Amine LLC
 // Created & Developed by Amine Saoud ibn al-Bashir
-// Git Architecture Diagram · SPDX-License-Identifier: MIT · Provenance ID: GAD-EXPORT-PACK-001
+// Git Architecture Diagram · SPDX-License-Identifier: AGPL-3.0-only · Provenance ID: GAD-EXPORT-PACK-001
 // Project: Git Architecture Diagram | Component: Secret detection for exports and repository scans (browser and Node).
 // High-confidence credential shapes only, so ordinary code is not mangled. Exports replace every match with a visible
 // [REDACTED:type] marker; the repository scanner reports file, line, and type, never the value itself.

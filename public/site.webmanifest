@@ -1,0 +1,13 @@
+{
+  "name": "Git Architecture Diagram",
+  "short_name": "Git Architecture",
+  "description": "AI diagram generator for GitHub repositories, with System Maps, Mermaid diagrams, and Genius AI.",
+  "start_url": "/",
+  "display": "browser",
+  "background_color": "#090D14",
+  "theme_color": "#090D14",
+  "icons": [
+    { "src": "/assets/brand/icons/gad-icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/assets/brand/icons/gad-icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

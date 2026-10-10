@@ -1,6 +1,6 @@
 // Copyright © 2026 Pro_Amine LLC
 // Created & Developed by Amine Saoud ibn al-Bashir
-// Git Architecture Diagram · SPDX-License-Identifier: MIT · Provenance ID: GAD-PROVENANCE-CORE-001
+// Git Architecture Diagram · SPDX-License-Identifier: AGPL-3.0-only · Provenance ID: GAD-PROVENANCE-CORE-001
 // Project: Git Architecture Diagram | Component: Secret scan for the tracked tree and, optionally, the Git history.
 // Usage: npm run scan:secrets            # tracked files (run before every push; CI runs it too)
 //        npm run scan:secrets -- --history  # also every added line in every commit

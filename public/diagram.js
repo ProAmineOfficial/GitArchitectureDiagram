@@ -1,6 +1,6 @@
 // Copyright © 2026 Pro_Amine LLC
 // Created & Developed by Amine Saoud ibn al-Bashir
-// Git Architecture Diagram · SPDX-License-Identifier: MIT · Provenance ID: GAD-WORKSPACE-UI-001
+// Git Architecture Diagram · SPDX-License-Identifier: AGPL-3.0-only · Provenance ID: GAD-WORKSPACE-UI-001
 // Project: Git Architecture Diagram | Component: Mermaid canvas | Author: Amine Saoud ibn al-Bashir.
 import mermaid from '/vendor/mermaid/mermaid.esm.min.mjs'; // Load the pinned local Mermaid distribution.
 import DOMPurify from '/vendor/dompurify/purify.es.mjs'; // Sanitize generated SVG before inserting it into the page.

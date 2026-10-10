@@ -1,6 +1,6 @@
 // Copyright © 2026 Pro_Amine LLC
 // Created & Developed by Amine Saoud ibn al-Bashir
-// Git Architecture Diagram · SPDX-License-Identifier: MIT · Provenance ID: GAD-WORKSPACE-UI-001
+// Git Architecture Diagram · SPDX-License-Identifier: AGPL-3.0-only · Provenance ID: GAD-WORKSPACE-UI-001
 // Project: Git Architecture Diagram | Component: Browse examples | Author: Amine Saoud ibn al-Bashir.
 // Saved snapshots of real repositories. Counts are the analyzer's own measurements at the pinned commit;
 // they are not stars, usage numbers, or test results. Opening a card runs a fresh analysis.
