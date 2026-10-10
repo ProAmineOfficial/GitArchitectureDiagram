@@ -157,6 +157,7 @@ test('the 0.7 workspace', async t => {
     assert.equal(await page.locator('#view-dock .dock-sep').count(), 2);
     await page.click('#view-dock [data-view=hierarchy]'); await page.waitForTimeout(400); assert.equal(await page.getAttribute('#view-dock [data-view=hierarchy]', 'aria-selected'), 'true'); // Colors transition over 250 ms.
     await page.waitForFunction(() => getComputedStyle(document.querySelector('#view-dock [data-view=hierarchy] .dock-icon')).backgroundColor === 'rgb(212, 137, 26)', null, { timeout: 3000 }); // Amber once the color transition settles.
+    await page.waitForFunction(() => getComputedStyle(document.querySelector('#view-dock [aria-selected=true] .dock-dot')).backgroundColor === 'rgb(212, 137, 26)', null, { timeout: 3000 }); // The dot fades in on its own transition; wait for it to settle.
     assert.equal(await page.locator('#view-dock [aria-selected=true] .dock-dot').evaluate(dot => getComputedStyle(dot).backgroundColor), 'rgb(212, 137, 26)');
   });
   await t.test('Dock: proximity magnification, neighbors, and reset on leave', async () => {
