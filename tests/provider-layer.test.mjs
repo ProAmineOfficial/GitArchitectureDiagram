@@ -5,7 +5,7 @@ import { PROVIDERS, MODEL_ROLES, structuredMode, roleOf, checkKeyFormat } from '
 import { providerRequest, providerOutput, parseModelList, modelListRequest } from '../src/providers.mjs';
 import { sendProviderRequest, callProviderJSON, classifyStatus, retryAfterMs, backoffDelay, isQuotaExhausted, RETRY } from '../src/provider-errors.mjs';
 import { reducePair, discoverModels, testConnection, bundledPair } from '../src/model-registry.mjs';
-import { runAnalysis } from '../src/service.mjs'; import { githubFixture } from './fixtures.mjs';
+import { runAnalysis } from '../src/service.mjs'; import { githubFixture, isGitHubHost } from './fixtures.mjs';
 
 const SCHEMA = { type: 'object', additionalProperties: false, properties: { ok: { type: 'boolean' } }, required: ['ok'] };
 const KEY = 'sk-test-placeholder-0000000000';
@@ -144,11 +144,11 @@ test('the key-format check only warns on documented prefixes and never blocks a 
 test('choosing DeepSeek never borrows another provider\'s server key', async () => {
   const fixture = githubFixture({ name: 'deepseek-isolation' });
   const result = await runAnalysis({ repository: 'acme/deepseek-isolation', maxFiles: 1, ai: true, provider: 'deepseek', model: 'deepseek-flash' }, { env: { OPENAI_API_KEY: 'openai-server-placeholder', ANTHROPIC_API_KEY: 'anthropic-placeholder', GENIUS_PROVIDER: 'openai', GENIUS_MODEL: 'gpt-6-luna' }, allowEnvAI: true, fetchImpl: fixture.fetchImpl });
-  assert.equal(result.ai, null); assert.ok(result.warnings.some(item => item.includes('no authorized key'))); assert.ok(fixture.requests.every(item => new URL(item.url).hostname === 'api.github.com'));
+  assert.equal(result.ai, null); assert.ok(result.warnings.some(item => item.includes('no authorized key'))); assert.ok(fixture.requests.every(item => isGitHubHost(item.url)));
 });
 
 test('a provider failure leaves the structural report intact and explains the 429', async () => {
-  const fixture = githubFixture({ name: 'rate-limited' }); const fetchImpl = async (url, options) => (new URL(url).hostname === 'api.github.com' ? fixture.fetchImpl(url, options) : json(429, { error: { code: 'insufficient_quota' } }));
+  const fixture = githubFixture({ name: 'rate-limited' }); const fetchImpl = async (url, options) => (isGitHubHost(url) ? fixture.fetchImpl(url, options) : json(429, { error: { code: 'insufficient_quota' } }));
   const result = await runAnalysis({ repository: 'acme/rate-limited', maxFiles: 2, ai: true, provider: 'openai', apiKey: KEY, model: 'gpt-6-luna' }, { fetchImpl, cachePublic: false });
   assert.equal(result.ai, null); assert.ok(result.diagrams.architecture); assert.equal(result.aiError.kind, 'quota_exhausted'); assert.equal(result.aiError.providerName, 'OpenAI'); assert.match(result.warnings.join(' '), /quota\/credits are exhausted/);
 });
