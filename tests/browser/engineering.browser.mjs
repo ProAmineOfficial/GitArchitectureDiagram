@@ -1,4 +1,4 @@
-// Project: Git Architecture Diagram | Browser tests: Make Any Product with Genius AI — the labeled
+// Project: Git Architecture Diagram | Browser tests: Make Any Product with Genius AI — the home mission, the labeled
 // ESP32 example (diagrams, editing, validation, Development Pack), project import, and a full idea → design run against a
 // fake Genius Engineering Engine and a fake provider. No network: the real server serves the page, and every outside
 // request goes to the fakes below.
@@ -38,6 +38,28 @@ async function open(path, { viewport = { width: 1440, height: 940 }, theme = 'da
   await page.goto(base + path); return page;
 }
 const noOverflow = page => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
+
+test('the home page leads with the mission and keeps the GitHub import as the second path', async () => {
+  const page = await open('/'); await page.waitForSelector('#welcome:not([hidden])');
+  assert.equal(await page.title(), 'Make Any Product with Genius AI | Git Architecture Diagram');
+  assert.equal((await page.textContent('#mission-title')).trim(), 'Make Any Product with Genius AI');
+  assert.equal((await page.textContent('.mission-tagline')).trim(), 'Imagine It. Design It. Develop It. Validate It.');
+  assert.deepEqual(await page.$$eval('.mission-card strong', nodes => nodes.map(node => node.textContent)), ['Start from an Idea', 'Import GitHub Project']);
+  assert.deepEqual(await page.$$eval('.mission-outputs li', nodes => nodes.map(node => node.textContent.trim())), ['Validation Reports', 'Engineering Files', 'System Diagrams']);
+  assert.ok(await page.locator('#hero-slot .command-bar').isVisible(), 'the GitHub input is still on the home page');
+  assert.ok(await page.locator('.address-swap').isVisible()); assert.equal(await page.locator('#starter-examples').count(), 1);
+  await page.click('#mission-import');
+  await page.waitForFunction(() => document.activeElement?.id === 'repository');
+  assert.equal(new URL(page.url()).pathname, '/');
+  await page.click('#mission-idea'); await page.waitForSelector('#idea-view:not([hidden])');
+  assert.equal(new URL(page.url()).pathname, '/new');
+  assert.ok(await page.locator('#welcome').isHidden()); assert.ok(await page.locator('.command-bar').isHidden(), 'the idea workspace has its own form');
+  await page.waitForFunction(() => /not connected/.test(document.querySelector('#idea-engine').textContent));
+  assert.equal(await page.title(), 'Start from an Idea · Make Any Product with Genius AI');
+  await page.goBack(); await page.waitForSelector('#welcome:not([hidden])'); assert.ok(await page.locator('.command-bar').isVisible());
+  for (const width of [390, 430, 768, 1280]) { await page.setViewportSize({ width, height: 900 }); assert.ok(await noOverflow(page), `home: no horizontal overflow at ${width}px`); }
+  await page.context().close();
+});
 
 test('without an engine, starting from an idea explains why and offers the labeled example', async () => {
   const page = await open('/new'); await page.waitForFunction(() => /not connected/.test(document.querySelector('#idea-engine').textContent));
@@ -121,6 +143,9 @@ test('with an engine: idea → questions → design → regenerate, and the key 
   } finally { delete process.env.GENIUS_ENGINE_URL; delete process.env.GENIUS_ENGINE_TOKEN; }
 });
 
-test('no page script errors occurred', () => {
+test('both themes render the mission, and no page script errors occurred', async () => {
+  const light = await open('/', { theme: 'light' }); await light.waitForSelector('#welcome:not([hidden])');
+  const colors = await light.$eval('.mission-card', card => ({ text: getComputedStyle(card).color, background: getComputedStyle(document.body).backgroundColor }));
+  assert.notEqual(colors.text, colors.background); await light.context().close();
   assert.deepEqual(errors, []);
 });

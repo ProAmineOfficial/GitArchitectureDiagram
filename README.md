@@ -1,10 +1,11 @@
 # Git Architecture Diagram
 
-**Understand. Visualize. Highlight. Extract. Build.**
+**Make Any Product with Genius AI.** Imagine It. Design It. Develop It. Validate It.
 
-Git Architecture Diagram transforms a GitHub repository into an interactive, diagram-first workspace for architecture understanding, software hierarchy, repository mind maps, source-grounded Genius guidance, project extraction, and developer-ready exports.
+Git Architecture Diagram turns a product idea into a structured engineering project, and an existing GitHub repository into an interactive, diagram-first workspace.
 
-Replace the GitHub hostname with your Git Architecture Diagram hostname and open the same repository path as an analysis workspace.
+- **Start from an Idea** (primary path): describe a product, and Genius AI proposes requirements, an architecture, Mermaid diagrams, engineering files, and a tiered validation report. You can edit everything and export it as a Development Pack. See [Make Any Product with Genius AI](#make-any-product-with-genius-ai).
+- **Import GitHub Project** (second path): replace the GitHub hostname with your Git Architecture Diagram hostname and open the same repository path as an analysis workspace. It covers architecture understanding, software hierarchy, repository mind maps, source-grounded Genius guidance, project extraction, and developer-ready exports.
 
 Git Architecture Diagram is an AI architecture diagram generator for GitHub repositories. It produces architecture diagrams, System Maps, Mermaid diagrams, a software hierarchy, and a repository mind map, all pinned to the analyzed commit. **Genius AI** is its integrated AI engineering engine: with your own AI provider key, Genius AI adds AI-powered repository analysis, grounded answers with verified citations, and development packs.
 
@@ -46,6 +47,35 @@ Open source under the **GNU AGPL-3.0-only** license.
 ### Project Files extract
 
 ![Git Architecture Diagram — Project Files](docs/images/project-files.png)
+
+---
+
+## Make Any Product with Genius AI
+
+Open **Start from an Idea** on the home page, or go to `/new`.
+
+1. **Describe the idea.** Genius AI separates what you stated from what it assumes, and asks the questions that would change the design.
+2. **Answer, or keep the defaults.** Each unanswered question becomes a recorded assumption.
+3. **Review the project.** It has six tabs:
+   - Overview: risks and milestones.
+   - Requirements: each one with its source.
+   - Architecture: components, interfaces, pin map, bill of materials, and Mermaid diagrams checked by the Mermaid parser in your browser.
+   - Files: editable, with a regenerate action for each file.
+   - Validation.
+   - Development Pack.
+4. **Validate.** Ten tiers of code checks: structure, traceability, consistency, syntax, build, simulation, source ↔ specification, domain rules (ESP32 today), reproducibility, and physical review.
+   - A check that needs a tool or a person who was not available is reported as **Not run**, never as a pass.
+   - Builds are not run on the server. The report gives the command instead.
+   - Hardware specifications stay at "requires physical testing".
+5. **Export.** The Development Pack is a zip that keeps every file at its path, plus the project data, the overview, the diagrams, and the validation report.
+
+**What you need:**
+
+- Generation uses your own AI provider key from API settings, held only in the tab.
+- It also needs the **Genius Engineering Engine**, a private service run by Pro_Amine LLC. The engine plans and checks; this server runs each model call with your key, and the engine never receives it.
+- Without the engine, the workspace shows a labeled ESP32 development-board example and still lets you import, edit, and export project files.
+
+The project format, the interface, and the example are open source in this repository. The engine's prompts and rule packs are not. Read [docs/ENGINEERING.md](docs/ENGINEERING.md) for the format, the API, and the current limits.
 
 ---
 
@@ -559,10 +589,11 @@ Secrets never enter the repository or the browser bundle, every export is scanne
 
 ## Project vision
 
-Git Architecture Diagram is built to make complex repositories easier to understand, explore, document, export, and extend.
+Git Architecture Diagram is built to help anyone make a product with Genius AI, from the first idea to a validated engineering project. It also makes complex repositories easier to understand, explore, document, export, and extend.
 
 The platform brings together:
 
+- idea-to-engineering projects with honest, tiered validation
 - architecture visualization
 - system maps
 - software hierarchy
@@ -594,6 +625,10 @@ Third-party licenses remain with their respective authors.
 ## Developed by
 
 Git Architecture Diagram is Created & Developed by Amine Saoud ibn al-Bashir / Pro_Amine LLC.
+
+Created and developed by Pro_Amine LLC, with AI-assisted engineering contributions from Claude by Anthropic.
+
+Claude is a product of Anthropic. This acknowledgment describes a development tool that was used; it does not imply any partnership with, sponsorship by, or endorsement from Anthropic. Pro_Amine LLC owns and is responsible for the project.
 
 - Official website: <https://gitarchitecturediagram.com>
 - Company: <https://proamine.tech>
