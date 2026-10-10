@@ -1,6 +1,6 @@
 // Copyright © 2026 Pro_Amine LLC
 // Created & Developed by Amine Saoud ibn al-Bashir
-// Git Architecture Diagram · SPDX-License-Identifier: MIT · Provenance ID: GAD-EXPORT-PACK-001
+// Git Architecture Diagram · SPDX-License-Identifier: AGPL-3.0-only · Provenance ID: GAD-EXPORT-PACK-001
 // Project: Git Architecture Diagram | Component: Project knowledge generators | Author: Amine Saoud ibn al-Bashir.
 // Pure functions over an analysis result: prompts, skills, blueprints, roadmaps, AI-ready context, project extract,
 // README snippets, and the reconstruction pack. No model is called here: every section is assembled from evidence

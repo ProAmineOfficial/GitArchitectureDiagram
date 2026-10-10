@@ -6,9 +6,11 @@
 Canonical repository: <https://github.com/ProAmineOfficial/GitArchitectureDiagram>
 Official website: <https://gitarchitecturediagram.com>
 
-This project is released under the [MIT License](LICENSE). The MIT License allows anyone to use, copy, modify, merge, publish, distribute, sublicense, and sell copies, provided the copyright notice and the permission notice are included in all copies or substantial portions of the software. Please keep this notice, the [LICENSE](LICENSE), and the provenance headers in source files when you redistribute the code.
+This project is released under the [GNU Affero General Public License v3.0 only](LICENSE) (SPDX: `AGPL-3.0-only`). You may use, study, modify, and share it under that license. If you run a modified version as a network service, the AGPL requires you to offer its users the corresponding source code. Please keep this notice, the [LICENSE](LICENSE), and the provenance headers in source files when you redistribute the code.
 
-The names "Git Architecture Diagram", "Pro_Amine", "NanoKit", and "UMT", and the official logos and product images in `public/assets/brand/`, identify Pro_Amine LLC and its products. The MIT License covers the software. It does not grant permission to present a modified version as the official Pro_Amine product or website.
+**License history.** Versions published up to and including commit `765f42c` (2026-10-05), including the `v0.9.0` tag, were released under the MIT License. Those versions remain available under MIT; the change to AGPL-3.0-only applies to later versions.
+
+The names "Git Architecture Diagram", "Pro_Amine", "NanoKit", and "UMT", and the official logos and product images in `public/assets/brand/`, identify Pro_Amine LLC and its products. The software license covers the code. It does not grant rights to these names, logos, or product images, and it does not grant permission to present a modified version as the official Pro_Amine product or website.
 
 How to verify an official build is described in [PROVENANCE.md](PROVENANCE.md).
 

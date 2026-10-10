@@ -9,7 +9,7 @@ Replace the GitHub hostname with your Git Architecture Diagram hostname and open
 Git Architecture Diagram is an AI architecture diagram generator for GitHub repositories. It produces architecture diagrams, System Maps, Mermaid diagrams, a software hierarchy, and a repository mind map, all pinned to the analyzed commit. **Genius AI** is its integrated AI engineering engine: with your own AI provider key, Genius AI adds AI-powered repository analysis, grounded answers with verified citations, and development packs.
 
 Created & Developed by **Amine Saoud ibn al-Bashir** — **ProAmineOfficial / Pro_Amine LLC**.  
-Open source under the **AGPL-3.0 license**.
+Open source under the **GNU AGPL-3.0-only** license.
 
 ---
 
@@ -604,7 +604,7 @@ Brand assets and their provenance are listed in [docs/BRAND.md](docs/BRAND.md).
 
 ## License
 
-AGPL-3.0 License. See [LICENSE](LICENSE) and [NOTICE.md](NOTICE.md).
+GNU Affero General Public License v3.0 only (AGPL-3.0-only). See [LICENSE](LICENSE) and [NOTICE.md](NOTICE.md). Versions published up to and including commit `765f42c` (2026-10-05) were released under the MIT License and remain available under MIT.
 
 Official builds can be verified with public provenance: [PROVENANCE.md](PROVENANCE.md) describes the stable identifiers, `PROVENANCE.json`, and the `/api/version` build fingerprint.
 

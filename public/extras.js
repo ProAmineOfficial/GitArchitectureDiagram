@@ -1,6 +1,6 @@
 // Copyright © 2026 Pro_Amine LLC
 // Created & Developed by Amine Saoud ibn al-Bashir
-// Git Architecture Diagram · SPDX-License-Identifier: MIT · Provenance ID: GAD-EXPORT-PACK-001
+// Git Architecture Diagram · SPDX-License-Identifier: AGPL-3.0-only · Provenance ID: GAD-EXPORT-PACK-001
 // Project: Git Architecture Diagram | Component: Highlights, hierarchy, cross-view selection, exports, Build With Genius | Author: Amine Saoud ibn al-Bashir.
 // Connected to the workspace through a small API object so the stable app.js modules stay as they are.
 import { MODES, computeHighlight, readModel, applyHighlight, clearHighlight } from './highlights.js';

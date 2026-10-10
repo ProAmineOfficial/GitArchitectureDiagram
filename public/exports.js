@@ -1,6 +1,6 @@
 // Copyright © 2026 Pro_Amine LLC
 // Created & Developed by Amine Saoud ibn al-Bashir
-// Git Architecture Diagram · SPDX-License-Identifier: MIT · Provenance ID: GAD-EXPORT-PACK-001
+// Git Architecture Diagram · SPDX-License-Identifier: AGPL-3.0-only · Provenance ID: GAD-EXPORT-PACK-001
 // Project: Git Architecture Diagram | Component: Portable exports | Author: Amine Saoud ibn al-Bashir.
 import { zipSync, strToU8 } from '/vendor/fflate/browser.js'; // Package documentation locally without uploading it elsewhere.
 import { redactSecrets } from './secret-scan.js'; // Every exported text is scanned; credential-shaped values become [REDACTED:type].

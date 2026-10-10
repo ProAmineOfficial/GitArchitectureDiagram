@@ -1,6 +1,6 @@
 // Copyright © 2026 Pro_Amine LLC
 // Created & Developed by Amine Saoud ibn al-Bashir
-// Git Architecture Diagram · SPDX-License-Identifier: MIT · Provenance ID: GAD-PROVENANCE-CORE-001
+// Git Architecture Diagram · SPDX-License-Identifier: AGPL-3.0-only · Provenance ID: GAD-PROVENANCE-CORE-001
 // Project: Git Architecture Diagram | Component: Provenance record and non-secret build fingerprint.
 // This is attribution, not tracking: nothing here collects, stores, or sends anything about visitors. GET /api/version
 // returns the public provenance record, the release version, the source commit when the host provides it, a SHA-256
@@ -18,7 +18,7 @@ export const PROVENANCE = Object.freeze({
   canonicalRepository: 'https://github.com/ProAmineOfficial/GitArchitectureDiagram',
   canonicalWebsite: 'https://gitarchitecturediagram.com',
   firstReleaseYear: 2026,
-  license: 'MIT',
+  license: 'AGPL-3.0-only',
   identifiers: Object.freeze({
     'GAD-PROVENANCE-CORE-001': 'Runtime core: HTTP server, hosted Worker, CLI, GitHub ingestion, analysis service, extract, build and release scripts',
     'GAD-PROVIDER-LAYER-001': 'AI provider layer: adapters, error classification and retries, model registry, connection test, provider catalog',

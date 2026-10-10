@@ -7,7 +7,7 @@
   "canonicalRepository": "https://github.com/ProAmineOfficial/GitArchitectureDiagram",
   "canonicalWebsite": "https://gitarchitecturediagram.com",
   "firstReleaseYear": 2026,
-  "license": "MIT",
+  "license": "AGPL-3.0-only",
   "identifiers": {
     "GAD-PROVENANCE-CORE-001": "Runtime core: HTTP server, hosted Worker, CLI, GitHub ingestion, analysis service, extract, build and release scripts",
     "GAD-PROVIDER-LAYER-001": "AI provider layer: adapters, error classification and retries, model registry, connection test, provider catalog",

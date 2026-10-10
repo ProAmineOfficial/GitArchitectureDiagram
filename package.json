@@ -4,7 +4,7 @@
   "description": "Mermaid architecture, repository trees, and source-grounded Genius guides for GitHub repositories.",
   "type": "module",
   "private": true,
-  "license": "MIT",
+  "license": "AGPL-3.0-only",
   "author": "Amine Saoud ibn al-Bashir",
   "engines": {
     "node": ">=22.12.0"

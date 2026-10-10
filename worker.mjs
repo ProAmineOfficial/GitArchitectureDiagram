@@ -1,6 +1,6 @@
 // Copyright © 2026 Pro_Amine LLC
 // Created & Developed by Amine Saoud ibn al-Bashir
-// Git Architecture Diagram · SPDX-License-Identifier: MIT · Provenance ID: GAD-PROVENANCE-CORE-001
+// Git Architecture Diagram · SPDX-License-Identifier: AGPL-3.0-only · Provenance ID: GAD-PROVENANCE-CORE-001
 // Project: Git Architecture Diagram | Component: Hosted Worker | Author: Amine Saoud ibn al-Bashir.
 import { AppError, boundedJson, VERSION } from './src/github.mjs'; // Reuse the validated ingestion contracts and bounded JSON reader.
 import { runAnalysis, publicAIStatus } from './src/service.mjs'; // Run the same real source analyzer used by the local server and CLI.

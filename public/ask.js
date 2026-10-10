@@ -1,6 +1,6 @@
 // Copyright © 2026 Pro_Amine LLC
 // Created & Developed by Amine Saoud ibn al-Bashir
-// Git Architecture Diagram · SPDX-License-Identifier: MIT · Provenance ID: GAD-GENIUS-PIPELINE-001
+// Git Architecture Diagram · SPDX-License-Identifier: AGPL-3.0-only · Provenance ID: GAD-GENIUS-PIPELINE-001
 // Project: Git Architecture Diagram | Component: Ask Genius | Author: Amine Saoud ibn al-Bashir.
 // Keyword search runs locally over files already read. An AI answer is sent only on an explicit click,
 // with the excerpt count, size, provider, and output limit stated beforehand.

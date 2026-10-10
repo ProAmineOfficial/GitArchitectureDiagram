@@ -1,6 +1,6 @@
 // Copyright © 2026 Pro_Amine LLC
 // Created & Developed by Amine Saoud ibn al-Bashir
-// Git Architecture Diagram · SPDX-License-Identifier: MIT · Provenance ID: GAD-WORKSPACE-UI-001
+// Git Architecture Diagram · SPDX-License-Identifier: AGPL-3.0-only · Provenance ID: GAD-WORKSPACE-UI-001
 // Project: Git Architecture Diagram | Component: Workspace routes | Author: Amine Saoud ibn al-Bashir.
 // Maps GitHub-shaped paths (/owner/repo, /tree/ref/path, /blob/ref/file#L1-L9) to analysis requests and back.
 // Pure functions only, so the same rules are unit-tested in Node and used by the browser.

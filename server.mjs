@@ -1,6 +1,6 @@
 // Copyright © 2026 Pro_Amine LLC
 // Created & Developed by Amine Saoud ibn al-Bashir
-// Git Architecture Diagram · SPDX-License-Identifier: MIT · Provenance ID: GAD-PROVENANCE-CORE-001
+// Git Architecture Diagram · SPDX-License-Identifier: AGPL-3.0-only · Provenance ID: GAD-PROVENANCE-CORE-001
 // Project: Git Architecture Diagram | Component: HTTP server | Author: Amine Saoud ibn al-Bashir.
 // Features: same-origin API, streamed progress, bundled browser modules, bounded analysis, and secure defaults.
 import http from 'node:http'; // Serve the application without an additional web framework.

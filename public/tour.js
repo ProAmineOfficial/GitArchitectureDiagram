@@ -1,6 +1,6 @@
 // Copyright © 2026 Pro_Amine LLC
 // Created & Developed by Amine Saoud ibn al-Bashir
-// Git Architecture Diagram · SPDX-License-Identifier: MIT · Provenance ID: GAD-SYSTEM-MAP-001
+// Git Architecture Diagram · SPDX-License-Identifier: AGPL-3.0-only · Provenance ID: GAD-SYSTEM-MAP-001
 // Project: Git Architecture Diagram | Component: Guided architecture tour | Author: Amine Saoud ibn al-Bashir.
 // Steps come from a validated graph (the AI system map, or the deterministic component overview): each names a real
 // node on screen, the stage of the walkthrough, the files that support it, and the kind of evidence behind it.

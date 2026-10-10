@@ -1,12 +1,12 @@
 # Provenance
 
-Git Architecture Diagram is open source under the MIT License. Anyone may copy and build on it. This document explains how to tell the **official** project and its builds apart from copies. It relies only on public, verifiable facts.
+Git Architecture Diagram is open source under the GNU Affero General Public License v3.0 only (AGPL-3.0-only). Anyone may use, study, modify, and share it under that license. Versions published up to and including commit `765f42c` (2026-10-05) were released under the MIT License, and those versions remain available under MIT. This document explains how to tell the **official** project and its builds apart from copies. It relies only on public, verifiable facts.
 
 > This is not a tracking system. Nothing in the application collects, stores, or sends information about visitors, phones home, or embeds hidden beacons or telemetry. Provenance is a set of public records that anyone can check.
 
 ## The record
 
-[`PROVENANCE.json`](PROVENANCE.json) is the public provenance record. It holds the project name, the creator (Amine Saoud ibn al-Bashir), the organization (Pro_Amine LLC), the canonical repository and website, the first release year (2026), the license (MIT), and the stable identifiers below. It contains no secrets, and `src/provenance.mjs` must stay identical to it (a test enforces this).
+[`PROVENANCE.json`](PROVENANCE.json) is the public provenance record. It holds the project name, the creator (Amine Saoud ibn al-Bashir), the organization (Pro_Amine LLC), the canonical repository and website, the first release year (2026), the license (AGPL-3.0-only), and the stable identifiers below. It contains no secrets, and `src/provenance.mjs` must stay identical to it (a test enforces this).
 
 ## Stable provenance identifiers
 
@@ -15,7 +15,7 @@ Each core module starts with this header:
 ```text
 // Copyright © 2026 Pro_Amine LLC
 // Created & Developed by Amine Saoud ibn al-Bashir
-// Git Architecture Diagram · SPDX-License-Identifier: MIT · Provenance ID: GAD-…-001
+// Git Architecture Diagram · SPDX-License-Identifier: AGPL-3.0-only · Provenance ID: GAD-…-001
 ```
 
 | Identifier | Covers |
@@ -47,7 +47,7 @@ Every deployment answers `GET /api/version` with public data only:
   "creator": "Amine Saoud ibn al-Bashir",
   "repository": "https://github.com/ProAmineOfficial/GitArchitectureDiagram",
   "website": "https://gitarchitecturediagram.com",
-  "license": "MIT",
+  "license": "AGPL-3.0-only",
   "runtime": "node"
 }
 ```

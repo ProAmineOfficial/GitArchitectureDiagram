@@ -1,6 +1,6 @@
 // Copyright © 2026 Pro_Amine LLC
 // Created & Developed by Amine Saoud ibn al-Bashir
-// Git Architecture Diagram · SPDX-License-Identifier: MIT · Provenance ID: GAD-BRAND-001
+// Git Architecture Diagram · SPDX-License-Identifier: AGPL-3.0-only · Provenance ID: GAD-BRAND-001
 // Project: Git Architecture Diagram | Component: Pro_Amine social dock (glass buttons, proximity magnification).
 // The links are ordinary anchors in the markup (target="_blank", rel="noopener noreferrer"); this module never
 // intercepts them. It only adds the dock effect for a fine pointer — 1.28 for the item under the pointer, 1.12 for

@@ -17,5 +17,5 @@ Follow [docs/SECURITY_POLICY.md](docs/SECURITY_POLICY.md) for every change. It i
 - Every byte sent to the browser is public. User provider keys stay in tab memory for one request and are never persisted, logged, or exported.
 - Before every push: review the diff and the staged files, then run `npm run scan:secrets`, `npm audit`, `npm run check`, `npm test`, `npm run test:browser`, and `npm run build`. Do not push when a critical check fails.
 - Never delete or keep a legacy file because of its age. Trace it and classify it (KEEP, UPDATE, MIGRATE, DEPRECATE, REMOVE) with a reason. See [docs/LEGACY_AUDIT.md](docs/LEGACY_AUDIT.md).
-- Provenance is public attribution (headers, `PROVENANCE.json`, `/api/version`), never tracking or telemetry. Keep the copyright header and provenance ID at the top of every core module. Do not change the MIT license without the owner's approval.
+- Provenance is public attribution (headers, `PROVENANCE.json`, `/api/version`), never tracking or telemetry. Keep the copyright header and provenance ID at the top of every core module. The project license is GNU AGPL-3.0-only; do not change it without the owner's approval.
 - End every meaningful update with the SECURITY STATUS report from the policy.

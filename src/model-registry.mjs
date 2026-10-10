@@ -1,6 +1,6 @@
 // Copyright © 2026 Pro_Amine LLC
 // Created & Developed by Amine Saoud ibn al-Bashir
-// Git Architecture Diagram · SPDX-License-Identifier: MIT · Provenance ID: GAD-PROVIDER-LAYER-001
+// Git Architecture Diagram · SPDX-License-Identifier: AGPL-3.0-only · Provenance ID: GAD-PROVIDER-LAYER-001
 // Project: Git Architecture Diagram | Component: Provider model registry and connection test | Author: Amine Saoud ibn al-Bashir.
 // The registry keeps model choices current without inventing IDs: it reads the provider's official model list for a
 // key, then reduces it to exactly two roles (fast, advanced) by picking the first verified candidate that the key can
