@@ -48,12 +48,13 @@ function analysisMode() { return document.querySelector('[name=analysis-mode]:ch
 function setMode(mode) { const input = document.querySelector(`[name=analysis-mode][value=${mode}]`); if (input) input.checked = true; $('#use-ai').checked = mode === 'genius'; updateCostNote(); }
 
 // ——— Pages and routing ———
+const HOME_TITLE = 'Git Architecture Diagram | AI Diagram Generator & Genius AI'; // Same text as <title> in index.html.
 function showPage(page) {
   const bar = $('.command-bar'); if (page === 'home') $('#hero-slot').append(bar); else if (bar.parentElement !== $('#main')) $('#main').prepend(bar); bar.classList.toggle('tucked', page === 'repo'); // Home centers the input; a repository page tucks it away.
   $('#welcome').hidden = page !== 'home'; $('#browse-view').hidden = page !== 'browse'; $('#workspace').hidden = page !== 'repo';
   $('#workspace-nav').toggleAttribute('aria-current', page !== 'browse'); $('#browse-nav').toggleAttribute('aria-current', page === 'browse');
   if (page === 'browse') { document.title = 'Browse examples · Git Architecture Diagram'; renderBrowse(); }
-  if (page === 'home') document.title = 'Git Architecture Diagram';
+  if (page === 'home') document.title = HOME_TITLE; // Keep the search title from index.html when returning to the home page.
 }
 const keyOf = (pathname = location.pathname, search = location.search) => pathname.replace(/\/+$/, '') + search;
 

@@ -6,6 +6,8 @@ Git Architecture Diagram transforms a GitHub repository into an interactive, dia
 
 Replace the GitHub hostname with your Git Architecture Diagram hostname and open the same repository path as an analysis workspace.
 
+Git Architecture Diagram is an AI architecture diagram generator for GitHub repositories. It produces architecture diagrams, System Maps, Mermaid diagrams, a software hierarchy, and a repository mind map, all pinned to the analyzed commit. **Genius AI** is its integrated AI engineering engine: with your own AI provider key, Genius AI adds AI-powered repository analysis, grounded answers with verified citations, and development packs.
+
 Created & Developed by **Amine Saoud ibn al-Bashir** — **ProAmineOfficial / Pro_Amine LLC**.  
 Open source under the **AGPL-3.0 license**.
 
@@ -397,17 +399,17 @@ Export formats can include:
 
 ### Genius development outputs
 
-Genius can generate:
+Genius prepares development prompts for an AI coding agent. Each prompt is assembled from the analyzed repository's evidence and stamped with its commit; the plan itself is written by the agent you give it to, not by Git Architecture Diagram.
 
 - Development Prompt
 - Build Similar App
-- MVP Plan
-- Frontend Plan
-- Backend Plan
-- API Plan
-- Database Plan
-- App Blueprint
-- Implementation Roadmap
+- MVP Plan prompt
+- Frontend Plan prompt
+- Backend Plan prompt
+- API Plan prompt
+- Database Plan prompt
+- App Blueprint (assembled from evidence)
+- Implementation Roadmap (template from evidence)
 
 ### AI / Developer Context
 
