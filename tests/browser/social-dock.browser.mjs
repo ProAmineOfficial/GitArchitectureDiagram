@@ -46,7 +46,7 @@ test('exactly eight links, in order, with the exact URLs, new-tab safety, and ac
   assert.equal(await page.locator('.eco-card .footer-nav + .social-dock, .eco-card nav + .social-dock').count(), 1, 'the dock sits under the navigation links in the ecosystem card');
   const prevented = await page.evaluate(() => { const link = document.querySelector('.social-link[data-network=github]'); let result = null; const spy = event => { result = event.defaultPrevented; event.preventDefault(); }; window.addEventListener('click', spy); link.click(); window.removeEventListener('click', spy); return result; });
   assert.equal(prevented, false, 'the application router never intercepts a social link');
-  const foreign = await page.evaluate(() => [...document.querySelectorAll('script[src], link[href], img[src]')].map(node => node.src || node.href).filter(url => new URL(url, location.href).origin !== location.origin));
+  const foreign = await page.evaluate(() => [...document.querySelectorAll('script[src], link[href]:not([rel="canonical"]), img[src]')].map(node => node.src || node.href).filter(url => new URL(url, location.href).origin !== location.origin));
   assert.deepEqual(foreign, [], 'no external CDN or remote asset');
   await page.context().close();
 });
