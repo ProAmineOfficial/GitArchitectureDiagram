@@ -18,7 +18,7 @@ test('site landing pages have distinct titles, descriptions and self-canonical l
     assert.equal(result.status, 200, route); // Ensure server routing still works.
     assert.match(result.headers.get('content-type') || '', /^text\/html/, route); // Pages are HTML.
     assert.ok(html.includes(`<title>${title}</title>`), route + ' title'); // Confirm page-specific title.
-    assert.ok(html.includes(`<link rel="canonical" href="${SITE}${route === '/' ? '' : route}">`), route + ' canonical'); // Canonicalize each page to itself.
+    assert.ok(html.includes(`<link rel="canonical" href="${SITE}${route}">`), route + ' canonical'); // Canonicalize each page to itself.
     assert.ok(html.includes(`<meta name="description" content="${descriptionStart}`), route + ' description'); // Distinct and relevant text.
     assert.equal((html.match(/rel="canonical"/g) || []).length, 1, route + ' canonical count'); // Avoid duplicates.
   } // Finish checking public pages.
