@@ -4,6 +4,7 @@
 // Project: Git Architecture Diagram | Component: Hosted Worker | Author: Amine Saoud ibn al-Bashir.
 import { AppError, boundedJson, VERSION } from './src/github.mjs'; // Reuse the validated ingestion contracts and bounded JSON reader.
 import { runAnalysis, publicAIStatus } from './src/service.mjs'; // Run the same real source analyzer used by the local server and CLI.
+import { withSearchMetadata, routeMetadata } from './src/seo.mjs'; // Route titles, descriptions, canonicals, and visible sections for the three landing pages.
 import { runEngineering, validateEngineering, engineeringStatus, admitEngineering, createReadinessCache } from './src/engineering.mjs'; // Make Any Product with Genius AI: the interface to the private engine.
 import { PROVIDERS, resolveCredentials } from './src/providers.mjs';
 import { discoverModels, testConnection } from './src/model-registry.mjs';
@@ -60,7 +61,9 @@ export function createWorker({ analyze = runAnalysis, ask = askGenius, extract =
       } // End hosted API routing.
       if (!['GET', 'HEAD'].includes(request.method)) throw new AppError(405, 'Method not allowed.'); if (!env.ASSETS?.fetch) throw new AppError(503, 'The website assets are not available.'); let asset = await env.ASSETS.fetch(request); // Serve only the packaged public assets through the platform binding.
       if (asset.status === 404 && !url.pathname.startsWith('/assets/') && (url.pathname === '/' || /^\/(examples|browse|new)\/?$/.test(url.pathname) || /^\/[\w.-]+\/[\w.-]+(?:\/.*)?$/.test(url.pathname))) { const index = new URL('/index.html', url); asset = await env.ASSETS.fetch(new Request(index, { method: request.method })); } // Route repository, branch, and folder URLs to the same working workspace.
-      const headers = new Headers(asset.headers); for (const [name, value] of Object.entries(SECURITY)) headers.set(name, value); return new Response(request.method === 'HEAD' ? null : asset.body, { status: asset.status, headers }); // Preserve asset types and status codes while adding security headers.
+      const headers = new Headers(asset.headers); for (const [name, value] of Object.entries(SECURITY)) headers.set(name, value);
+      if (asset.ok && routeMetadata(url.pathname) && (headers.get('Content-Type') || '').startsWith('text/html')) { headers.delete('Content-Length'); headers.delete('ETag'); return new Response(request.method === 'HEAD' ? null : withSearchMetadata(await asset.text(), url.pathname), { status: asset.status, headers }); } // Landing pages get the same metadata as on the Node server.
+      return new Response(request.method === 'HEAD' ? null : asset.body, { status: asset.status, headers }); // Preserve asset types and status codes while adding security headers.
     } catch (error) { return json(error instanceof AppError ? error.status : 500, { error: error instanceof AppError ? error.message : 'The request could not be completed.', ...(error instanceof ProviderError ? { kind: error.kind, retryable: error.retryable, suggestion: error.suggestion, providerStatus: error.providerStatus } : {}) }); } // Avoid sending stack traces or provider credentials to clients.
   } }; // Return the Workers fetch handler required by the hosting platform.
 } // End Worker construction.

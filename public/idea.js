@@ -267,7 +267,7 @@ export function setupIdeaWorkspace({ credentials, aiConfigured, toast, openSetti
   }
 
   return {
-    async show() { document.title = 'Start from an Idea · Make Any Product with Genius AI'; await refreshStatus(); },
+    async show() { document.title = 'Start from an Idea with Genius AI | Git Architecture Diagram'; /* Same title as src/seo.mjs. */ await refreshStatus(); },
     openExample,
   };
 }

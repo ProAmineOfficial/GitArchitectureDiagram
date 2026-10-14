@@ -48,12 +48,12 @@ function analysisMode() { return document.querySelector('[name=analysis-mode]:ch
 function setMode(mode) { const input = document.querySelector(`[name=analysis-mode][value=${mode}]`); if (input) input.checked = true; $('#use-ai').checked = mode === 'genius'; updateCostNote(); }
 
 // ——— Pages and routing ———
-const HOME_TITLE = 'Make Any Product with Genius AI | Git Architecture Diagram'; // Same text as <title> in index.html.
+const HOME_TITLE = 'Git Architecture Diagram — Make Any Product with Genius AI'; // Same text as <title> in index.html and src/seo.mjs.
 function showPage(page) {
   const bar = $('.command-bar'); if (page === 'home') $('#hero-slot').append(bar); else if (bar.parentElement !== $('#main')) $('#main').prepend(bar); bar.classList.toggle('tucked', page === 'repo'); bar.hidden = page === 'idea'; // Home centers the input; a repository page tucks it away; the idea workspace has its own form.
   $('#welcome').hidden = page !== 'home'; $('#browse-view').hidden = page !== 'browse'; $('#workspace').hidden = page !== 'repo'; $('#idea-view').hidden = page !== 'idea';
   $('#workspace-nav').toggleAttribute('aria-current', page === 'home' || page === 'repo'); $('#browse-nav').toggleAttribute('aria-current', page === 'browse');
-  if (page === 'browse') { document.title = 'Browse examples · Git Architecture Diagram'; renderBrowse(); }
+  if (page === 'browse') { document.title = 'Browse examples · Git Architecture Diagram'; renderBrowse(); } // Same titles as src/seo.mjs, so search engines see one title per page.
   if (page === 'home') document.title = HOME_TITLE; // Keep the search title from index.html when returning to the home page.
   if (page === 'idea') openIdea();
 }

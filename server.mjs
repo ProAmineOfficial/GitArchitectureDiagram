@@ -19,6 +19,7 @@ import { discoverModels, testConnection } from './src/model-registry.mjs'; // Tw
 import { runGeniusAgent } from './src/genius-agent.mjs'; // One Deep Genius agent call per request.
 import { ProviderError } from './src/provider-errors.mjs'; // Classified provider failures carry a stable kind for the interface.
 import { versionInfo, sourceDigest, SOURCE_PATTERN, cleanCommit } from './src/provenance.mjs'; // Public provenance and a non-secret build fingerprint.
+import { withSearchMetadata as searchMetadata, routeMetadata } from './src/seo.mjs'; // Route titles, descriptions, canonicals, and visible sections for the three landing pages.
 import { defaultAnalysisStore } from './src/store.mjs'; // Durable, commit-keyed saved analyses for public repositories.
 import { runEngineering, validateEngineering, engineeringStatus, admitEngineering, createReadinessCache, describeEngineConfig } from './src/engineering.mjs'; // Make Any Product with Genius AI: the interface to the private engine.
 let defaultStore = null; // Created on first use, so importing the server never touches the disk.
@@ -40,22 +41,7 @@ function guard(request, bucket = 'default') { // Validate browser origin and req
   const now = Date.now(); const ip = `${request.socket.remoteAddress || 'unknown'}|${bucket}`; const current = rates.get(ip); if (rates.size > 5000) rates.clear(); // Bound the in-memory limiter.
   const item = current && current.until > now ? current : { count: 0, until: now + 60000 }; item.count++; rates.set(ip, item); if (item.count > (LIMITS[bucket] || LIMITS.default)) throw new AppError(429, 'Too many requests. Please wait a minute.'); // Limit expensive endpoint calls per direct client address.
 } // End API request admission.
-function withSearchMetadata(page, pathname) { // Serve distinct, crawlable SEO metadata for public routes only.
-  const pages = { // Keep the canonical URLs consistent with the published sitemap.
-    '/': { title: 'Make Any Product with Genius AI | Git Architecture Diagram', description: 'Make any product with Genius AI: develop an engineering plan from an idea, or explore GitHub repositories with interactive architecture diagrams.' }, // Homepage mission and import flow.
-    '/new': { title: 'Start from an Idea with Genius AI | Git Architecture Diagram', description: 'Turn a product idea into structured requirements, proposed architecture, Mermaid diagrams, editable engineering files and clearly labeled validation reports.' }, // Idea workspace.
-    '/browse': { title: 'Browse examples · Git Architecture Diagram', description: 'Browse GitHub repository architecture diagram examples, Mermaid visualizations, software hierarchies, mind maps and source-grounded developer insights.' } // Examples directory.
-  }; // Never rewrite metadata for repository deep links or unrelated assets.
-  const route = pathname.length > 1 && pathname.endsWith('/') ? pathname.slice(0, -1) : pathname; const selected = pages[route]; if (!selected) return page; // Only three public routes need unique metadata.
-  let html = page.toString('utf8'); // Preserve application markup and client-side behavior.
-  html = html.replace('<title>Make Any Product with Genius AI | Git Architecture Diagram</title>', `<title>${selected.title}</title>`); // Distinct HTML titles are available before JavaScript runs.
-  const replaceMeta = (attribute, key, replacement) => { const prefix = `<meta ${attribute}="${key}" content="`; const start = html.indexOf(prefix); const end = html.indexOf('">', start + prefix.length); if (start !== -1 && end !== -1) html = html.slice(0, start) + prefix + replacement + html.slice(end); }; // Update one known metadata attribute without altering other HTML.
-  replaceMeta('name', 'description', selected.description); // Keep descriptions concise and relevant to their route.
-  replaceMeta('property', 'og:title', selected.title); // Keep Open Graph titles aligned.
-  replaceMeta('property', 'og:description', selected.description); // Keep Open Graph descriptions aligned.
-  html = html.replace('</head>', `  <link rel="canonical" href="https://gitarchitecturediagram.com${route}">\n</head>`); // Self-canonicalize the three indexable site pages.
-  return Buffer.from(html, 'utf8'); // Send the validated HTML body as UTF-8 bytes.
-} // End route SEO transformation.
+function withSearchMetadata(page, pathname) { return routeMetadata(pathname) ? Buffer.from(searchMetadata(page.toString('utf8'), pathname), 'utf8') : page; } // Landing pages get their own metadata and visible section (src/seo.mjs); other paths are untouched.
 async function staticAsset(url, response, method) { // Serve only public files and explicitly approved dependency distributions.
   let base = path.join(ROOT, 'public'); let relative = url.pathname.slice(1); // Default to the application public directory.
   const vendors = { '/vendor/mermaid/': 'mermaid/dist', '/vendor/dompurify/': 'dompurify/dist', '/vendor/marked/': 'marked/lib', '/vendor/fflate/': 'fflate/esm' }; // Restrict browser dependencies to known distribution roots.

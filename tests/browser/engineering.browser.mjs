@@ -43,7 +43,7 @@ const noOverflow = page => page.evaluate(() => document.documentElement.scrollWi
 
 test('the home page leads with the mission and keeps the GitHub import as the second path', async () => {
   const page = await open('/'); await page.waitForSelector('#welcome:not([hidden])');
-  assert.equal(await page.title(), 'Make Any Product with Genius AI | Git Architecture Diagram');
+  assert.equal(await page.title(), 'Git Architecture Diagram — Make Any Product with Genius AI');
   assert.equal((await page.textContent('#mission-title')).trim(), 'Make Any Product with Genius AI');
   assert.equal((await page.textContent('.mission-tagline')).trim(), 'Imagine It. Design It. Develop It. Validate It.');
   assert.deepEqual(await page.$$eval('.mission-card strong', nodes => nodes.map(node => node.textContent)), ['Start from an Idea', 'Import GitHub Project']);
@@ -57,7 +57,7 @@ test('the home page leads with the mission and keeps the GitHub import as the se
   assert.equal(new URL(page.url()).pathname, '/new');
   assert.ok(await page.locator('#welcome').isHidden()); assert.ok(await page.locator('.command-bar').isHidden(), 'the idea workspace has its own form');
   await page.waitForFunction(() => /not set up on this site/.test(document.querySelector('#idea-engine').textContent));
-  assert.equal(await page.title(), 'Start from an Idea · Make Any Product with Genius AI');
+  assert.equal(await page.title(), 'Start from an Idea with Genius AI | Git Architecture Diagram');
   await page.goBack(); await page.waitForSelector('#welcome:not([hidden])'); assert.ok(await page.locator('.command-bar').isVisible());
   for (const width of [390, 430, 768, 1280]) { await page.setViewportSize({ width, height: 900 }); assert.ok(await noOverflow(page), `home: no horizontal overflow at ${width}px`); }
   await page.context().close();
