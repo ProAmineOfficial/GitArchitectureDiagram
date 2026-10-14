@@ -12,9 +12,11 @@ import { createAppServer } from '../../server.mjs';
 const example = JSON.parse(readFileSync('public/assets/engineering/example-esp32.json', 'utf8'));
 const ENGINE = 'https://engine.example'; const ENGINE_TOKEN = 'engine-browser-token-0123456789abcdef-012345'; const KEY = 'sk-fake-browser-visitor-key-placeholder-000000';
 const generated = () => { const project = structuredClone(example); project.provenance = { ...project.provenance, example: false, provider: 'openai', model: 'gpt-test', engineVersion: '0.1.0', generatedAt: '2026-10-10T12:00:00.000Z' }; return project; };
-const engineCalls = []; const providerCalls = [];
+const engineCalls = []; const providerCalls = []; const engine = { accepts: true, readyChecks: 0 };
 const network = async (url, init = {}) => {
   const target = String(url); const body = init.body ? JSON.parse(init.body) : {};
+  if (target.startsWith(ENGINE) && !engine.accepts) { if (target.endsWith('/v1/ready')) engine.readyChecks++; return Response.json({ error: { kind: 'unauthorized', reason: 'mismatch', message: 'Authentication required.' } }, { status: 401 }); } // The production failure: the engine refuses this server's token.
+  if (target === `${ENGINE}/v1/ready`) { engine.readyChecks++; return Response.json({ ok: true, version: '0.1.1', stateSecret: 'derived' }); }
   if (target.startsWith(ENGINE)) {
     engineCalls.push({ path: new URL(target).pathname, raw: init.body || '' });
     if (target.endsWith('/v1/validate')) return Response.json({ done: true, project: body.project, validation: body.project.validation });
@@ -28,7 +30,7 @@ const network = async (url, init = {}) => {
   return new Response('{}', { status: 404 });
 };
 for (const name of ['GENIUS_ENGINE_URL', 'GENIUS_ENGINE_TOKEN']) delete process.env[name];
-const server = createAppServer({ fetchImpl: network });
+const server = createAppServer({ fetchImpl: network, engineReadyTtl: { operational: 60000, other: 0 } }); // Failures are re-checked immediately in tests.
 let base; let browser; const errors = []; const dir = mkdtempSync(join(tmpdir(), 'gad-idea-'));
 test.before(async () => { await new Promise(resolve => server.listen(0, '127.0.0.1', resolve)); base = `http://127.0.0.1:${server.address().port}`; browser = await chromium.launch(); });
 test.after(async () => { await browser?.close(); server.close(); rmSync(dir, { recursive: true, force: true }); for (const name of ['GENIUS_ENGINE_URL', 'GENIUS_ENGINE_TOKEN']) delete process.env[name]; });
@@ -54,7 +56,7 @@ test('the home page leads with the mission and keeps the GitHub import as the se
   await page.click('#mission-idea'); await page.waitForSelector('#idea-view:not([hidden])');
   assert.equal(new URL(page.url()).pathname, '/new');
   assert.ok(await page.locator('#welcome').isHidden()); assert.ok(await page.locator('.command-bar').isHidden(), 'the idea workspace has its own form');
-  await page.waitForFunction(() => /not connected/.test(document.querySelector('#idea-engine').textContent));
+  await page.waitForFunction(() => /not set up on this site/.test(document.querySelector('#idea-engine').textContent));
   assert.equal(await page.title(), 'Start from an Idea · Make Any Product with Genius AI');
   await page.goBack(); await page.waitForSelector('#welcome:not([hidden])'); assert.ok(await page.locator('.command-bar').isVisible());
   for (const width of [390, 430, 768, 1280]) { await page.setViewportSize({ width, height: 900 }); assert.ok(await noOverflow(page), `home: no horizontal overflow at ${width}px`); }
@@ -62,9 +64,9 @@ test('the home page leads with the mission and keeps the GitHub import as the se
 });
 
 test('without an engine, starting from an idea explains why and offers the labeled example', async () => {
-  const page = await open('/new'); await page.waitForFunction(() => /not connected/.test(document.querySelector('#idea-engine').textContent));
+  const page = await open('/new'); await page.waitForFunction(() => /not set up on this site/.test(document.querySelector('#idea-engine').textContent));
   await page.fill('#idea-text', 'An ESP32 weather station that posts readings over Wi-Fi.'); await page.click('#idea-run');
-  await page.waitForSelector('#idea-progress.error:not([hidden])'); assert.match(await page.textContent('#idea-progress'), /not connected on this site yet/);
+  await page.waitForSelector('#idea-progress.error:not([hidden])'); assert.match(await page.textContent('#idea-progress'), /not set up on this site yet/); assert.equal(await page.locator('#idea-progress button', { hasText: 'Retry' }).count(), 0, 'nothing to retry until the site is set up');
   assert.equal(engineCalls.length, 0); assert.equal(providerCalls.length, 0);
   await page.context().close();
 });
@@ -94,7 +96,7 @@ test('the ESP32 example: labeled, diagrams parsed in the browser, editable files
   await page.click('.idea-file[data-file] >> text=firmware/include/config.h');
   const editor = page.locator('.idea-code-editor'); await editor.click(); await page.keyboard.press('End'); await page.keyboard.type(' // edited in the browser');
   await page.waitForSelector('.idea-editor-head .idea-badge.tone-warn'); assert.equal(await page.textContent('.idea-editor-head .idea-badge.tone-warn'), 'Edited — not re-validated');
-  await page.getByRole('button', { name: 'Re-validate', exact: true }).click(); await page.waitForSelector('#idea-progress.error:not([hidden])'); assert.match(await page.textContent('#idea-progress'), /Re-validation runs in the Genius Engineering Engine/);
+  await page.getByRole('button', { name: 'Re-validate', exact: true }).click(); await page.waitForSelector('#idea-progress.error:not([hidden])'); assert.match(await page.textContent('#idea-progress'), /not set up on this site yet\..*Your edits are kept in this tab/);
   await page.click('.idea-tab[data-tab=validation]'); assert.match(await page.textContent('#idea-panel'), /Files changed since this report/);
 
   await page.click('.idea-tab[data-tab=pack]');
@@ -116,6 +118,24 @@ test('the ESP32 example: labeled, diagrams parsed in the browser, editable files
   await again.setInputFiles('#idea-file', broken); await again.waitForSelector('#idea-progress.error:not([hidden])'); assert.match(await again.textContent('#idea-progress'), /Unsafe file path/);
   await again.setViewportSize({ width: 390, height: 860 }); await again.click('.idea-tab[data-tab=files]'); assert.ok(await noOverflow(again), 'idea workspace: no horizontal overflow on a phone');
   await again.context().close();
+});
+
+test('an engine that refuses this server: honest status, Retry, the key is never sent, and no stray example', async () => {
+  process.env.GENIUS_ENGINE_URL = ENGINE; process.env.GENIUS_ENGINE_TOKEN = ENGINE_TOKEN; engineCalls.length = 0; providerCalls.length = 0; engine.accepts = false;
+  try {
+    const page = await open('/new'); await page.waitForFunction(() => document.querySelector('#idea-engine').dataset.state === 'unauthorized');
+    assert.match(await page.textContent('#idea-engine'), /configured, but this site's server is not authorized\. This is a site setting, not your AI key/);
+    await page.click('#settings-open'); await page.selectOption('#provider', 'openai'); await page.fill('#api-key', KEY); await page.click('#settings .dialog-actions .primary-button');
+    await page.click('#idea-example'); await page.waitForSelector('#idea-project:not([hidden])'); // The example was open before the new idea.
+    await page.fill('#idea-text', 'NanoKit Integrated ESP32 LED controller with a web page to set the brightness.'); await page.click('#idea-run');
+    await page.waitForSelector('#idea-progress.error:not([hidden])');
+    assert.match(await page.textContent('#idea-progress'), /not authorized/); assert.ok(await page.locator('#idea-project').isHidden(), 'the example is not shown under a failed run');
+    assert.equal(await page.inputValue('#idea-text'), 'NanoKit Integrated ESP32 LED controller with a web page to set the brightness.', 'the idea text is kept');
+    assert.deepEqual(engineCalls, [], 'no engine stage was started'); assert.equal(providerCalls.length, 0, 'the provider was not called');
+    engine.accepts = true; await page.click('#idea-progress button:has-text("Retry")'); await page.waitForSelector('#idea-questions:not([hidden])');
+    assert.ok(engine.readyChecks >= 2); assert.deepEqual(engineCalls.map(call => call.path), ['/v1/start', '/v1/resume']);
+    await page.context().close();
+  } finally { engine.accepts = true; delete process.env.GENIUS_ENGINE_URL; delete process.env.GENIUS_ENGINE_TOKEN; }
 });
 
 test('with an engine: idea → questions → design → regenerate, and the key reaches only the provider', async () => {

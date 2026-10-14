@@ -651,3 +651,6 @@ ul.hier,ul.hier ul{list-style:none;margin:0;padding:0}ul.hier ul{margin-left:20p
 .idea-view{margin-top:22px}.idea-heading>.glass-icon{display:none}.idea-form,.idea-card{padding:15px;border-radius:18px}.idea-files{grid-template-columns:1fr}.idea-file-list{grid-auto-flow:column;grid-auto-columns:minmax(200px,1fr);overflow-x:auto}.idea-code-editor{min-height:300px}}
 @media(prefers-reduced-motion:reduce){.mission-card,.mission-card:hover,.mission-go,.mission-card:hover .mission-go{transition:none;transform:none}}
 @media(max-width:720px){#import-github,.idea-card{scroll-margin-top:118px}}
+/* Engine status and run errors: the message stays readable, with Retry (and Back) beside it. */
+.idea-progress{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}.idea-progress-text{flex:1 1 280px}.idea-progress-action{padding:5px 12px;min-height:32px;font-size:13px}
+.idea-engine[data-state=unauthorized]::before,.idea-engine[data-state=unreachable]::before,.idea-engine[data-state=unavailable]::before{background:var(--idea-warn)}

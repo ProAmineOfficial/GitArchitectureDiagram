@@ -32,22 +32,39 @@ function tableOf(headers, rows) {
 export function setupIdeaWorkspace({ credentials, aiConfigured, toast, openSettings }) {
   const $ = selector => document.querySelector(selector);
   const view = $('#idea-view'); if (!view) return { show() {} };
-  const state = { project: null, tab: 'overview', file: null, connected: false, busy: false, stale: false, controller: null, render: 0 };
+  const state = { project: null, tab: 'overview', file: null, engine: 'unknown', busy: false, stale: false, controller: null, render: 0 };
 
-  const progress = (text, error = false) => { const line = $('#idea-progress'); line.hidden = !text; line.textContent = text || ''; line.classList.toggle('error', error); };
+  /** One status line: progress text, or an error with optional actions such as Retry. Text is never cleared by a failure. */
+  const progress = (text, error = false, actions = []) => {
+    const line = $('#idea-progress'); line.hidden = !text; line.replaceChildren(); line.classList.toggle('error', error);
+    if (!text) return;
+    line.append(el('span', 'idea-progress-text', text));
+    for (const [label, action] of actions) { const button = el('button', 'quiet-button idea-progress-action', label); button.type = 'button'; button.addEventListener('click', action); line.append(button); }
+  };
   const setBusy = busy => { state.busy = busy; for (const id of ['#idea-run', '#idea-design', '#idea-skip', '#idea-example']) if ($(id)) $(id).disabled = busy; };
 
+  // Configured is not the same as working: the server makes an authenticated readiness check and reports one state.
+  const RUNNABLE = new Set(['operational', 'unverified']);
+  const STATUS_TEXT = {
+    operational: 'Genius Engineering Engine: connected and authorized. Generation uses the AI key in API settings.',
+    unverified: 'Genius Engineering Engine: configured. This engine version cannot confirm authorization yet.',
+    not_configured: 'Genius Engineering Engine: not set up on this site yet. You can open the example project.',
+    unreachable: 'Genius Engineering Engine: configured, but not reachable right now.',
+    unauthorized: 'Genius Engineering Engine: configured, but this site\'s server is not authorized. This is a site setting, not your AI key.',
+    unavailable: 'Genius Engineering Engine: configured, but temporarily unavailable.',
+    unknown: 'Genius Engineering Engine: status unknown. Check your connection and reload.',
+  };
   async function refreshStatus() {
-    try { const response = await fetch('/api/engineering/status'); state.connected = response.ok && Boolean((await response.json()).connected); } catch { state.connected = false; }
-    const line = $('#idea-engine');
-    line.textContent = state.connected ? 'Genius Engineering Engine: connected. Generation uses the AI key in API settings.' : 'Genius Engineering Engine: not connected on this site yet. You can explore the ESP32 example project.';
-    line.classList.toggle('connected', state.connected);
+    try { const response = await fetch('/api/engineering/status'); const body = response.ok ? await response.json() : {}; state.engine = typeof body.state === 'string' && STATUS_TEXT[body.state] ? body.state : body.connected ? 'operational' : 'unknown'; } catch { state.engine = 'unknown'; }
+    const line = $('#idea-engine'); line.textContent = STATUS_TEXT[state.engine]; line.dataset.state = state.engine;
+    line.classList.toggle('connected', state.engine === 'operational');
+    return state.engine;
   }
 
   /** Run one engineering stage on the server (which calls the private engine and the provider with this tab's key). */
-  async function runStage(body, label) {
+  async function runStage(body, label, retry) {
     const { apiKey, model, provider } = credentials();
-    if (!state.connected) { progress('The Genius Engineering Engine is not connected on this site yet. Open the ESP32 example to explore the workspace.', true); return null; }
+    if (!RUNNABLE.has(await refreshStatus())) { progress(STATUS_TEXT[state.engine], true, retry && state.engine !== 'not_configured' ? [['Retry', retry]] : []); return null; } // The key is not sent while the engine cannot run.
     if (!aiConfigured()) { progress('Add your AI provider key and model in API settings first.', true); openSettings(); return null; }
     state.controller?.abort(); state.controller = new AbortController(); setBusy(true); progress(label);
     try {
@@ -55,18 +72,22 @@ export function setupIdeaWorkspace({ credentials, aiConfigured, toast, openSetti
       const result = await readAnalysisResponse(response, event => progress(`${event.stage}${event.detail ? ` · ${event.detail}` : ''}`), value => Boolean(value?.project));
       progress('');
       return result;
-    } catch (error) { if (error.name !== 'AbortError') progress(error.message || 'The engineering run failed.', true); return null; }
+    } catch (error) { if (error.name !== 'AbortError') progress(error.message || 'The engineering run failed.', true, retry ? [['Retry', retry]] : []); return null; }
     finally { setBusy(false); }
   }
 
   // ——— Idea → questions → design ———
-  $('#idea-form').addEventListener('submit', async event => {
-    event.preventDefault();
+  // Starting a new idea hides whatever project was on screen (the example included), so a failure can never look like
+  // a result. A generated or imported project can be brought back after a failure; the idea text is always kept.
+  async function startIdea() {
     const idea = $('#idea-text').value.trim();
     if (idea.length < 12) { progress('Describe your idea in at least a sentence.', true); return; }
-    const result = await runStage({ stage: 'clarify', idea }, 'Genius AI is reading your idea…');
-    if (result) { state.project = result.project; showQuestions(); }
-  });
+    const previous = state.project; state.project = null; $('#idea-project').hidden = true; $('#idea-questions').hidden = true;
+    const result = await runStage({ stage: 'clarify', idea }, 'Genius AI is reading your idea…', startIdea);
+    if (result) { state.project = result.project; showQuestions(); return; }
+    if (previous && !previous.provenance?.example && $('#idea-progress').classList.contains('error')) $('#idea-progress').append(Object.assign(el('button', 'quiet-button idea-progress-action', 'Back to the previous project'), { type: 'button', onclick: () => openProject(previous) }));
+  }
+  $('#idea-form').addEventListener('submit', event => { event.preventDefault(); startIdea(); });
   function showQuestions() {
     const box = $('#idea-question-list'); box.replaceChildren();
     const questions = state.project.questions || [];
@@ -84,7 +105,7 @@ export function setupIdeaWorkspace({ credentials, aiConfigured, toast, openSetti
   async function design(useDefaults) {
     const answers = {};
     if (!useDefaults) for (const input of document.querySelectorAll('#idea-question-list input')) if (input.value.trim()) answers[input.dataset.question] = input.value.trim();
-    const result = await runStage({ stage: 'design', project: state.project, answers }, 'Genius AI is designing the architecture…');
+    const result = await runStage({ stage: 'design', project: state.project, answers }, 'Genius AI is designing the architecture…', () => design(useDefaults));
     if (result) openProject(result.project);
   }
   $('#idea-design').addEventListener('click', () => design(false));
@@ -195,7 +216,7 @@ export function setupIdeaWorkspace({ credentials, aiConfigured, toast, openSetti
       const revalidate = el('button', 'quiet-button', 'Re-validate'); revalidate.type = 'button'; revalidate.addEventListener('click', revalidateProject);
       const instruction = el('input', 'idea-instruction'); instruction.placeholder = 'Instruction for Genius AI, e.g. "read the sensor every 5 seconds"'; instruction.maxLength = 1000;
       const regenerate = el('button', 'quiet-button', 'Regenerate this file'); regenerate.type = 'button';
-      regenerate.addEventListener('click', async () => { const result = await runStage({ stage: 'regenerate', project: state.project, artifactId: artifact.id, instruction: instruction.value.trim() }, `Genius AI is rewriting ${artifact.path}…`); if (result) { state.project = result.project; state.stale = false; selectTab('files'); show(artifact.id); toast(`${artifact.path} regenerated and re-validated.`); } });
+      const rewrite = async () => { const result = await runStage({ stage: 'regenerate', project: state.project, artifactId: artifact.id, instruction: instruction.value.trim() }, `Genius AI is rewriting ${artifact.path}…`, rewrite); if (result) { state.project = result.project; state.stale = false; selectTab('files'); show(artifact.id); toast(`${artifact.path} regenerated and re-validated.`); } }; regenerate.addEventListener('click', rewrite);
       const save = el('button', 'quiet-button', 'Download file'); save.type = 'button'; save.addEventListener('click', () => download(artifact.path.split('/').pop(), artifact.content));
       actions.append(revalidate, instruction, regenerate, save); editor.append(actions);
     };
@@ -204,7 +225,7 @@ export function setupIdeaWorkspace({ credentials, aiConfigured, toast, openSetti
   }
 
   async function revalidateProject() {
-    if (!state.connected) { progress('Re-validation runs in the Genius Engineering Engine, which is not connected on this site yet. Your edits are kept in this tab and in exported files.', true); return; }
+    if (!RUNNABLE.has(await refreshStatus())) { progress(`${STATUS_TEXT[state.engine]} Your edits are kept in this tab and in exported files.`, true); return; }
     setBusy(true); progress('Re-validating with the Genius Engineering Engine…');
     try {
       const response = await fetch('/api/engineering/validate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ project: state.project }) });
