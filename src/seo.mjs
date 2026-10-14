@@ -51,10 +51,16 @@ export function withSearchMetadata(html, pathname) {
   replaceMeta('property', 'og:title', meta.title);
   replaceMeta('property', 'og:description', meta.description);
   if (!/<link rel="canonical"/.test(page)) page = page.replace('</head>', `  <link rel="canonical" href="${SITE}${meta.canonical}">\n</head>`);
-  // Show the right section before scripts run: the home sections for /, the idea workspace for /new, the catalog for /browse.
+  // Show the right section before scripts run: the home sections for /, the workspace with its idea composer for /new,
+  // the catalog for /browse.
   page = setHidden(page, /<section\b[^>]*\bid="welcome"[^>]*>/, meta.page !== 'home');
-  page = setHidden(page, /<section\b[^>]*\bid="idea-view"[^>]*>/, meta.page !== 'idea');
   page = setHidden(page, /<section\b[^>]*\bid="browse-view"[^>]*>/, meta.page !== 'browse');
-  page = setHidden(page, /<section\b[^>]*\bclass="command-bar"[^>]*>/, meta.page === 'idea'); // The idea workspace has its own form.
+  page = setHidden(page, /<section\b[^>]*\bclass="command-bar"[^>]*>/, meta.page === 'idea'); // The workspace composer has its own form.
+  if (meta.page === 'idea') {
+    page = setHidden(page, /<section\b[^>]*\bid="workspace"[^>]*>/, false).replace(/(<section\b[^>]*\bid="workspace"[^>]*\bdata-source=")repository(")/, '$1project$2');
+    page = page.replace('<h1 id="repo-title"></h1>', '<h1 id="repo-title">Start from an Idea</h1>');
+    for (const id of ['workspace-home', 'workspace-start']) page = setHidden(page, new RegExp(`<div\\b[^>]*\\bid="${id}"[^>]*>`), false);
+    page = setHidden(page, /<div\b[^>]*\bid="canvas"[^>]*>/, true); page = setHidden(page, /<div\b[^>]*\bclass="diagram-meta"[^>]*>/, true);
+  }
   return page;
 }

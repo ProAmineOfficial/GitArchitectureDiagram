@@ -41,6 +41,8 @@ test('the server shows the right section for each landing page before any script
   const home = withSearchMetadata(INDEX, '/'); const idea = withSearchMetadata(INDEX, '/new'); const browse = withSearchMetadata(INDEX, '/browse');
   assert.ok(visible(home, /<section\b[^>]*id="welcome"[^>]*>/) && !visible(home, /<section\b[^>]*id="browse-view"[^>]*>/));
   assert.ok(!visible(idea, /<section\b[^>]*id="welcome"[^>]*>/), '/new: the home mission is hidden');
+  assert.ok(visible(idea, /<section\b[^>]*id="workspace"[^>]*>/) && /id="workspace" data-source="project"/.test(idea), '/new: the unified workspace, with an idea project as its source');
+  assert.ok(visible(idea, /<div\b[^>]*id="workspace-start"[^>]*>/) && !visible(idea, /<div\b[^>]*id="canvas"[^>]*>/), '/new: the composer is visible before scripts run');
   assert.ok(!visible(idea, /<section\b[^>]*class="command-bar"[^>]*>/), '/new: the GitHub input is hidden; the idea workspace has its own form');
   assert.ok(!visible(browse, /<section\b[^>]*id="welcome"[^>]*>/) && visible(browse, /<section\b[^>]*id="browse-view"[^>]*>/));
   const firstVisibleH1 = html => { for (const match of html.matchAll(/<h1\b[^>]*>([\s\S]*?)<\/h1>/g)) { const open = html.lastIndexOf('<section', match.index); const tag = html.slice(open, html.indexOf('>', open) + 1); if (!/\shidden(?=[\s>])/.test(tag)) return match[1].replace(/<[^>]+>/g, '').trim(); } return null; }; // The heading of the first section that is not hidden.
@@ -52,11 +54,11 @@ test('the server shows the right section for each landing page before any script
   assert.ok(withSearchMetadata(INDEX, '/examples').includes('<link rel="canonical" href="https://gitarchitecturediagram.com/browse">'));
 });
 
-test('the browser script sets the same title as the server for each page', () => {
+test('the browser script sets the same title as the server for each page', async () => {
   assert.ok(INDEX.includes(`<title>${PAGE_TITLES.home}</title>`), 'index.html');
   assert.ok(readFileSync('public/app.js', 'utf8').includes(`const HOME_TITLE = '${PAGE_TITLES.home}';`), 'home');
   assert.ok(readFileSync('public/app.js', 'utf8').includes(`document.title = '${PAGE_TITLES.browse}';`), 'browse');
-  assert.ok(readFileSync('public/idea.js', 'utf8').includes(`document.title = '${PAGE_TITLES.idea}';`), 'idea');
+  assert.equal((await import('../public/idea.js')).IDEA_TITLE, PAGE_TITLES.idea, 'idea');
 });
 
 test('the hosted Worker serves the same landing-page metadata', async () => {

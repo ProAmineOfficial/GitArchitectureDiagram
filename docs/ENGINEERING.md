@@ -10,11 +10,46 @@
 
 **Import GitHub Project** is the second path: the existing repository analysis. This document covers the first path.
 
+## One workspace for both paths
+
+An idea project opens in **the same workspace as a GitHub repository**. It uses the same Files sidebar, canvas, Genius sidebar, and Dock. The new **Workspace** icon comes first in the Dock.
+
+- **Workspace (`/new`):** the composer when no project is open. It offers:
+  - describe a product;
+  - open the example project;
+  - import a project file;
+  - import a GitHub repository.
+
+  When a project is open, the Workspace view shows its overview: requirements, progress, diagrams, files, validation, recent operations, and exports.
+- **System Map:** the project's architecture diagram.
+- **Architecture:** components and interfaces, drawn by code from the project data.
+- **Hierarchy:** component groups, components, and files.
+- **Mind Map:** requirements, components, files, and risks.
+- **Diagrams:** the project's own diagrams.
+- **Source:** every one of these diagrams, editable.
+- **Genius:** the overview as Markdown.
+- **Process:** how the project was made, and the validation tiers.
+- **Export Project:** the Development Pack.
+- **Export:** the current diagram.
+- **Build:** the build and test steps from the report. They are **not run here**.
+
+**What an idea project never shows:**
+
+- the commit, refresh, permalink, Highlights, Deep Genius, or repository Ask controls;
+- a repository tree. The Files sidebar lists the **generated engineering files**, each with its status from the validation report.
+
+**Behavior of runs:**
+
+- Until a project exists, every Dock view except Workspace is disabled.
+- A failed run keeps the idea text and offers Retry. It never shows another project as its result.
+- The prepared example opens only when asked.
+- A project stays open in the tab while you visit a repository, so Back and Forward return to it.
+
 ## What runs where (open core)
 
 | Part | Where | License |
 |---|---|---|
-| The workspace (`public/idea.js`), the `gad.project/1` format and its public helpers (`public/engineering.js`), the server interface (`src/engineering.mjs`), the HTTP routes, and the labeled example (`public/assets/engineering/example-esp32.json`) | This repository | AGPL-3.0-only |
+| The composer (`public/idea.js`), the project views in the unified workspace (`public/project-workspace.js`, `public/project-views.js`), the `gad.project/1` format and its public helpers (`public/engineering.js`), the server interface (`src/engineering.mjs`), the HTTP routes, and the labeled example (`public/assets/engineering/example-esp32.json`) | This repository | AGPL-3.0-only |
 | The **Genius Engineering Engine**: stage orchestration, prompts, structured-output schemas, the validation tiers and domain rule packs | A separate private service operated by Pro_Amine LLC | Proprietary |
 
 No engine code, prompt, or rule pack is shipped to the browser or committed here. The public repository holds the format and the client, and that is enough to read, edit, export, and re-import a project. Running the generation itself needs the operator's engine.

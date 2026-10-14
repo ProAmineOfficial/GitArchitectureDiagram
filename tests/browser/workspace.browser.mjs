@@ -154,10 +154,10 @@ test('the 0.7 workspace', async t => {
   await t.test('Dock: every view has its own icon, badges, and a moving active indicator', async () => {
     await page.keyboard.press('Escape');
     const labels = await page.locator('#view-dock .dock-item').evaluateAll(items => items.map(item => item.getAttribute('aria-label')));
-    assert.deepEqual(labels, ['System Map', 'Architecture', 'Software Hierarchy', 'Repository Mind Map', 'Project Diagrams', 'Mermaid Source', 'Genius Guide', 'Genius Process', 'Export Project', 'Export', 'Build With Genius']);
-    const icons = await page.locator('#view-dock .dock-icon svg').evaluateAll(svgs => svgs.map(svg => svg.innerHTML)); assert.equal(new Set(icons).size, 11, 'eleven distinct icons');
+    assert.deepEqual(labels, ['Workspace', 'System Map', 'Architecture', 'Software Hierarchy', 'Repository Mind Map', 'Project Diagrams', 'Mermaid Source', 'Genius Guide', 'Genius Process', 'Export Project', 'Export', 'Build With Genius']);
+    const icons = await page.locator('#view-dock .dock-icon svg').evaluateAll(svgs => svgs.map(svg => svg.innerHTML)); assert.equal(new Set(icons).size, 12, 'twelve distinct icons: the approved Workspace icon plus the original eleven');
     assert.equal(await page.locator('#view-dock [data-view=system] .dock-badge.ai').count(), 1); assert.ok(await page.isHidden('#docs-count'), 'no count badge without diagrams');
-    assert.equal(await page.locator('#view-dock .dock-sep').count(), 2);
+    assert.equal(await page.locator('#view-dock .dock-sep').count(), 3, 'Workspace stands apart from the views');
     await page.click('#view-dock [data-view=hierarchy]'); await page.waitForTimeout(400); assert.equal(await page.getAttribute('#view-dock [data-view=hierarchy]', 'aria-selected'), 'true'); // Colors transition over 250 ms.
     await page.waitForFunction(() => getComputedStyle(document.querySelector('#view-dock [data-view=hierarchy] .dock-icon')).backgroundColor === 'rgb(212, 137, 26)', null, { timeout: 3000 }); // Amber once the color transition settles.
     await page.waitForFunction(() => getComputedStyle(document.querySelector('#view-dock [aria-selected=true] .dock-dot')).backgroundColor === 'rgb(212, 137, 26)', null, { timeout: 3000 }); // The dot fades in on its own transition; wait for it to settle.
@@ -166,7 +166,7 @@ test('the 0.7 workspace', async t => {
   await t.test('Dock: proximity magnification, neighbors, and reset on leave', async () => {
     const box = await page.locator('#view-dock [data-view=hierarchy]').boundingBox(); await page.mouse.move(box.x + box.width / 2, box.y + 20); await page.waitForTimeout(350);
     const scales = await page.locator('#view-dock .dock-item').evaluateAll(items => items.map(item => Number(item.style.getPropertyValue('--s') || 1)));
-    assert.ok(scales[2] > 1.45, `nearest ${scales[2]}`); assert.ok(scales[1] > 1.15 && scales[1] < 1.3 && scales[3] > 1.15 && scales[3] < 1.3, `neighbors ${scales[1]} ${scales[3]}`); assert.ok(scales[0] < scales[1] && scales[9] === 1);
+    assert.ok(scales[3] > 1.45, `nearest ${scales[3]}`); assert.ok(scales[2] > 1.15 && scales[2] < 1.3 && scales[4] > 1.15 && scales[4] < 1.3, `neighbors ${scales[2]} ${scales[4]}`); assert.ok(scales[1] < scales[2] && scales[10] === 1); // Index 0 is the Workspace icon.
     assert.match(await page.locator('#view-dock [data-view=hierarchy] .dock-icon').evaluate(icon => getComputedStyle(icon).transform), /matrix\(1\.4/);
     await page.mouse.move(5, 5); await page.waitForTimeout(350);
     assert.ok((await page.locator('#view-dock .dock-item').evaluateAll(items => items.map(item => Number(item.style.getPropertyValue('--s') || 1)))).every(scale => scale === 1));

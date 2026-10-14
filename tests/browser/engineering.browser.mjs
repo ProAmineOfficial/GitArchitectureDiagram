@@ -1,17 +1,27 @@
-// Project: Git Architecture Diagram | Browser tests: Make Any Product with Genius AI — the home mission, the labeled
-// ESP32 example (diagrams, editing, validation, Development Pack), project import, and a full idea → design run against a
-// fake Genius Engineering Engine and a fake provider. No network: the real server serves the page, and every outside
-// request goes to the fakes below.
+// Project: Git Architecture Diagram | Browser tests: Make Any Product with Genius AI in the unified workspace — the home
+// mission, /new as the Workspace composer, the labeled example in every Dock view, editing and the Development Pack,
+// project import, an engine that refuses this server, a full idea → design → regenerate run against a fake Genius
+// Engineering Engine and a fake provider, and the switch back to a repository. No network: the real server serves the
+// page, and every outside request goes to the fakes below.
 import test from 'node:test'; import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs'; import { tmpdir } from 'node:os'; import { join } from 'node:path';
+import { readFileSync, writeFileSync, mkdtempSync, rmSync, mkdirSync } from 'node:fs'; import { tmpdir } from 'node:os'; import { join, dirname } from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { chromium } from 'playwright';
 import { unzipSync, strFromU8 } from 'fflate';
 import '../support/no-autostart.mjs';
 import { createAppServer } from '../../server.mjs';
+import { createGitHubFetch } from '../support/github-emulator.mjs';
 
 const example = JSON.parse(readFileSync('public/assets/engineering/example-esp32.json', 'utf8'));
 const ENGINE = 'https://engine.example'; const ENGINE_TOKEN = 'engine-browser-token-0123456789abcdef-012345'; const KEY = 'sk-fake-browser-visitor-key-placeholder-000000';
 const generated = () => { const project = structuredClone(example); project.provenance = { ...project.provenance, example: false, provider: 'openai', model: 'gpt-test', engineVersion: '0.1.0', generatedAt: '2026-10-10T12:00:00.000Z' }; return project; };
+// A tiny real repository, served through the GitHub emulator, to check the switch between the two project sources.
+const repoDir = mkdtempSync(join(tmpdir(), 'gad-ws-repo-')); const git = (...args) => execFileSync('git', ['-C', repoDir, ...args], { encoding: 'utf8' });
+const write = (path, text) => { mkdirSync(dirname(join(repoDir, path)), { recursive: true }); writeFileSync(join(repoDir, path), text); };
+git('init', '-q', '-b', 'main'); git('config', 'user.email', 't@example.com'); git('config', 'user.name', 'Test');
+write('README.md', '# Lamp\nA small LED lamp controller.\n'); write('src/main.cpp', '#include "led.h"\nint main() { return led(); }\n'); write('src/led.h', 'int led();\n');
+git('add', '.'); git('commit', '-q', '-m', 'lamp');
+const github = createGitHubFetch({ 'acme/lamp': { dir: repoDir, description: 'LED lamp' } }, { fallback: async () => new Response('{}', { status: 404 }) });
 const engineCalls = []; const providerCalls = []; const engine = { accepts: true, readyChecks: 0 };
 const network = async (url, init = {}) => {
   const target = String(url); const body = init.body ? JSON.parse(init.body) : {};
@@ -27,13 +37,13 @@ const network = async (url, init = {}) => {
     return Response.json({ done: true, project, validation: project.validation });
   }
   if (target.startsWith('https://api.openai.com/')) { if (new URL(target).pathname === '/v1/responses') providerCalls.push({ auth: init.headers?.Authorization || '' }); else return Response.json({ data: [] }); /* Model discovery from API settings is not a generation call. */ return Response.json({ status: 'completed', model: 'gpt-test', output: [{ content: [{ type: 'output_text', text: '{"ok":true}' }] }] }); }
-  return new Response('{}', { status: 404 });
+  return github(url, init);
 };
 for (const name of ['GENIUS_ENGINE_URL', 'GENIUS_ENGINE_TOKEN']) delete process.env[name];
 const server = createAppServer({ fetchImpl: network, engineReadyTtl: { operational: 60000, other: 0 } }); // Failures are re-checked immediately in tests.
 let base; let browser; const errors = []; const dir = mkdtempSync(join(tmpdir(), 'gad-idea-'));
 test.before(async () => { await new Promise(resolve => server.listen(0, '127.0.0.1', resolve)); base = `http://127.0.0.1:${server.address().port}`; browser = await chromium.launch(); });
-test.after(async () => { await browser?.close(); server.close(); rmSync(dir, { recursive: true, force: true }); for (const name of ['GENIUS_ENGINE_URL', 'GENIUS_ENGINE_TOKEN']) delete process.env[name]; });
+test.after(async () => { await browser?.close(); server.close(); rmSync(dir, { recursive: true, force: true }); rmSync(repoDir, { recursive: true, force: true }); for (const name of ['GENIUS_ENGINE_URL', 'GENIUS_ENGINE_TOKEN']) delete process.env[name]; });
 async function open(path, { viewport = { width: 1440, height: 940 }, theme = 'dark' } = {}) {
   const context = await browser.newContext({ viewport, acceptDownloads: true }); const page = await context.newPage(); page.on('pageerror', error => errors.push(error.message));
   await page.addInitScript(value => { try { localStorage.setItem('gad-theme', value); } catch { /* Default theme. */ } }, theme);
@@ -41,95 +51,114 @@ async function open(path, { viewport = { width: 1440, height: 940 }, theme = 'da
 }
 const noOverflow = page => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
 
-test('the home page leads with the mission and keeps the GitHub import as the second path', async () => {
+const views = ['system', 'architecture', 'hierarchy', 'mindmap', 'documented'];
+const waitSvg = page => page.waitForFunction(() => { const svg = document.querySelector('#canvas:not([hidden]) #diagram-content svg'); return svg && svg.getBoundingClientRect().width > 0; }, null, { timeout: 20000 });
+
+test('the home page leads with the mission; Start from an Idea opens the Workspace composer', async () => {
   const page = await open('/'); await page.waitForSelector('#welcome:not([hidden])');
   assert.equal(await page.title(), 'Git Architecture Diagram — Make Any Product with Genius AI');
   assert.equal((await page.textContent('#mission-title')).trim(), 'Make Any Product with Genius AI');
-  assert.equal((await page.textContent('.mission-tagline')).trim(), 'Imagine It. Design It. Develop It. Validate It.');
   assert.deepEqual(await page.$$eval('.mission-card strong', nodes => nodes.map(node => node.textContent)), ['Start from an Idea', 'Import GitHub Project']);
-  assert.deepEqual(await page.$$eval('.mission-outputs li', nodes => nodes.map(node => node.textContent.trim())), ['Validation Reports', 'Engineering Files', 'System Diagrams']);
   assert.ok(await page.locator('#hero-slot .command-bar').isVisible(), 'the GitHub input is still on the home page');
-  assert.ok(await page.locator('.address-swap').isVisible()); assert.equal(await page.locator('#starter-examples').count(), 1);
-  await page.click('#mission-import');
-  await page.waitForFunction(() => document.activeElement?.id === 'repository');
-  assert.equal(new URL(page.url()).pathname, '/');
-  await page.click('#mission-idea'); await page.waitForSelector('#idea-view:not([hidden])');
+  await page.click('#mission-import'); await page.waitForFunction(() => document.activeElement?.id === 'repository');
+  await page.click('#mission-idea'); await page.waitForSelector('#workspace:not([hidden]) #workspace-start:not([hidden])');
   assert.equal(new URL(page.url()).pathname, '/new');
-  assert.ok(await page.locator('#welcome').isHidden()); assert.ok(await page.locator('.command-bar').isHidden(), 'the idea workspace has its own form');
+  assert.equal(await page.getAttribute('#workspace', 'data-source'), 'project', 'the same workspace, with an idea project as its source');
+  assert.equal(await page.getAttribute('#view-dock [data-view=workspace]', 'aria-selected'), 'true');
+  assert.equal(await page.textContent('#repo-title'), 'Start from an Idea');
+  assert.ok(await page.locator('.command-bar').isHidden() && await page.locator('#welcome').isHidden());
+  for (const selector of ['#commit', '#refresh', '#share', '#hl-toggle', '#deep-genius', '.ask']) assert.ok(await page.locator(selector).isHidden(), `${selector} is a repository control`);
+  assert.equal(await page.locator('#view-dock .dock-item[aria-disabled=true]').count(), 11, 'until a project exists, only Workspace works');
+  await page.$eval('#view-dock [data-view=system]', item => item.click()); await page.waitForFunction(() => /first/.test(document.querySelector('#toast').textContent)); // A guarded click, not pointer physics.
+  assert.equal(await page.getAttribute('#view-dock [data-view=workspace]', 'aria-selected'), 'true');
   await page.waitForFunction(() => /not set up on this site/.test(document.querySelector('#idea-engine').textContent));
   assert.equal(await page.title(), 'Start from an Idea with Genius AI | Git Architecture Diagram');
   await page.goBack(); await page.waitForSelector('#welcome:not([hidden])'); assert.ok(await page.locator('.command-bar').isVisible());
-  for (const width of [390, 430, 768, 1280]) { await page.setViewportSize({ width, height: 900 }); assert.ok(await noOverflow(page), `home: no horizontal overflow at ${width}px`); }
+  for (const width of [390, 768, 1280]) { await page.setViewportSize({ width, height: 900 }); assert.ok(await noOverflow(page), `home: no horizontal overflow at ${width}px`); }
   await page.context().close();
 });
 
-test('without an engine, starting from an idea explains why and offers the labeled example', async () => {
+test('without an engine, a run fails honestly: no project, no example, the text is kept', async () => {
   const page = await open('/new'); await page.waitForFunction(() => /not set up on this site/.test(document.querySelector('#idea-engine').textContent));
   await page.fill('#idea-text', 'An ESP32 weather station that posts readings over Wi-Fi.'); await page.click('#idea-run');
-  await page.waitForSelector('#idea-progress.error:not([hidden])'); assert.match(await page.textContent('#idea-progress'), /not set up on this site yet/); assert.equal(await page.locator('#idea-progress button', { hasText: 'Retry' }).count(), 0, 'nothing to retry until the site is set up');
+  await page.waitForSelector('#idea-progress.error:not([hidden])'); assert.match(await page.textContent('#idea-progress'), /not set up on this site yet/);
+  assert.equal(await page.locator('#idea-progress button', { hasText: 'Retry' }).count(), 0, 'nothing to retry until the site is set up');
+  assert.ok(await page.locator('#workspace-overview').isHidden(), 'no project appears'); assert.equal(await page.textContent('#repo-title'), 'Start from an Idea');
+  assert.equal(await page.inputValue('#idea-text'), 'An ESP32 weather station that posts readings over Wi-Fi.');
   assert.equal(engineCalls.length, 0); assert.equal(providerCalls.length, 0);
   await page.context().close();
 });
 
-test('the ESP32 example: labeled, diagrams parsed in the browser, editable files, honest validation, and a Development Pack', async () => {
-  const page = await open('/new'); await page.waitForSelector('#idea-view:not([hidden])');
-  await page.click('#idea-example'); await page.waitForSelector('#idea-project:not([hidden])');
-  assert.match(await page.textContent('#idea-banner'), /Example project — prepared by Pro_Amine LLC/);
-  assert.equal(await page.textContent('#idea-project-title'), example.title);
-  assert.deepEqual(await page.$$eval('#idea-tabs .idea-tab', nodes => nodes.map(node => node.textContent)), ['Overview', 'Requirements', 'Architecture', 'Files', 'Validation', 'Development Pack']);
-  assert.match(await page.textContent('#idea-panel'), /Prepared example; no AI model was used/);
+test('the example opens in the unified workspace: every Dock view, files, editing, validation, and the Development Pack', async () => {
+  const page = await open('/new'); await page.waitForSelector('#workspace-start:not([hidden])');
+  await page.click('#idea-example'); await page.waitForSelector('#workspace-overview:not([hidden])');
+  assert.equal(await page.textContent('#repo-title'), example.title);
+  assert.match(await page.textContent('#workspace-overview'), /Example project — prepared by Pro_Amine LLC/);
+  assert.match(await page.textContent('#project-pill'), /^Example project · 22 pass · 1 warn · 3 not run$/);
+  assert.equal(await page.locator('#view-dock .dock-item[aria-disabled=true]').count(), 0);
+  assert.equal(await page.locator('#workspace-overview .ws-steps li[data-state=done]').count(), 4, 'idea, architecture, files, validation');
+  assert.equal(await page.getAttribute('#workspace-overview .ws-steps li:last-child', 'data-state'), 'todo', 'builds and physical tests are never marked done here');
+  for (const view of views) {
+    await page.click(`#view-dock [data-view=${view}]`); await waitSvg(page);
+    assert.ok(!/syntax problem/.test(await page.textContent('#diagram-caption')), `${view} renders`);
+    assert.match(await page.textContent('#diagram-basis'), /Example project|Drawn from the project data/, `${view} is labeled`);
+  }
+  assert.equal(await page.locator('#document-select option').count(), example.diagrams.length);
+  await page.click('#view-dock [data-view=pipeline]'); await page.waitForSelector('#pipeline-view:not([hidden]) .project-panel');
+  assert.match(await page.textContent('#pipeline-view'), /never counted as a pass/); assert.ok(await page.locator('#pipeline-view .idea-badge', { hasText: 'Not run' }).count() >= 1);
+  await page.click('#view-dock [data-view=guide]'); await page.waitForSelector('#guide:not([hidden]) h1'); assert.equal(await page.textContent('#guide h1'), example.title);
+  await page.click('#view-dock [data-view=source]'); await page.waitForSelector('#source-view:not([hidden])');
+  assert.equal(await page.locator('#source-target option').count(), 4 + example.diagrams.length);
 
-  await page.click('.idea-tab[data-tab=requirements]'); assert.ok((await page.locator('#idea-panel .idea-table-wrap').count()) >= 3);
-  assert.ok(await page.locator('#idea-panel h3', { hasText: 'Assumptions' }).count()); assert.ok(await page.locator('#idea-panel h3', { hasText: 'Verification plan' }).count());
-  await page.click('.idea-tab[data-tab=architecture]');
-  await page.waitForFunction(count => document.querySelectorAll('#idea-panel .idea-diagram-canvas svg').length === count, example.diagrams.length + 1, { timeout: 20000 });
-  assert.equal(await page.locator('#idea-panel .idea-badge', { hasText: 'Mermaid syntax checked in your browser' }).count(), example.diagrams.length + 1);
-  assert.ok(await page.locator('#idea-panel h3', { hasText: 'Pin map' }).count());
+  await page.click('[data-drawer=tree]'); await page.waitForSelector('#tree .tree-file');
+  assert.equal(await page.locator('#tree .tree-file').count(), example.artifacts.length); assert.match(await page.textContent('#tree-foot'), /not a repository/);
+  await page.click('#tree .tree-file[data-path="firmware/include/config.h"]'); await page.waitForSelector('#file-inspector:not([hidden]) #project-file textarea');
+  assert.ok(await page.locator('#file-code').isHidden() && await page.locator('#source-link').isHidden(), 'no GitHub source link for a generated file');
+  const editor = page.locator('#project-file textarea'); await editor.click(); await page.keyboard.press('End'); await page.keyboard.type(' // edited in the browser');
+  await page.waitForFunction(() => /Edited/.test(document.querySelector('#tree .tree-file[data-path="firmware/include/config.h"]').textContent));
+  assert.match(await page.textContent('#project-pill'), /Edited · re-validate/);
+  await page.click('#project-file button:has-text("Re-validate")'); await page.waitForSelector('#project-file .project-file-status.error');
+  assert.match(await page.textContent('#project-file .project-file-status'), /not set up on this site yet\..*Your edits are kept in this tab/);
+  await page.click('#view-dock [data-view=pipeline]'); assert.match(await page.textContent('#pipeline-view'), /Files changed since this report/);
 
-  await page.click('.idea-tab[data-tab=validation]');
-  const summary = await page.$$eval('#idea-panel .idea-stat strong', nodes => nodes.map(node => Number(node.textContent)));
-  assert.deepEqual(summary, [example.validation.summary.pass, example.validation.summary.warn, example.validation.summary.fail, example.validation.summary.notRun]);
-  assert.match(await page.textContent('#idea-panel .idea-note'), /never counted as a pass/);
-  assert.ok(await page.locator('#idea-panel .idea-badge', { hasText: 'Not run' }).count() >= 1);
-
-  await page.click('.idea-tab[data-tab=files]');
-  await page.click('.idea-file[data-file] >> text=firmware/include/config.h');
-  const editor = page.locator('.idea-code-editor'); await editor.click(); await page.keyboard.press('End'); await page.keyboard.type(' // edited in the browser');
-  await page.waitForSelector('.idea-editor-head .idea-badge.tone-warn'); assert.equal(await page.textContent('.idea-editor-head .idea-badge.tone-warn'), 'Edited — not re-validated');
-  await page.getByRole('button', { name: 'Re-validate', exact: true }).click(); await page.waitForSelector('#idea-progress.error:not([hidden])'); assert.match(await page.textContent('#idea-progress'), /not set up on this site yet\..*Your edits are kept in this tab/);
-  await page.click('.idea-tab[data-tab=validation]'); assert.match(await page.textContent('#idea-panel'), /Files changed since this report/);
-
-  await page.click('.idea-tab[data-tab=pack]');
-  const [zip] = await Promise.all([page.waitForEvent('download'), page.click('text=Download Development Pack (.zip)')]);
-  assert.match(zip.suggestedFilename(), /-development-pack\.zip$/);
-  const entries = unzipSync(readFileSync(await zip.path())); const names = Object.keys(entries); const folder = names[0].split('/')[0];
-  for (const path of [...example.artifacts.map(item => item.path), '.genius-project/project.json', '.genius-project/OVERVIEW.md', '.genius-project/VALIDATION_REPORT.md', '.genius-project/diagrams/dependencies.mmd']) assert.ok(entries[`${folder}/${path}`], path);
+  await page.click('[data-drawer=tree]'); // Close the Files drawer, which overlays the left of the canvas in the focus layout.
+  await page.click('#view-dock [data-view=extract]'); await page.waitForSelector('#extract-view:not([hidden]) .project-panel');
+  const [zip] = await Promise.all([page.waitForEvent('download'), page.click('#extract-view button:has-text("Download Development Pack (.zip)")')]);
+  const entries = unzipSync(readFileSync(await zip.path())); const folder = Object.keys(entries)[0].split('/')[0];
+  for (const path of [...example.artifacts.map(item => item.path), '.genius-project/project.json', '.genius-project/VALIDATION_REPORT.md', '.genius-project/diagrams/dependencies.mmd']) assert.ok(entries[`${folder}/${path}`], path);
   assert.match(strFromU8(entries[`${folder}/firmware/include/config.h`]), /edited in the browser/, 'the pack carries the edits');
-  assert.equal(JSON.parse(strFromU8(entries[`${folder}/.genius-project/project.json`])).artifacts.find(item => item.path === 'firmware/include/config.h').status, 'edited');
-  const [json] = await Promise.all([page.waitForEvent('download'), page.click('text=Export project file (.json)')]);
+  const [json] = await Promise.all([page.waitForEvent('download'), page.click('#extract-view button:has-text("Export project file (.json)")')]);
   const exported = join(dir, 'exported.json'); writeFileSync(exported, readFileSync(await json.path()));
+  await page.click('#view-dock [data-view=architecture]'); await waitSvg(page);
+  const [mmd] = await Promise.all([page.waitForEvent('download'), page.selectOption('#export-format', 'mmd')]);
+  assert.match(mmd.suggestedFilename(), /^esp32-sensor-development-board-project-architecture\.mmd$/); assert.match(readFileSync(await mmd.path(), 'utf8'), /^flowchart LR/);
+  await page.click('#dock-build'); await page.waitForSelector('#project-build'); assert.match(await page.textContent('#project-build'), /pio run -e esp32dev/);
   await page.context().close();
 
   // The exported file opens again in a new tab; a file that is not a project is refused with a reason.
-  const again = await open('/new'); await again.waitForSelector('#idea-view:not([hidden])');
-  await again.setInputFiles('#idea-file', exported); await again.waitForSelector('#idea-project:not([hidden])');
-  assert.equal(await again.textContent('#idea-project-title'), example.title);
+  const again = await open('/new'); await again.waitForSelector('#workspace-start:not([hidden])');
+  await again.setInputFiles('#idea-file', exported); await again.waitForSelector('#workspace-overview:not([hidden])');
+  assert.equal(await again.textContent('#repo-title'), example.title); assert.match(await again.textContent('#project-pill'), /Example project/);
+  await again.click('#workspace-overview button:has-text("New project")'); await again.waitForSelector('#workspace-start:not([hidden])');
+  assert.match(await again.textContent('#workspace-back'), /Back to ESP32 sensor development board/);
   const broken = join(dir, 'broken.json'); writeFileSync(broken, JSON.stringify({ schema: 'gad.project/1', title: 'Bad', requirements: [], components: [], artifacts: [{ path: '../escape.txt', content: '' }] }));
   await again.setInputFiles('#idea-file', broken); await again.waitForSelector('#idea-progress.error:not([hidden])'); assert.match(await again.textContent('#idea-progress'), /Unsafe file path/);
-  await again.setViewportSize({ width: 390, height: 860 }); await again.click('.idea-tab[data-tab=files]'); assert.ok(await noOverflow(again), 'idea workspace: no horizontal overflow on a phone');
+  await again.click('#workspace-back'); await again.waitForSelector('#workspace-overview:not([hidden])');
+  for (const width of [390, 768]) { await again.setViewportSize({ width, height: 860 }); await again.waitForTimeout(150); assert.ok(await noOverflow(again), `workspace: no horizontal overflow at ${width}px`); }
   await again.context().close();
 });
 
-test('an engine that refuses this server: honest status, Retry, the key is never sent, and no stray example', async () => {
+test('an engine that refuses this server: honest status, Retry, the key is never sent, and the open project is not replaced', async () => {
   process.env.GENIUS_ENGINE_URL = ENGINE; process.env.GENIUS_ENGINE_TOKEN = ENGINE_TOKEN; engineCalls.length = 0; providerCalls.length = 0; engine.accepts = false;
   try {
     const page = await open('/new'); await page.waitForFunction(() => document.querySelector('#idea-engine').dataset.state === 'unauthorized');
     assert.match(await page.textContent('#idea-engine'), /configured, but this site's server is not authorized\. This is a site setting, not your AI key/);
     await page.click('#settings-open'); await page.selectOption('#provider', 'openai'); await page.fill('#api-key', KEY); await page.click('#settings .dialog-actions .primary-button');
-    await page.click('#idea-example'); await page.waitForSelector('#idea-project:not([hidden])'); // The example was open before the new idea.
+    await page.click('#idea-example'); await page.waitForSelector('#workspace-overview:not([hidden])');
+    await page.click('#workspace-overview button:has-text("New project")'); await page.waitForSelector('#workspace-start:not([hidden])');
     await page.fill('#idea-text', 'NanoKit Integrated ESP32 LED controller with a web page to set the brightness.'); await page.click('#idea-run');
     await page.waitForSelector('#idea-progress.error:not([hidden])');
-    assert.match(await page.textContent('#idea-progress'), /not authorized/); assert.ok(await page.locator('#idea-project').isHidden(), 'the example is not shown under a failed run');
+    assert.match(await page.textContent('#idea-progress'), /not authorized/); assert.ok(await page.locator('#workspace-overview').isHidden(), 'no project is shown as a result');
     assert.equal(await page.inputValue('#idea-text'), 'NanoKit Integrated ESP32 LED controller with a web page to set the brightness.', 'the idea text is kept');
     assert.deepEqual(engineCalls, [], 'no engine stage was started'); assert.equal(providerCalls.length, 0, 'the provider was not called');
     engine.accepts = true; await page.click('#idea-progress button:has-text("Retry")'); await page.waitForSelector('#idea-questions:not([hidden])');
@@ -138,34 +167,53 @@ test('an engine that refuses this server: honest status, Retry, the key is never
   } finally { engine.accepts = true; delete process.env.GENIUS_ENGINE_URL; delete process.env.GENIUS_ENGINE_TOKEN; }
 });
 
-test('with an engine: idea → questions → design → regenerate, and the key reaches only the provider', async () => {
+test('with an engine: idea → questions → design opens the project in the workspace; regenerate and re-validate there', async () => {
   process.env.GENIUS_ENGINE_URL = ENGINE; process.env.GENIUS_ENGINE_TOKEN = ENGINE_TOKEN; engineCalls.length = 0; providerCalls.length = 0;
   try {
     const page = await open('/new'); await page.waitForFunction(() => document.querySelector('#idea-engine').classList.contains('connected'));
-    await page.fill('#idea-text', 'An ESP32 development board with USB-C, a BME280 sensor, and a status LED.'); await page.click('#idea-run');
+    await page.fill('#idea-text', 'A NanoKit Integrated ESP32 smart LED controller with a web dashboard and brightness control.'); await page.click('#idea-run');
     await page.waitForSelector('#idea-progress.error:not([hidden])'); assert.match(await page.textContent('#idea-progress'), /API settings/); // No key yet: nothing is sent.
     assert.equal(engineCalls.length, 0);
     await page.selectOption('#provider', 'openai'); await page.fill('#api-key', KEY); await page.click('#settings .dialog-actions .primary-button');
     await page.click('#idea-run'); await page.waitForSelector('#idea-questions:not([hidden])');
     assert.equal(await page.locator('#idea-question-list input').count(), example.questions.length);
     await page.fill('#idea-question-list input >> nth=0', 'Yes, USB-C only');
-    await page.click('#idea-design'); await page.waitForSelector('#idea-project:not([hidden])');
-    assert.ok(await page.locator('#idea-banner').isHidden(), 'a generated project carries no example label');
-    assert.match(await page.textContent('#idea-panel'), /Generated by openai gpt-test through the Genius Engineering Engine 0\.1\.0/);
-    await page.click('.idea-tab[data-tab=files]'); await page.click('.idea-file[data-file] >> text=firmware/include/config.h');
-    await page.fill('.idea-instruction', 'Add a comment'); await page.click('text=Regenerate this file');
-    await page.waitForFunction(() => /Regenerated by the fake engine/.test(document.querySelector('.idea-code-editor').value));
-    await page.getByRole('button', { name: 'Re-validate', exact: true }).click(); await page.waitForFunction(() => /Validation report updated/.test(document.querySelector('#toast').textContent));
+    await page.click('#idea-design'); await page.waitForSelector('#workspace-overview:not([hidden])');
+    assert.ok(!/Example project/.test(await page.textContent('#workspace-overview')), 'a generated project carries no example label');
+    assert.match(await page.textContent('#project-pill'), /^Generated by Genius AI · /);
+    await page.click('#view-dock [data-view=system]'); await waitSvg(page); assert.match(await page.textContent('#diagram-basis'), /Generated by Genius AI · not independently verified/);
+    await page.click('[data-drawer=tree]'); await page.click('#tree .tree-file[data-path="firmware/include/config.h"]'); await page.waitForSelector('#project-file textarea');
+    await page.fill('#project-file .idea-instruction', 'Add a comment'); await page.click('#project-file button:has-text("Regenerate this file")');
+    await page.waitForFunction(() => /Regenerated by the fake engine/.test(document.querySelector('#project-file textarea')?.value || ''));
+    await page.click('#project-file button:has-text("Re-validate")');
+    for (let waited = 0; !engineCalls.some(call => call.path === '/v1/validate') && waited < 10000; waited += 100) await page.waitForTimeout(100);
     assert.deepEqual(engineCalls.map(call => call.path), ['/v1/start', '/v1/resume', '/v1/start', '/v1/resume', '/v1/start', '/v1/resume', '/v1/validate']);
     assert.ok(engineCalls.every(call => !call.raw.includes(KEY)), 'the engine never receives the visitor key');
     assert.equal(providerCalls.length, 3); assert.ok(providerCalls.every(call => call.auth === `Bearer ${KEY}`));
+    await page.click('[data-drawer=tree]'); await page.click('#view-dock [data-view=workspace]'); await page.waitForSelector('#workspace-overview:not([hidden])'); // The open Files drawer covers the left of the Dock.
+    assert.match(await page.textContent('#workspace-overview .ws-ops'), /Regenerated firmware\/include\/config\.h/);
     await page.context().close();
   } finally { delete process.env.GENIUS_ENGINE_URL; delete process.env.GENIUS_ENGINE_TOKEN; }
 });
 
-test('both themes render the mission, and no page script errors occurred', async () => {
-  const light = await open('/', { theme: 'light' }); await light.waitForSelector('#welcome:not([hidden])');
-  const colors = await light.$eval('.mission-card', card => ({ text: getComputedStyle(card).color, background: getComputedStyle(document.body).backgroundColor }));
+test('switching between a repository and an idea project re-renders the right source, and Back restores each', async () => {
+  const page = await open('/acme/lamp'); await page.waitForSelector('#workspace:not([hidden]) #diagram-content svg', { timeout: 30000 });
+  assert.equal(await page.getAttribute('#workspace', 'data-source'), 'repository'); assert.equal(await page.textContent('#repo-title'), 'acme/lamp');
+  await page.click('#view-dock [data-view=workspace]'); await page.waitForSelector('#workspace-overview:not([hidden])');
+  assert.match(await page.textContent('#workspace-overview'), /GitHub repository/); assert.ok(await page.locator('#workspace-start').isHidden());
+  await page.click('#workspace-overview a:has-text("Start from an Idea")'); await page.waitForSelector('#workspace-start:not([hidden])');
+  await page.click('#idea-example'); await page.waitForSelector('#workspace-overview:not([hidden])'); assert.equal(await page.textContent('#repo-title'), example.title);
+  await page.goBack(); await page.waitForFunction(() => document.querySelector('#repo-title').textContent === 'acme/lamp');
+  assert.equal(await page.getAttribute('#workspace', 'data-source'), 'repository'); assert.ok(await page.locator('#commit').isVisible());
+  await page.click('[data-drawer=tree]'); await page.waitForSelector('#tree .tree-file[data-path="README.md"]'); assert.equal(await page.locator('#tree .tree-file[data-path="firmware/include/config.h"]').count(), 0, 'the repository tree, not the project files');
+  await page.goForward(); await page.waitForFunction(() => document.querySelector('#repo-title').textContent === 'ESP32 sensor development board');
+  assert.equal(await page.getAttribute('#workspace', 'data-source'), 'project');
+  await page.context().close();
+});
+
+test('both themes stay readable, and no page script errors occurred', async () => {
+  const light = await open('/new', { theme: 'light' }); await light.click('#idea-example'); await light.waitForSelector('#workspace-overview:not([hidden])');
+  const colors = await light.$eval('.ws-card', card => ({ text: getComputedStyle(card).color, background: getComputedStyle(document.body).backgroundColor }));
   assert.notEqual(colors.text, colors.background); await light.context().close();
   assert.deepEqual(errors, []);
 });
