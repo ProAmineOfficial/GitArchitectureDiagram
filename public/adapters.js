@@ -10,6 +10,7 @@
 // tools, generated code, or uploaded files.
 import { defineAdapter, createRegistry } from './toolhub.js';
 import { validatePinUse, checkWiring, wiringTable, pinHeader, suggestPins, availablePins } from './boards.js';
+import { pinMap, pinDetail, interfaceSummary, hardwareReport } from './hardware-panel.js';
 
 /** The one adapter with a real backend. The caller passes the gad.board/1 profile in the job input (input.board). */
 export const nanokitElectronicsAdapter = defineAdapter({
@@ -24,6 +25,10 @@ export const nanokitElectronicsAdapter = defineAdapter({
     { id: 'pin-header', summary: 'A C header of pin #defines (GPIO numbers; board pin in comments)', input: '{ board, connections[] }', output: 'C source text' },
     { id: 'suggest-pins', summary: 'Candidate pins for a role, best first', input: '{ board, role, exclude? }', output: 'ranked pin verdicts' },
     { id: 'available-pins', summary: 'Usable pins a plan has not taken', input: '{ board, connections[] }', output: 'a list of pins' },
+    { id: 'pin-map', summary: 'The 40-pin map for a hardware panel', input: '{ board }', output: 'one entry per physical pin' },
+    { id: 'pin-detail', summary: 'One pin in full, with verdicts for the roles it could take', input: '{ board, pin }', output: 'pin detail' },
+    { id: 'interface-summary', summary: 'Interface counts and the fixed pins for each bus', input: '{ board }', output: 'a summary' },
+    { id: 'hardware-report', summary: 'Map, summary, wiring check, table, and free pins for a plan', input: '{ board, connections[] }', output: 'a hardware report' },
   ],
   supportedInputs: ['application/json: a gad.board/1 profile and a list of connections'],
   supportedOutputs: ['verdicts', 'wiring table (JSON)', 'C header (text)'],
@@ -45,6 +50,10 @@ export const nanokitElectronicsAdapter = defineAdapter({
       case 'pin-header': return pinHeader(board, connections);
       case 'suggest-pins': return suggestPins(board, input, { exclude: input.exclude || [] });
       case 'available-pins': return availablePins(board, connections);
+      case 'pin-map': return pinMap(board);
+      case 'pin-detail': return pinDetail(board, input.pin);
+      case 'interface-summary': return interfaceSummary(board);
+      case 'hardware-report': return hardwareReport(board, connections);
       default: throw new Error(`unknown capability ${capability}`);
     }
   },
