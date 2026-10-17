@@ -6,7 +6,7 @@ import './support/no-autostart.mjs'; // Keep the imported server from opening it
 import { createAppServer } from '../server.mjs';
 
 const SITE = 'https://gitarchitecturediagram.com';
-const TITLE = 'Make Any Product with Genius AI | Git Architecture Diagram';
+const TITLE = 'Git Architecture Diagram — Make Any Product with Genius AI';
 const html = readFileSync('public/index.html', 'utf8');
 
 test('robots.txt, sitemap.xml, and the web app manifest are served with crawler-friendly types', async t => {
@@ -66,7 +66,7 @@ test('the home page leads with Make Any Product with Genius AI and keeps the Git
   for (const size of [48, 96, 192]) assert.ok(html.includes(`sizes="${size}x${size}" href="/assets/brand/icons/gad-icon-${size}.png"`), `${size}px icon`);
   assert.ok(html.includes('alt="Git Architecture Diagram logo"'));
   // The browser keeps the same title when it returns to the home page.
-  assert.ok(readFileSync('public/app.js', 'utf8').includes("const HOME_TITLE = 'Make Any Product with Genius AI | Git Architecture Diagram';"));
+  assert.ok(readFileSync('public/app.js', 'utf8').includes("const HOME_TITLE = 'Git Architecture Diagram — Make Any Product with Genius AI';"));
 });
 
 test('structured data identifies Genius AI as part of Git Architecture Diagram and makes no rating claims', () => {

@@ -7,7 +7,9 @@
 // The engine is a separate, private service configured by the operator (GENIUS_ENGINE_URL, GENIUS_ENGINE_TOKEN).
 // It never receives the visitor's provider key: it returns generation requests, this server runs each one with the
 // visitor's key through the existing provider layer (fixed provider endpoints only), and sends the model output back.
-// Without a configured engine, every engineering route answers 503 and the workspace shows the labeled example.
+// Without a configured, authorized engine, every engineering run answers 503 before anything is sent, and the
+// workspace offers the labeled example. Status distinguishes configured from operational (authenticated readiness).
+import { createHmac } from 'node:crypto';
 import { AppError } from './github.mjs';
 import { PROVIDERS } from './providers.mjs';
 import { callProviderJSON } from './provider-errors.mjs';
@@ -18,21 +20,114 @@ const MAX_STEPS = 6; // clarify: 1–2 calls; design: 2–4; regenerate: 1–2. 
 const ENGINE_TIMEOUT_MS = 30000; // The engine does no model work, so its answers are quick.
 const PROVIDER_TIMEOUT_MS = 180000; // File generation can take minutes on slower models.
 const MAX_ENGINE_BYTES = 3_500_000;
+const MIN_TOKEN_LENGTH = 32;
+const READY_TIMEOUT_MS = 5000; // Readiness is a tiny authenticated request.
+const READY_TTL_MS = { operational: 60000, other: 15000 }; // Public status requests never cause more than one engine call per window.
+const COLD_START_RETRY_MS = 1500; // A sleeping host (Railway serverless) can refuse the first request while it boots.
 
-/** The operator's engine settings, or null when the engine is not configured. Only HTTPS (or localhost for development). */
-export function engineConfig(env = process.env) {
-  const url = String(env.GENIUS_ENGINE_URL || '').trim().replace(/\/+$/, ''); const token = String(env.GENIUS_ENGINE_TOKEN || '').trim();
-  if (!url || token.length < 32) return null;
-  let parsed; try { parsed = new URL(url); } catch { return null; }
-  const local = ['127.0.0.1', 'localhost', '[::1]'].includes(parsed.hostname);
-  if (parsed.username || parsed.password || (parsed.protocol !== 'https:' && !(local && parsed.protocol === 'http:'))) return null;
-  return { url, token };
+// ——— The service token ———
+// The same rules run in the private engine (engine/auth.mjs); both test suites use tests/fixtures/token-cases.json.
+// Nothing here returns, logs, or throws the token itself.
+
+/** Normalize a service token: trims, ignores one pair of surrounding quotes and a "Bearer " prefix, refuses inner whitespace or quotes. */
+export function normalizeServiceToken(value, name = 'GENIUS_ENGINE_TOKEN') {
+  let token = String(value ?? '').trim(); const notes = [];
+  if (!token) return { ok: false, problem: `${name} is not set.` };
+  const quoted = token.match(/^(["'`])([\s\S]*)\1$/); if (quoted) { token = quoted[2].trim(); notes.push('surrounding quotes'); }
+  if (/^bearer\s+/i.test(token)) { token = token.replace(/^bearer\s+/i, ''); notes.push('a "Bearer " prefix'); }
+  if (/\s/.test(token)) return { ok: false, problem: `${name} contains spaces or line breaks inside the value. Paste the token as a single line.` };
+  if (/["'`]/.test(token)) return { ok: false, problem: `${name} contains quote characters inside the value.` };
+  if (token.length < MIN_TOKEN_LENGTH) return { ok: false, problem: `${name} must be at least ${MIN_TOKEN_LENGTH} characters.` };
+  return { ok: true, token, notes };
 }
 
-/** Public status: whether the engine is configured. The URL and token are never revealed. */
-export function engineeringStatus(env = process.env) { return { connected: Boolean(engineConfig(env)) }; }
+/** A one-way, 8-hex fingerprint of the token. The engine prints the same value at start-up when the tokens match. */
+export function engineKeyId(token) { return createHmac('sha256', String(token)).update('gad-engine-key-id').digest('hex').slice(0, 8); }
 
-const notConnected = () => new AppError(503, 'The Genius Engineering Engine is not connected on this server yet. Open the ESP32 example to explore the workspace.');
+/** Check the operator's settings. Returns { ok: true, config } or { ok: false, problem } (the problem names variables, never values). */
+export function inspectEngineConfig(env = process.env) {
+  const url = String(env.GENIUS_ENGINE_URL || '').trim().replace(/\/+$/, '');
+  if (!url && !String(env.GENIUS_ENGINE_TOKEN || '').trim()) return { ok: false, problem: 'GENIUS_ENGINE_URL and GENIUS_ENGINE_TOKEN are not set.' };
+  if (!url) return { ok: false, problem: 'GENIUS_ENGINE_URL is not set.' };
+  let parsed; try { parsed = new URL(url); } catch { return { ok: false, problem: 'GENIUS_ENGINE_URL is not a valid URL.' }; }
+  const local = ['127.0.0.1', 'localhost', '[::1]'].includes(parsed.hostname);
+  if (parsed.username || parsed.password || (parsed.protocol !== 'https:' && !(local && parsed.protocol === 'http:'))) return { ok: false, problem: 'GENIUS_ENGINE_URL must use HTTPS (HTTP only for localhost) and contain no credentials.' };
+  const token = normalizeServiceToken(env.GENIUS_ENGINE_TOKEN);
+  if (!token.ok) return { ok: false, problem: token.problem };
+  return { ok: true, config: { url, token: token.token, keyId: engineKeyId(token.token), notes: token.notes } };
+}
+
+/** The operator's engine settings, or null when the engine is not configured. Only HTTPS (or localhost for development). */
+export function engineConfig(env = process.env) { const inspected = inspectEngineConfig(env); return inspected.ok ? inspected.config : null; }
+
+/** One start-up line for the server log: the key id when configured, the problem otherwise. Never a value. */
+export function describeEngineConfig(env = process.env) {
+  const inspected = inspectEngineConfig(env);
+  if (!inspected.ok) return `[engine] not configured: ${inspected.problem}`;
+  const { config } = inspected; return `[engine] configured · key id ${config.keyId}${config.notes.length ? ` · ignored ${config.notes.join(' and ')} around GENIUS_ENGINE_TOKEN` : ''} · compare the key id with the engine's start-up line`;
+}
+
+// ——— Authenticated readiness ———
+// "Configured" is not "working": readiness makes one authenticated POST /v1/ready and reports one of
+// not_configured · unreachable · unauthorized · unavailable · unverified (engine older than 0.1.1) · operational.
+
+/** A readiness cache. Each server keeps its own, so tests and runtimes never share results. */
+export function createReadinessCache(ttl = READY_TTL_MS) { return { key: '', at: 0, result: null, pending: null, logged: '', ttl }; }
+const defaultReadiness = createReadinessCache();
+const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+async function probeReadiness(config, { fetchImpl, retryDelayMs }) {
+  const attempt = async () => {
+    let response;
+    try { response = await fetchImpl(`${config.url}/v1/ready`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.token}` }, body: '{}', signal: AbortSignal.timeout(READY_TIMEOUT_MS), redirect: 'manual' }); }
+    catch { return { state: 'unreachable', detail: 'no response' }; }
+    let body = null; try { body = await response.json(); } catch { /* A host error page is not JSON. */ }
+    if (response.ok && body?.ok === true) return { state: 'operational', version: typeof body.version === 'string' ? body.version.slice(0, 20) : '' };
+    if (response.status === 401 || response.status === 403) return { state: 'unauthorized', detail: `reason=${String(body?.error?.reason || 'unknown').slice(0, 20)}` };
+    if (response.status === 404 && body?.error?.kind === 'not_found') return { state: 'unverified', detail: 'the engine has no /v1/ready; it is older than 0.1.1' };
+    if ([502, 503, 504].includes(response.status) && !body?.error) return { state: 'unreachable', detail: `HTTP ${response.status} from the host` };
+    return { state: 'unavailable', detail: `HTTP ${response.status}` };
+  };
+  let result = await attempt();
+  if (result.state === 'unreachable') { await wait(retryDelayMs); result = await attempt(); }
+  return result;
+}
+
+/** The engine's state, cached (60 s when operational, 15 s otherwise). Logs state changes with the key id, never the token. */
+export async function engineReadiness({ env = process.env, fetchImpl = fetch, cache = defaultReadiness, now = Date.now, log = line => console.info(line), force = false, retryDelayMs = COLD_START_RETRY_MS } = {}) {
+  const inspected = inspectEngineConfig(env);
+  if (!inspected.ok) return { state: 'not_configured', checkedAt: new Date(now()).toISOString() };
+  const { config } = inspected; const key = `${config.url}|${config.keyId}`;
+  if (cache.key !== key) Object.assign(cache, createReadinessCache(cache.ttl), { key });
+  const ttl = cache.result?.state === 'operational' ? cache.ttl.operational : cache.ttl.other;
+  if (!force && cache.result && now() - cache.at < ttl) return cache.result;
+  if (cache.pending) return cache.pending;
+  cache.pending = probeReadiness(config, { fetchImpl, retryDelayMs }).then(found => {
+    const result = { state: found.state, checkedAt: new Date(now()).toISOString(), ...(found.version ? { version: found.version } : {}) };
+    const line = `[engine] ${found.state} · key id ${config.keyId}${found.version ? ` · engine ${found.version}` : ''}${found.detail ? ` · ${found.detail}` : ''}`;
+    if (line !== cache.logged && !process.env.NODE_TEST_CONTEXT) log(line); cache.logged = line; // Operator detail stays in the server log.
+    cache.result = result; cache.at = now(); cache.pending = null; return result;
+  }, () => { cache.pending = null; return { state: 'unavailable', checkedAt: new Date(now()).toISOString() }; });
+  return cache.pending;
+}
+
+/** Forget the cached state, for example after the engine refused a run. */
+export function resetEngineReadiness(cache = defaultReadiness) { Object.assign(cache, createReadinessCache(cache.ttl)); }
+
+/** Public status. The URL, token, key id, and refusal reasons are never revealed. `connected` is kept for older pages. */
+export async function engineeringStatus(env = process.env, options = {}) {
+  const { state, checkedAt } = await engineReadiness({ env, ...options });
+  return { state, configured: state !== 'not_configured', operational: state === 'operational', connected: state === 'operational' || state === 'unverified', checkedAt };
+}
+
+/** What a visitor is told for each state that blocks a run. The operator's detail is in the server log. */
+export const STATE_MESSAGES = {
+  not_configured: 'Genius AI generation is not set up on this site yet. You can open the example project.',
+  unreachable: 'The Genius Engineering Engine is not reachable right now. Try again in a minute.',
+  unauthorized: 'Genius AI generation is unavailable: this site\'s server is not authorized by its Genius Engineering Engine. This is a site configuration problem, not your AI key.',
+  unavailable: 'The Genius Engineering Engine is temporarily unavailable. Try again shortly.',
+};
+const notConnected = () => new AppError(503, STATE_MESSAGES.not_configured);
 
 /** One request to the engine. Engine messages for 4xx answers are shown; 5xx and network failures are not detailed. */
 async function engineRequest(config, path, body, { fetchImpl, signal }) {
@@ -43,7 +138,7 @@ async function engineRequest(config, path, body, { fetchImpl, signal }) {
   const text = await response.text();
   if (text.length > MAX_ENGINE_BYTES) throw new AppError(502, 'The Genius Engineering Engine returned too much data.');
   let data = null; try { data = JSON.parse(text); } catch { /* Handled below. */ }
-  if (response.status === 401) throw new AppError(503, 'The Genius Engineering Engine refused this server\'s credentials. The operator must check GENIUS_ENGINE_TOKEN.');
+  if (response.status === 401) throw Object.assign(new AppError(503, STATE_MESSAGES.unauthorized), { engineState: 'unauthorized' }); // Never the visitor's key: the server-to-engine token was refused.
   if (response.status >= 400 && response.status < 500) throw new AppError(response.status === 429 ? 429 : 400, String(data?.error?.message || 'The engineering request was refused.').slice(0, 300));
   if (!response.ok || !data) throw new AppError(502, 'The Genius Engineering Engine failed on this request. Try again.');
   return data;
@@ -70,18 +165,34 @@ export function validateEngineeringInput(input) {
   return { stage: input.stage, provider: input.provider, model: input.model, apiKey: input.apiKey.trim(), idea: input.idea, project: input.project, answers: input.answers, artifactId: input.artifactId, instruction: input.instruction };
 }
 
-/**
- * Run one engineering stage to completion: engine step, provider call with the visitor's key, engine step, …
- * `progress` receives { stage, detail } events. Returns { project, validation, usage }.
- */
 /** Refuse early, before a stream starts: 503 without a configured engine, 400 for an unusable request. */
 export function prepareEngineering(rawInput, env = process.env) {
   const config = engineConfig(env); if (!config) throw notConnected();
   return { config, input: validateEngineeringInput(rawInput) };
 }
 
-export async function runEngineering(rawInput, { env = process.env, fetchImpl = fetch, signal, progress = () => {} } = {}) {
+/**
+ * Admit a run before streaming: the request must be valid and the engine must be operational (or unverified, when it is
+ * older than the readiness route). A blocked run never sends the visitor's key anywhere.
+ */
+export async function admitEngineering(rawInput, { env = process.env, fetchImpl = fetch, cache } = {}) {
+  const prepared = prepareEngineering(rawInput, env);
+  const { state } = await engineReadiness({ env, fetchImpl, cache });
+  if (state !== 'operational' && state !== 'unverified') throw Object.assign(new AppError(503, STATE_MESSAGES[state] || STATE_MESSAGES.unavailable), { engineState: state });
+  return prepared;
+}
+
+/**
+ * Run one engineering stage to completion: engine step, provider call with the visitor's key, engine step, …
+ * `progress` receives { stage, detail } events. Returns { project, validation, usage }.
+ */
+export async function runEngineering(rawInput, { env = process.env, fetchImpl = fetch, signal, progress = () => {}, cache } = {}) {
   const { config, input } = prepareEngineering(rawInput, env);
+  try { return await runStages(config, input, { fetchImpl, signal, progress }); }
+  catch (error) { if (error.engineState === 'unauthorized') resetEngineReadiness(cache); throw error; } // The next status check asks the engine again.
+}
+
+async function runStages(config, input, { fetchImpl, signal, progress }) {
   const { apiKey, ...forEngine } = input; // The key stays on this server.
   const labels = { genius_engineering_clarify: 'Interpreting the idea', genius_engineering_architecture: 'Designing the architecture', genius_engineering_artifacts: 'Writing the engineering files', genius_engineering_regenerate: 'Rewriting the file' };
   const usage = [];
@@ -101,10 +212,11 @@ export async function runEngineering(rawInput, { env = process.env, fetchImpl = 
 }
 
 /** Validate a project with the engine (no model call, no key). */
-export async function validateEngineering(input, { env = process.env, fetchImpl = fetch, signal } = {}) {
+export async function validateEngineering(input, { env = process.env, fetchImpl = fetch, signal, cache } = {}) {
   const config = engineConfig(env); if (!config) throw notConnected();
   if (!input?.project || input.project.schema !== PROJECT_SCHEMA) throw new AppError(400, 'Send the current project.');
-  const result = await engineRequest(config, '/v1/validate', { project: input.project }, { fetchImpl, signal });
+  let result; try { result = await engineRequest(config, '/v1/validate', { project: input.project }, { fetchImpl, signal }); }
+  catch (error) { if (error.engineState === 'unauthorized') resetEngineReadiness(cache); throw error; }
   if (!result.project || result.project.schema !== PROJECT_SCHEMA) throw new AppError(502, 'The Genius Engineering Engine returned an unusable project.');
   return { project: result.project, validation: result.validation || null };
 }

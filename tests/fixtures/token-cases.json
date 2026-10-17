@@ -1,0 +1,69 @@
+{
+  "comment": "Shared by the public server and the private engine (test/fixtures/token-cases.json there). Keep both copies identical.",
+  "base": "test-only-token-0123456789abcdefghijklmnopqrstuv",
+  "same": [
+    [
+      "clean",
+      "{base}"
+    ],
+    [
+      "trailing newline",
+      "{base}\n"
+    ],
+    [
+      "trailing CRLF",
+      "{base}\r\n"
+    ],
+    [
+      "surrounding spaces",
+      "  {base}  "
+    ],
+    [
+      "double quotes",
+      "\"{base}\""
+    ],
+    [
+      "single quotes",
+      "'{base}'"
+    ],
+    [
+      "quotes and newline",
+      "\"{base}\"\n"
+    ],
+    [
+      "Bearer prefix",
+      "Bearer {base}"
+    ],
+    [
+      "bearer prefix lower case",
+      "bearer {base}"
+    ]
+  ],
+  "invalid": [
+    [
+      "empty",
+      ""
+    ],
+    [
+      "only spaces",
+      "   "
+    ],
+    [
+      "inner space",
+      "test-only-token-0123456789 abcdefghijklmnopqrstuv"
+    ],
+    [
+      "inner newline",
+      "test-only-token-0123456789\nabcdefghijklmnopqrstuv"
+    ],
+    [
+      "inner quote",
+      "test-only-token-0123456789\"abcdefghijklmnopqrstuv"
+    ],
+    [
+      "too short",
+      "short-token"
+    ]
+  ],
+  "keyIdOfBase": "b5e8630e"
+}

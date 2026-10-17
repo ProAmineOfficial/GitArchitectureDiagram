@@ -48,7 +48,9 @@ flowchart TD
 | `src/store.mjs` | Analysis stores: memory, and a bounded file store (one atomic JSON file per commit-keyed entry); the Node server uses the file store, the Worker uses the platform cache |
 | `src/engineering.mjs` | Make Any Product with Genius AI: validates engineering requests, removes the visitor key, relays plans from the private Genius Engineering Engine, runs each model call through `callProviderJSON`, and returns the project. See [ENGINEERING.md](ENGINEERING.md). |
 | `public/engineering.js` | The public `gad.project/1` format: format check, status labels, Markdown views, dependency diagram, Development Pack layout |
-| `public/idea.js` | The Start from an Idea workspace: idea, questions, project tabs, file editing, validation view, Development Pack, project import and export |
+| `public/idea.js` | The Start from an Idea composer and the engine runs: idea, questions, design, regenerate, re-validate, the example, and project import |
+| `public/project-workspace.js` | An idea project in the unified workspace: the Workspace view (composer or overview), the engineering-files sidebar with status badges, the file editor, the Genius sidebar, Process and Export Project for a project |
+| `public/project-views.js` | Pure functions shared with the tests: the files tree, the diagram for each Dock view (system, architecture, hierarchy, mind map, project diagrams), progress, validation by tier, and build steps |
 | `server.mjs` / `worker.mjs` | HTTP routing, origin/access/rate checks, NDJSON streaming, SPA fallback for every `/owner/repo/...` path |
 | `public/route.js` | Pure mapping between GitHub-shaped paths and analysis requests; permalinks |
 | `public/app.js` | Workspace state, history, views, tree, inspector, Genius panel |

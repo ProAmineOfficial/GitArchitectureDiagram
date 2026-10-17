@@ -19,7 +19,8 @@
     "test:browser": "node --test tests/browser/*.browser.mjs",
     "scan:secrets": "node scripts/secret-scan.mjs",
     "provenance": "node scripts/provenance.mjs",
-    "brand:social": "node scripts/social-glyphs.mjs"
+    "brand:social": "node scripts/social-glyphs.mjs",
+    "engine:check": "node --env-file-if-exists=.env scripts/engine-check.mjs"
   },
   "dependencies": {
     "dompurify": "^3.4.16",

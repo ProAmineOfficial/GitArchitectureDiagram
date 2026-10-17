@@ -651,3 +651,37 @@ ul.hier,ul.hier ul{list-style:none;margin:0;padding:0}ul.hier ul{margin-left:20p
 .idea-view{margin-top:22px}.idea-heading>.glass-icon{display:none}.idea-form,.idea-card{padding:15px;border-radius:18px}.idea-files{grid-template-columns:1fr}.idea-file-list{grid-auto-flow:column;grid-auto-columns:minmax(200px,1fr);overflow-x:auto}.idea-code-editor{min-height:300px}}
 @media(prefers-reduced-motion:reduce){.mission-card,.mission-card:hover,.mission-go,.mission-card:hover .mission-go{transition:none;transform:none}}
 @media(max-width:720px){#import-github,.idea-card{scroll-margin-top:118px}}
+/* Engine status and run errors: the message stays readable, with Retry (and Back) beside it. */
+.idea-progress{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}.idea-progress-text{flex:1 1 280px}.idea-progress-action{padding:5px 12px;min-height:32px;font-size:13px}
+.idea-engine[data-state=unauthorized]::before,.idea-engine[data-state=unreachable]::before,.idea-engine[data-state=unavailable]::before{background:var(--idea-warn)}
+/* Unified workspace: one layout for repositories and idea projects. Repository-only and project-only controls. */
+#workspace[data-source=project] .repo-only,#workspace[data-source=repository] .project-only{display:none!important}
+.dock-item[aria-disabled=true]{cursor:not-allowed}.dock-item[aria-disabled=true] .dock-icon{opacity:.45}.dock-item[aria-disabled=true] .dock-label{opacity:.55}
+.project-pill{cursor:default;font-size:12.5px;white-space:nowrap}.project-pill[data-tone=warn]{color:var(--idea-warn)}.project-pill[data-tone=bad]{color:var(--danger)}
+.workspace-home{padding:22px;display:grid;gap:18px;min-width:0}
+.workspace-start,.workspace-overview{display:grid;gap:16px;min-width:0}
+.workspace-start .idea-heading h2{font-size:clamp(24px,2.4vw,32px);line-height:1.15;letter-spacing:-.8px;font-weight:600;margin:6px 0 8px}
+.workspace-alternatives{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.workspace-alt{display:grid;gap:6px;padding:14px 16px;border-radius:16px;border:1px solid var(--line);background:var(--surface2);min-width:0}
+.workspace-alt label{display:grid;gap:4px;cursor:default}.workspace-alt span{font-size:13px;color:var(--muted);line-height:1.5}
+.workspace-alt-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}.workspace-alt-row input{flex:1 1 200px}
+.ws-head{display:grid;gap:8px}.ws-head h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-.4px}.ws-head p{margin:0;color:var(--muted);max-width:90ch}
+.ws-steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
+.ws-steps li{display:grid;gap:3px;padding:11px 13px;border-radius:14px;border:1px solid var(--line);background:var(--surface2);font-size:13px}
+.ws-steps li strong{font-size:13.5px;font-weight:600}.ws-steps li span{color:var(--muted);line-height:1.45}
+.ws-steps li[data-state=done]{border-color:color-mix(in srgb,var(--ok) 40%,transparent)}.ws-steps li[data-state=attention]{border-color:color-mix(in srgb,var(--idea-warn) 55%,transparent)}
+.ws-steps li::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--muted);margin-bottom:2px}.ws-steps li[data-state=done]::before{background:var(--ok)}.ws-steps li[data-state=attention]::before{background:var(--idea-warn)}
+.ws-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.ws-card{display:grid;align-content:start;gap:10px;padding:16px;border-radius:18px;border:1px solid var(--line);background:var(--surface);min-width:0}
+.ws-card h3{margin:0;font-size:15.5px;font-weight:600}.ws-card.wide{grid-column:1/-1}
+.ws-links{display:flex;flex-wrap:wrap;gap:8px}.ws-links button{font-size:13px;padding:6px 11px;min-height:32px}
+.ws-list{list-style:none;margin:0;padding:0;display:grid;gap:6px}.ws-list li{display:flex;justify-content:space-between;gap:10px;align-items:center;font-size:13px;min-width:0}
+.ws-list button.link{border:0;background:none;padding:0;min-height:0;color:var(--accent);font:12.5px/1.45 ui-monospace,SFMono-Regular,Consolas,monospace;text-align:left;overflow-wrap:anywhere}
+.ws-ops li{display:block;color:var(--muted)}.ws-ops time{color:var(--text);margin-right:8px;font-variant-numeric:tabular-nums}
+.tree-file .idea-badge{margin-left:auto;font-size:10.5px;padding:0 7px;white-space:nowrap}
+.project-file{display:grid;gap:10px;padding:0 4px 4px}.project-file textarea{width:100%;min-height:340px;resize:vertical;font:13px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace;tab-size:2;white-space:pre;overflow:auto}
+.project-file .idea-actions input{flex:1 1 240px}.project-file-status{margin:0;font-size:13px;color:var(--muted)}.project-file-status.error{color:var(--danger)}
+.project-panel{padding:20px;display:grid;gap:14px;min-width:0}.project-panel h3{margin:6px 0 0;font-size:16px;font-weight:600}
+@media(max-width:760px){.workspace-home{padding:14px}.workspace-alternatives,.ws-grid{grid-template-columns:1fr}.project-file textarea{min-height:260px}}
+.project-pill{font-family:inherit;letter-spacing:0}
+.tree-file[data-project=true]{color:var(--text)}.tree-file[data-project=true] .ui-icon{color:var(--accent);opacity:1}.tree-file[data-project=true] .idea-badge{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,sans-serif;flex:none;overflow:visible}

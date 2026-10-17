@@ -20,6 +20,7 @@ Audit date: **October 4, 2026**, at commit `683094b` (main) before release 1.1.0
 | `cli.mjs` | Local command-line analysis (`npm run analyze`) | `package.json`, `scripts/check.mjs` | **KEEP** | The only way to analyze private repositories now (with your own local `GITHUB_TOKEN`). It runs locally and never on Hostinger. |
 | `server.mjs` | Production Node server (Hostinger entry file) | Hostinger, `npm start`, Docker, tests | **UPDATE** | Removed instance-password gating and browser GitHub tokens. Added `/api/version` and safe connection diagnostics. The runner-safe autostart (the 503 fix) is unchanged and covered by `tests/hosting.test.mjs`. |
 | `worker.mjs` | Cloudflare-compatible Worker for the earlier hosted Site | `scripts/build.mjs`, Worker tests | **UPDATE** | The same credential changes as `server.mjs`, so neither runtime silently keeps old behavior. Also gained `/api/version`. |
+| `public/favicon.svg` | An early product mark (teal and purple strokes on a dark tile), from before the official black-and-white icon | `scripts/build.mjs` copies it into `dist/client`; no page links it (the head declares `/favicon.ico` and the PNG icons only), and browsers request `/favicon.ico`, not `/favicon.svg`, by default | **DEPRECATE** | It is not the official icon and nothing references it. Kept for now because it is a public URL that may be cached or linked elsewhere. Remove it, and its line in `scripts/build.mjs`, with the owner's approval (audit of 2026-10-14). |
 
 ## Findings that changed production behavior
 

@@ -8,7 +8,7 @@ import { createAppServer } from '../server.mjs';
 import { createWorker } from '../worker.mjs';
 import { parseRoute } from '../public/route.js';
 import { PROJECT_SCHEMA, VALIDATION_SCHEMA, ARTIFACT_STATUS, checkProjectShape, dependencyMermaid, developmentPack, projectMarkdown, validationMarkdown } from '../public/engineering.js';
-import { engineConfig, engineeringStatus, validateEngineeringInput, runEngineering, validateEngineering } from '../src/engineering.mjs';
+import { engineConfig, engineeringStatus, validateEngineeringInput, runEngineering, validateEngineering, normalizeServiceToken, engineKeyId, inspectEngineConfig, describeEngineConfig, engineReadiness, createReadinessCache, admitEngineering } from '../src/engineering.mjs';
 
 const example = JSON.parse(readFileSync('public/assets/engineering/example-esp32.json', 'utf8'));
 const ENGINE = 'https://engine.example';
@@ -20,10 +20,17 @@ const jsonResponse = (status, body) => new Response(JSON.stringify(body), { stat
 const openaiEnvelope = value => ({ status: 'completed', model: 'gpt-test', output: [{ content: [{ type: 'output_text', text: JSON.stringify(value) }] }], usage: { input_tokens: 10, output_tokens: 20 } });
 
 /** A fake engine (two generation steps, then a project) and a fake OpenAI endpoint, recording every request. */
-function fakeNetwork({ steps = 2, engineStatus = 200, engineBody = null, finalProject = example } = {}) {
+function fakeNetwork({ steps = 2, engineStatus = 200, engineBody = null, finalProject = example, ready = 'ok' } = {}) {
   const calls = [];
   const fetchImpl = async (url, init = {}) => {
     const body = init.body ? JSON.parse(init.body) : null; calls.push({ url: String(url), headers: init.headers || {}, body, raw: init.body || '' });
+    if (String(url) === `${ENGINE}/v1/ready`) { // The authenticated readiness check (engine 0.1.1).
+      if (ready === 'ok') return init.headers?.Authorization === `Bearer ${ENGINE_TOKEN}` ? jsonResponse(200, { ok: true, version: '0.1.1', stateSecret: 'derived' }) : jsonResponse(401, { error: { kind: 'unauthorized', reason: 'mismatch', message: 'Authentication required.' } });
+      if (ready === 'offline') throw new TypeError('fetch failed');
+      if (ready === 'old') return jsonResponse(404, { error: { kind: 'not_found', message: 'Not found.' } });
+      if (ready === 'gateway') return new Response('<html>Application failed to respond</html>', { status: 502, headers: { 'Content-Type': 'text/html' } });
+      return jsonResponse(ready, { error: { kind: 'unauthorized', reason: 'mismatch', message: 'Authentication required.' } });
+    }
     if (String(url).startsWith(ENGINE)) {
       if (engineStatus !== 200) return jsonResponse(engineStatus, engineBody || { error: { kind: 'test', message: 'Engine says no.' } });
       const done = String(url).endsWith('/v1/resume') && body.state === `state-${steps}`;
@@ -106,9 +113,11 @@ test('engine settings accept HTTPS or local HTTP only, never reveal themselves, 
   assert.equal(engineConfig({ GENIUS_ENGINE_URL: 'http://engine.example', GENIUS_ENGINE_TOKEN: ENGINE_TOKEN }), null);
   assert.equal(engineConfig({ GENIUS_ENGINE_URL: 'https://user:pass@engine.example', GENIUS_ENGINE_TOKEN: ENGINE_TOKEN }), null);
   assert.equal(engineConfig({ GENIUS_ENGINE_URL: 'not a url', GENIUS_ENGINE_TOKEN: ENGINE_TOKEN }), null);
-  assert.deepEqual(engineConfig({ GENIUS_ENGINE_URL: 'http://127.0.0.1:8787/', GENIUS_ENGINE_TOKEN: ENGINE_TOKEN }), { url: 'http://127.0.0.1:8787', token: ENGINE_TOKEN });
-  assert.deepEqual(engineeringStatus(env), { connected: true });
-  assert.deepEqual(engineeringStatus({}), { connected: false });
+  assert.deepEqual(engineConfig({ GENIUS_ENGINE_URL: 'http://127.0.0.1:8787/', GENIUS_ENGINE_TOKEN: ENGINE_TOKEN }), { url: 'http://127.0.0.1:8787', token: ENGINE_TOKEN, keyId: engineKeyId(ENGINE_TOKEN), notes: [] });
+  assert.match(inspectEngineConfig({ GENIUS_ENGINE_URL: ENGINE, GENIUS_ENGINE_TOKEN: 'short' }).problem, /^GENIUS_ENGINE_TOKEN must be at least 32/);
+  assert.match(inspectEngineConfig({ GENIUS_ENGINE_URL: 'http://engine.example', GENIUS_ENGINE_TOKEN: ENGINE_TOKEN }).problem, /HTTPS/);
+  const line = describeEngineConfig(env); assert.match(line, new RegExp(`key id ${engineKeyId(ENGINE_TOKEN)}`)); assert.ok(!line.includes(ENGINE_TOKEN) && !line.includes(ENGINE), 'the start-up line holds neither the token nor the URL');
+  assert.match(describeEngineConfig({}), /not configured: GENIUS_ENGINE_URL and GENIUS_ENGINE_TOKEN are not set/);
 });
 
 test('requests are validated before anything leaves the server', () => {
@@ -121,7 +130,8 @@ test('requests are validated before anything leaves the server', () => {
 
 test('without an engine every engineering call answers 503 and nothing is sent', async () => {
   let sent = 0; const fetchImpl = async () => { sent++; return jsonResponse(200, {}); };
-  await assert.rejects(runEngineering(designInput(), { env: {}, fetchImpl }), error => error.status === 503 && /not connected/.test(error.message));
+  await assert.rejects(runEngineering(designInput(), { env: {}, fetchImpl }), error => error.status === 503 && /not set up on this site/.test(error.message));
+  await assert.rejects(admitEngineering(designInput(), { env: {}, fetchImpl, cache: createReadinessCache() }), error => error.status === 503);
   await assert.rejects(validateEngineering({ project: example }, { env: {}, fetchImpl }), error => error.status === 503);
   assert.equal(sent, 0);
 });
@@ -146,7 +156,7 @@ test('the engine plans and the public server executes: the visitor key reaches o
 
 test('engine failures map to clear messages; runaway or malformed plans are stopped', async () => {
   const run = options => runEngineering(designInput(), { env, fetchImpl: fakeNetwork(options).fetchImpl });
-  await assert.rejects(run({ engineStatus: 401 }), error => error.status === 503 && /GENIUS_ENGINE_TOKEN/.test(error.message));
+  await assert.rejects(run({ engineStatus: 401 }), error => error.status === 503 && /not authorized/.test(error.message) && /not your AI key/.test(error.message) && !/GENIUS_ENGINE_TOKEN/.test(error.message));
   await assert.rejects(run({ engineStatus: 400 }), error => error.status === 400 && error.message === 'Engine says no.');
   await assert.rejects(run({ engineStatus: 500 }), error => error.status === 502 && !/Engine says no/.test(error.message));
   await assert.rejects(run({ steps: 99 }), error => error.status === 502 && /too many steps/.test(error.message));
@@ -177,14 +187,16 @@ test('the Node server exposes status, answers 503 before streaming without an en
   const post = (path, body) => fetch(base + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 
   const status = await (await fetch(`${base}/api/engineering/status`)).json();
-  assert.deepEqual(status, { connected: false }, 'only a boolean is public');
+  assert.deepEqual(Object.keys(status).sort(), ['checkedAt', 'configured', 'connected', 'operational', 'state'], 'only the state is public: no URL, token, key id, or reason');
+  assert.equal(status.state, 'not_configured'); assert.equal(status.operational, false);
   const refused = await post('/api/engineering/run', designInput());
-  assert.equal(refused.status, 503); assert.match((await refused.json()).error, /not connected/);
+  assert.equal(refused.status, 503); assert.match((await refused.json()).error, /not set up on this site/);
   const large = await post('/api/engineering/validate', { project: { ...clone(example), padding: 'x'.repeat(200000) } });
   assert.equal(large.status, 503, 'engineering bodies may exceed the 20 KB default limit');
 
   process.env.GENIUS_ENGINE_URL = ENGINE; process.env.GENIUS_ENGINE_TOKEN = ENGINE_TOKEN;
-  assert.deepEqual(await (await fetch(`${base}/api/engineering/status`)).json(), { connected: true });
+  const operational = await (await fetch(`${base}/api/engineering/status`)).json();
+  assert.equal(operational.state, 'operational'); assert.equal(operational.connected, true);
   const bad = await post('/api/engineering/run', { ...designInput(), stage: 'nope' });
   assert.equal(bad.status, 400);
   const run = await post('/api/engineering/run', designInput());
@@ -200,10 +212,52 @@ test('the Node server exposes status, answers 503 before streaming without an en
 test('the hosted Worker exposes the same status and refuses runs without an engine', async () => {
   const worker = createWorker();
   const call = (path, init, environment = {}) => worker.fetch(new Request(`https://diagram.example${path}`, init), environment, { waitUntil() {} });
-  assert.deepEqual(await (await call('/api/engineering/status', { method: 'GET' })).json(), { connected: false });
-  assert.deepEqual(await (await call('/api/engineering/status', { method: 'GET' }, env)).json(), { connected: true });
+  assert.equal((await (await call('/api/engineering/status', { method: 'GET' })).json()).state, 'not_configured');
+  const unreachable = await (await call('/api/engineering/status', { method: 'GET' }, { GENIUS_ENGINE_URL: 'https://engine.invalid', GENIUS_ENGINE_TOKEN: ENGINE_TOKEN })).json();
+  assert.equal(unreachable.state, 'unreachable', 'configured is not operational: the Worker checks too');
   const refused = await call('/api/engineering/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(designInput()) });
   assert.equal(refused.status, 503);
   const validate = await call('/api/engineering/validate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ project: { ...clone(example), padding: 'x'.repeat(100000) } }) });
   assert.equal(validate.status, 503, 'engineering bodies may exceed the 20 KB default limit');
+});
+
+// ——— The 2026-10-14 production 401: token handling and authenticated readiness ———
+const CASES = JSON.parse(readFileSync('tests/fixtures/token-cases.json', 'utf8'));
+const fill = value => value.replaceAll('{base}', CASES.base);
+
+test('the public server normalizes the token exactly like the engine (shared cases) and fingerprints it the same way', () => {
+  for (const [label, value] of CASES.same) { const result = normalizeServiceToken(fill(value)); assert.equal(result.ok, true, label); assert.equal(result.token, CASES.base, label); }
+  for (const [label, value] of CASES.invalid) { const result = normalizeServiceToken(value); assert.equal(result.ok, false, label); assert.match(result.problem, /^GENIUS_ENGINE_TOKEN /, label); }
+  assert.equal(engineKeyId(CASES.base), CASES.keyIdOfBase, 'same key id as the engine prints');
+  assert.deepEqual(engineConfig({ GENIUS_ENGINE_URL: ENGINE, GENIUS_ENGINE_TOKEN: `"${CASES.base}"\n` }).notes, ['surrounding quotes']);
+});
+
+test('readiness separates configured from operational, caches results, and never reveals details publicly', async () => {
+  const states = {};
+  for (const ready of ['ok', 'offline', 401, 'old', 'gateway', 500]) {
+    const { calls, fetchImpl } = fakeNetwork({ ready });
+    const result = await engineReadiness({ env, fetchImpl, cache: createReadinessCache(), retryDelayMs: 1 });
+    states[ready] = result.state;
+    if (ready === 'offline' || ready === 'gateway') assert.equal(calls.length, 2, `${ready}: one retry for a cold start`);
+  }
+  assert.deepEqual(states, { ok: 'operational', offline: 'unreachable', 401: 'unauthorized', old: 'unverified', gateway: 'unreachable', 500: 'unavailable' });
+  const wrongToken = await engineReadiness({ env: { GENIUS_ENGINE_URL: ENGINE, GENIUS_ENGINE_TOKEN: 'another-token-0123456789abcdef-0123456789' }, fetchImpl: fakeNetwork().fetchImpl, cache: createReadinessCache() });
+  assert.equal(wrongToken.state, 'unauthorized');
+  const cache = createReadinessCache(); const network = fakeNetwork(); let clock = 1000; const now = () => clock;
+  await Promise.all([1, 2, 3].map(() => engineReadiness({ env, fetchImpl: network.fetchImpl, cache, now })));
+  assert.equal(network.calls.length, 1, 'concurrent status requests share one engine call');
+  clock += 59000; await engineReadiness({ env, fetchImpl: network.fetchImpl, cache, now }); assert.equal(network.calls.length, 1, 'operational is cached for 60 s');
+  clock += 2000; await engineReadiness({ env, fetchImpl: network.fetchImpl, cache, now }); assert.equal(network.calls.length, 2);
+  const status = await engineeringStatus(env, { fetchImpl: fakeNetwork({ ready: 401 }).fetchImpl, cache: createReadinessCache() });
+  assert.deepEqual({ state: status.state, configured: status.configured, operational: status.operational, connected: status.connected }, { state: 'unauthorized', configured: true, operational: false, connected: false });
+  assert.ok(!JSON.stringify(status).includes('mismatch') && !JSON.stringify(status).includes(ENGINE), 'the reason and the URL stay in the server log');
+});
+
+test('a run is refused before the visitor key is used when the engine is not authorized', async () => {
+  const { calls, fetchImpl } = fakeNetwork({ ready: 401 });
+  await assert.rejects(admitEngineering(designInput(), { env, fetchImpl, cache: createReadinessCache() }), error => error.status === 503 && error.engineState === 'unauthorized' && /not your AI key/.test(error.message));
+  assert.deepEqual(calls.map(call => new URL(call.url).pathname), ['/v1/ready'], 'nothing else was called');
+  assert.ok(calls.every(call => !call.raw.includes(KEY)), 'the visitor key was not sent anywhere');
+  const old = fakeNetwork({ ready: 'old' });
+  assert.equal((await admitEngineering(designInput(), { env, fetchImpl: old.fetchImpl, cache: createReadinessCache() })).input.stage, 'design', 'an engine older than 0.1.1 is still allowed to run');
 });

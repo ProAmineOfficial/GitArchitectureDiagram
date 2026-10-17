@@ -26,10 +26,10 @@ import { setupBrand } from './brand.js';
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
-const state = { result: null, view: 'architecture', mode: 'overview', drill: '', controller: null, filter: 'all', current: null, edits: new Map(), cache: new Map(), displayKey: '', maxFiles: 120, pairs: {}, role: 'fast', deepCache: new Map() };
+const state = { source: 'repository', project: null, projectOrigin: '', composing: false, projectFile: null, operations: [], result: null, view: 'architecture', mode: 'overview', drill: '', controller: null, filter: 'all', current: null, edits: new Map(), cache: new Map(), displayKey: '', maxFiles: 120, pairs: {}, role: 'fast', deepCache: new Map() };
 const CODE = /\.(m?[jc]?[jt]sx?|py|c|cc|cpp|h|hpp|ino|rs|go|java|kt|cs|rb|php|swift|vue|svelte)$/i;
 const DOC = /\.(md|mdx|mmd|rst|txt)$/i;
-const VIEWS = new Set(['system', 'architecture', 'hierarchy', 'mindmap', 'documented', 'source', 'guide', 'extract', 'pipeline']);
+const VIEWS = new Set(['workspace', 'system', 'architecture', 'hierarchy', 'mindmap', 'documented', 'source', 'guide', 'extract', 'pipeline']);
 const reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /** Create an element with safe text content. */
@@ -48,20 +48,31 @@ function analysisMode() { return document.querySelector('[name=analysis-mode]:ch
 function setMode(mode) { const input = document.querySelector(`[name=analysis-mode][value=${mode}]`); if (input) input.checked = true; $('#use-ai').checked = mode === 'genius'; updateCostNote(); }
 
 // ——— Pages and routing ———
-const HOME_TITLE = 'Make Any Product with Genius AI | Git Architecture Diagram'; // Same text as <title> in index.html.
+const HOME_TITLE = 'Git Architecture Diagram — Make Any Product with Genius AI'; // Same text as <title> in index.html and src/seo.mjs.
 function showPage(page) {
   const bar = $('.command-bar'); if (page === 'home') $('#hero-slot').append(bar); else if (bar.parentElement !== $('#main')) $('#main').prepend(bar); bar.classList.toggle('tucked', page === 'repo'); bar.hidden = page === 'idea'; // Home centers the input; a repository page tucks it away; the idea workspace has its own form.
-  $('#welcome').hidden = page !== 'home'; $('#browse-view').hidden = page !== 'browse'; $('#workspace').hidden = page !== 'repo'; $('#idea-view').hidden = page !== 'idea';
-  $('#workspace-nav').toggleAttribute('aria-current', page === 'home' || page === 'repo'); $('#browse-nav').toggleAttribute('aria-current', page === 'browse');
-  if (page === 'browse') { document.title = 'Browse examples · Git Architecture Diagram'; renderBrowse(); }
+  $('#welcome').hidden = page !== 'home'; $('#browse-view').hidden = page !== 'browse'; $('#workspace').hidden = page !== 'repo' && page !== 'idea'; // One workspace for repositories and idea projects.
+  $('#workspace-nav').toggleAttribute('aria-current', page === 'home' || page === 'repo' || page === 'idea'); $('#browse-nav').toggleAttribute('aria-current', page === 'browse');
+  if (page === 'repo') enterRepository();
+  if (page === 'browse') { document.title = 'Browse examples · Git Architecture Diagram'; renderBrowse(); } // Same titles as src/seo.mjs, so search engines see one title per page.
   if (page === 'home') document.title = HOME_TITLE; // Keep the search title from index.html when returning to the home page.
   if (page === 'idea') openIdea();
 }
-let ideaWorkspace = null; // Make Any Product with Genius AI: loaded on the first visit to /new, so the repository workspace never depends on it.
+let projectLoader = null; let projectWs = null; // Make Any Product with Genius AI: loaded on the first visit to /new, so repository analysis never depends on it.
+const renderMarkdown = text => DOMPurify.sanitize(marked.parse(text), { FORBID_TAGS: ['img', 'iframe', 'video', 'audio', 'form', 'style', 'input'], FORBID_ATTR: ['style'] });
 async function openIdea() {
-  ideaWorkspace ||= import('./idea.js').then(module => module.setupIdeaWorkspace({ credentials, aiConfigured, toast, openSettings: () => $('#settings').showModal() }));
-  try { await (await ideaWorkspace).show(); } catch { ideaWorkspace = null; status('The idea workspace could not be loaded. Reload the page and try again.', { error: true }); }
+  projectLoader ||= import('./project-workspace.js').then(module => module.setupProjectWorkspace({ state, $, $$, el, icon, toast, setDrawer, selectView, closeMenus, credentials, aiConfigured, openSettings: () => $('#settings').showModal(), renderMarkdown, navigate, inputToPath, resetHighlights: () => extras.reset() }));
+  try { projectWs = await projectLoader; state.source = 'project'; $('#workspace').dataset.source = 'project'; $('#file-inspector').hidden = true; await projectWs.enter(); }
+  catch { projectLoader = null; projectWs = null; status('The idea workspace could not be loaded. Reload the page and try again.', { error: true }); }
 }
+/** Switch the workspace back to the repository source; the next repository display re-renders everything. */
+function enterRepository() {
+  if (state.source === 'repository') return;
+  state.source = 'repository'; state.repositoryStale = true; $('#workspace').dataset.source = 'repository';
+  $$('#view-dock .dock-item[aria-disabled]').forEach(item => item.removeAttribute('aria-disabled')); $('#file-inspector').hidden = true;
+}
+const hasContent = () => (state.source === 'project' ? Boolean(state.project) : Boolean(state.result)); // What the export and search controls act on.
+const exportName = () => (state.source === 'project' ? projectWs.exportName() : state.result.repository.repo);
 const keyOf = (pathname = location.pathname, search = location.search) => pathname.replace(/\/+$/, '') + search;
 
 function cancelRun() { const running = state.controller; state.controller = null; if (running) { running.abort(); setBusy(false); } } // Leaving a route discards its unfinished analysis without touching history.
@@ -70,7 +81,7 @@ async function route() {
   if (target.page === 'invalid') { cancelRun(); showPage('home'); status(target.reason, { error: true }); return; }
   if (target.page !== 'repo') { cancelRun(); hideStatus(); showPage(target.page); return; }
   const key = keyOf();
-  if (state.result && state.displayKey === key) { cancelRun(); hideStatus(); showPage('repo'); applyFocus(target.lines); return; } // Only the line anchor changed.
+  if (state.result && state.displayKey === key) { cancelRun(); hideStatus(); showPage('repo'); if (state.repositoryStale) showResult(); applyFocus(target.lines); return; } // Only the line anchor changed, or the workspace showed an idea project in between.
   if (state.cache.has(key)) { cancelRun(); hideStatus(); state.result = state.cache.get(key); state.displayKey = key; showPage('repo'); showResult(); applyFocus(target.lines); return; } // Back/forward to a snapshot analyzed in this tab.
   $('#repository').value = target.repository; $('#ref').value = target.ref; $('#scope').value = target.scope;
   $('#max-files').value = String(Math.min(target.files || DEFAULT_FILES, state.maxFiles));
@@ -114,6 +125,7 @@ function remember(key, result) { state.cache.set(key, result); while (state.cach
 
 // ——— Result presentation ———
 function showResult() {
+  state.repositoryStale = false;
   const { result } = state; const repo = result.repository; state.drill = ''; state.mode = result.diagrams.overview ? 'overview' : 'files';
   $('#file-inspector').hidden = true; $('#search-results').replaceChildren(); state.current = null;
   $('#repo-title').textContent = repo.fullName; $('#repo-description').textContent = repo.description || '';
@@ -153,6 +165,7 @@ function renderMetrics() {
 
 // ——— Views ———
 function diagramFor(view = state.view) {
+  if (state.source === 'project') return projectWs?.diagramFor(view) || null;
   const { result } = state; const d = result.diagrams;
   if (view === 'system') { const a = result.ai?.diagrams; if (!a || !result.ai.graph) return null; return { key: 'ai', label: 'System map', source: a.architecture, paths: a.nodePaths || {}, legend: (a.legend || []).map(item => ({ ...item, label: `${item.label} (${item.count})` })), edgeLegend: a.edgeLegend, legendTitle: 'Kinds', basis: result.ai.saved ? 'AI system map, saved for this commit' : 'AI system map. Check the evidence', caption: `${result.ai.providerName} · ${result.ai.model}. Solid arrows cite a line the model was shown; dotted arrows are inferences; dashed shapes have no file.`, tour: result.ai.graph.tour || [], flowEdges: result.ai.graph.flowEdges || [] }; }
   if (view === 'mindmap' && $('#mindmap-mode').value !== 'folders' && d.conceptMindmap) return { key: 'concepts', label: 'Repository mind map', source: d.conceptMindmap, paths: d.conceptMindmapPaths || {}, legend: (d.conceptMindmapLegend || []).map(item => ({ ...item, label: `${item.label} (${item.count})` })), legendTitle: 'Concepts', basis: 'Concepts from the analysis. Select one to explore it everywhere', caption: 'Each concept maps to repository paths: selecting it explains it in Genius and can highlight it in the diagrams and hierarchy.' };
@@ -170,13 +183,22 @@ function diagramFor(view = state.view) {
 async function selectView(next, { focusTab = false } = {}) {
   state.view = next; if (tourActive()) stopTour({ refit: false }); $('#system-empty').hidden = true; $('#tour-start').hidden = true; $('#tour-action').hidden = true;
   $$('#view-dock [role=tab]').forEach(tab => { const selected = tab.dataset.view === next; tab.setAttribute('aria-selected', String(selected)); tab.tabIndex = selected ? 0 : -1; if (selected && focusTab) tab.focus(); });
-  const isDiagram = ['system', 'architecture', 'mindmap', 'documented'].includes(next); $('#hierarchy-view').hidden = next !== 'hierarchy'; $('#extract-view').hidden = next !== 'extract'; $('#pipeline-view').hidden = next !== 'pipeline'; $('#mindmap-mode-label').hidden = next !== 'mindmap';
+  const project = state.source === 'project'; // An idea project draws Hierarchy on the canvas; a repository has its own hierarchy view.
+  const isDiagram = (project ? ['system', 'architecture', 'hierarchy', 'mindmap', 'documented'] : ['system', 'architecture', 'mindmap', 'documented']).includes(next); $('#hierarchy-view').hidden = project || next !== 'hierarchy'; $('#extract-view').hidden = next !== 'extract'; $('#pipeline-view').hidden = next !== 'pipeline'; $('#mindmap-mode-label').hidden = next !== 'mindmap'; $('#workspace-home').hidden = next !== 'workspace';
   $('#canvas').hidden = !isDiagram; $('#source-view').hidden = next !== 'source'; $('#guide').hidden = next !== 'guide';
   $('.diagram-meta').hidden = !isDiagram; $('#diagram-legend').hidden = true;
-  $('#architecture-mode-label').hidden = next !== 'architecture'; $('#drill-chip').hidden = !(next === 'architecture' && state.mode === 'files' && state.drill);
-  $('#document-picker').hidden = next !== 'documented' || !state.result.documented.length;
+  $('#architecture-mode-label').hidden = next !== 'architecture'; $('#drill-chip').hidden = project || !(next === 'architecture' && state.mode === 'files' && state.drill);
+  $('#document-picker').hidden = next !== 'documented' || !(project ? state.project?.diagrams?.length : state.result.documented.length);
   $('.node-action').hidden = next === 'documented';
   $('#diagram-source-link').hidden = true;
+  if (project) {
+    if (projectWs?.showPanel(next)) return;
+    if (next === 'source') { $('#diagram-caption').textContent = 'Edit any project diagram; Preview edits renders it in its own view. Edits change this preview and exports only.'; fillSourceTargets(); loadSourceEditor(); return; }
+    const diagram = projectWs?.diagramFor(next);
+    if (!diagram) { $('#diagram-basis').textContent = ''; clearDiagram('Nothing to draw for this view yet.'); $('#diagram-caption').textContent = ''; return; }
+    await showDiagram(next, diagram); return;
+  }
+  if (next === 'workspace') { renderRepositoryHome(); $('#diagram-caption').textContent = 'The repository at a glance. Every other view in the Dock shows the same commit.'; return; }
   if (next === 'pipeline') { deep.renderPipeline(); $('#diagram-caption').textContent = 'How Genius Core coordinates three teams of three agents. Solid entries are verified at this commit; dotted entries are Genius inference.'; return; }
   if (next === 'extract') { extractView.render(); $('#diagram-caption').textContent = 'Clone the source, export project files and diagrams, skills, prompts, plans, and AI-ready knowledge. Repository text is shown as plain text.'; return; }
   if (next === 'hierarchy') { extras.renderHierarchyView(); $('#diagram-caption').textContent = 'How the software is organized: layers, components, and key files. Repository Tree shows where files are; this shows what they are for.'; return; }
@@ -185,15 +207,39 @@ async function selectView(next, { focusTab = false } = {}) {
   const diagram = diagramFor(next);
   if (next === 'system' && !diagram) { $('#canvas').hidden = true; $('.diagram-meta').hidden = true; renderSystemEmpty(); $('#system-empty').hidden = false; $('#diagram-caption').textContent = 'The system map is optional and uses an AI model; every other view works without one.'; return; }
   if (!diagram) { $('#diagram-basis').textContent = ''; clearDiagram(next === 'documented' ? 'No Mermaid diagrams were found in the files read.\nIncrease the file budget or open a documentation folder.' : 'Nothing to draw for this view.'); $('#diagram-caption').textContent = ''; return; }
-  const edited = state.edits.get(diagram.key);
+  await showDiagram(next, diagram);
+}
+
+/** Draw one diagram view (repository or project) with its basis, caption, legend, and saved edits. */
+async function showDiagram(next, diagram) {
+  const edited = state.edits.get(diagram.key); const project = state.source === 'project';
   $('#diagram-basis').textContent = edited ? 'Edited preview · source links removed' : diagram.basis;
-  $('#diagram-basis').dataset.basis = edited ? 'edited' : next === 'documented' ? 'documented' : next === 'system' ? 'inferred' : 'observed';
+  $('#diagram-basis').dataset.basis = edited ? 'edited' : project ? (state.project?.provenance?.example ? 'documented' : 'inferred') : next === 'documented' ? 'documented' : next === 'system' ? 'inferred' : 'observed';
   $('#diagram-caption').textContent = diagram.caption;
   if (diagram.item) { $('#diagram-source-link').hidden = false; $('#diagram-source-link').href = sourceURL(diagram.item.path, diagram.item.line); }
   if (!diagram.item) $('#drill-label').textContent = state.drill ? `Files in ${state.drill}` : '';
   renderLegend(diagram, edited);
   await renderDiagram(edited ?? diagram.source, edited ? {} : diagram.paths, navigateTarget, { generated: !edited && next !== 'documented' });
   if (state.view !== next) return; queueMicrotask(() => extras.afterRender(next)); decorate({ flowEdges: edited ? [] : diagram.flowEdges || [] }); $('#tour-start').hidden = !((next === 'system' || (next === 'architecture' && diagram.key === 'overview')) && !edited && diagram.tour?.length); $('#tour-action').hidden = $('#tour-start').hidden;
+}
+
+/** The Workspace view for a repository: what it is, where to look, what to export, and the idea path. */
+function renderRepositoryHome() {
+  const { result } = state; const repo = result.repository; $('#workspace-start').hidden = true;
+  const view = $('#workspace-overview'); view.hidden = false; view.replaceChildren();
+  const head = el('div', 'ws-head'); const badges = el('div', 'idea-badges');
+  badges.append(el('span', 'idea-badge tone-info', 'GitHub repository'), el('span', 'idea-badge tone-muted', `${repo.branch === repo.sha ? repo.sha.slice(0, 7) : repo.branch} · ${repo.sha.slice(0, 7)}`), ...(repo.scope ? [el('span', 'idea-badge tone-muted', repo.scope)] : []));
+  head.append(el('h2', '', repo.fullName), el('p', '', repo.description || result.summary || ''), badges);
+  const grid = el('div', 'ws-grid'); const card = title => { const node = el('section', 'ws-card'); node.append(el('h3', '', title)); grid.append(node); return node; };
+  const link = (text, handler) => { const button = el('button', 'quiet-button', text); button.type = 'button'; button.addEventListener('click', handler); return button; };
+  card('Coverage').append(el('p', '', `${result.coverage.readFiles} of ${result.coverage.listedFiles} files read, at commit ${repo.sha.slice(0, 7)}. ${result.dependencies.length} local imports located, ${result.documented.length} authored diagrams.`));
+  const views = el('div', 'ws-links'); [['System Map', 'system'], ['Architecture', 'architecture'], ['Hierarchy', 'hierarchy'], ['Mind Map', 'mindmap'], ['Diagrams', 'documented'], ['Genius guide', 'guide']].forEach(([text, target]) => views.append(link(text, () => selectView(target))));
+  card('Views').append(views);
+  const exports = el('div', 'ws-links'); exports.append(link('Export Project', () => selectView('extract')), link('Open Genius', () => setDrawer('genius', true)));
+  card('Exports and Genius').append(exports);
+  const idea = card('Make a new product'); const anchor = el('a', 'quiet-button', 'Start from an Idea'); anchor.href = '/new'; anchor.dataset.internal = '';
+  idea.append(el('p', 'idea-muted', 'Describe a product and Genius AI turns it into requirements, an architecture, engineering files, and a validation report, in this same workspace.'), anchor);
+  view.append(head, grid);
 }
 
 function renderLegend(diagram, edited) {
@@ -347,14 +393,15 @@ function openExportFromDock(button) {
   Object.assign(menu.style, { position: 'fixed', top: `${Math.round(rect.bottom + 12)}px`, left: `${Math.round(Math.max(12, Math.min(innerWidth - width - 12, rect.left + rect.width / 2 - width / 2)))}px`, right: 'auto' });
   button.setAttribute('aria-expanded', 'true'); menu.querySelector('[role=menuitem]:not([hidden])')?.focus({ preventScroll: true });
 }
-$('#dock-export').addEventListener('click', event => { event.stopPropagation(); openExportFromDock(event.currentTarget); });
-$('#dock-build').addEventListener('click', () => { setDrawer('genius', true); setTimeout(() => $('#build-genius').scrollIntoView({ block: 'start', behavior: reduceMotion() ? 'auto' : 'smooth' }), 80); });
+const dockBlocked = button => { if (button.getAttribute('aria-disabled') !== 'true') return false; toast('Start from an idea, open the example project, or import a project file first.'); return true; }; // Until a project exists, only Workspace works.
+$('#dock-export').addEventListener('click', event => { event.stopPropagation(); if (dockBlocked(event.currentTarget)) return; openExportFromDock(event.currentTarget); });
+$('#dock-build').addEventListener('click', event => { if (dockBlocked(event.currentTarget)) return; if (state.source === 'project') { projectWs?.focusBuild(); return; } setDrawer('genius', true); setTimeout(() => $('#build-genius').scrollIntoView({ block: 'start', behavior: reduceMotion() ? 'auto' : 'smooth' }), 80); });
 $('#zoom-toggle').addEventListener('click', () => { const on = $('#canvas').dataset.wheel !== 'on'; $('#canvas').dataset.wheel = on ? 'on' : 'off'; $('#zoom-toggle').setAttribute('aria-pressed', String(on)); toast(on ? 'Scrolling over the diagram now zooms.' : 'Scrolling scrolls the page again; click the diagram to zoom.'); });
 setupDock($('#view-dock'));
 $('#hl-toggle').addEventListener('click', event => { event.stopPropagation(); toggleMenu('#hl-toggle', '#hl-menu'); });
 $('#mindmap-mode').addEventListener('change', () => selectView('mindmap'));
 document.addEventListener('click', event => { if (!event.target.closest('.menu, .popover')) closeMenus(); });
-$$('#export-menu [data-export]').forEach(item => item.addEventListener('click', async () => { closeMenus(); if (!state.result) return; const format = item.dataset.export; if (format === 'copy') { try { await navigator.clipboard.writeText(getSource()); toast('Mermaid source copied.'); } catch { toast('Copying is blocked here; use Mermaid source (.mmd).'); } return; } try { await exportDiagram(format, getSource(), getSVG(), `${state.result.repository.repo}-${diagramFor()?.key.replace(/[^a-z0-9]+/gi, '-') || state.view}`); } catch (error) { toast(error.message); } }));
+$$('#export-menu [data-export]').forEach(item => item.addEventListener('click', async () => { closeMenus(); if (!hasContent()) return; const format = item.dataset.export; if (format === 'copy') { try { await navigator.clipboard.writeText(getSource()); toast('Mermaid source copied.'); } catch { toast('Copying is blocked here; use Mermaid source (.mmd).'); } return; } try { await exportDiagram(format, getSource(), getSVG(), `${exportName()}-${diagramFor()?.key.replace(/[^a-z0-9]+/gi, '-') || state.view}`); } catch (error) { toast(error.message); } }));
 $('#fullscreen-action').addEventListener('click', () => $('#fullscreen').click());
 $('#tour-action').addEventListener('click', () => $('#tour-start').click());
 $('#change-repo').addEventListener('click', () => { const bar = $('.command-bar'); bar.classList.toggle('tucked'); if (!bar.classList.contains('tucked')) { $('#repository').select(); $('#repository').focus(); } });
@@ -401,6 +448,7 @@ function renderGuide() {
 
 // ——— Mermaid source editor ———
 function sourceTargets() {
+  if (state.source === 'project') return projectWs?.sourceTargets() || [];
   const { result } = state; const d = result.diagrams; const targets = [];
   if (d.overview) targets.push({ key: 'overview', label: 'Architecture: components', view: 'architecture', mode: 'overview', source: d.overview });
   targets.push({ key: 'files', label: 'Architecture: files and imports', view: 'architecture', mode: 'files', source: d.architecture });
@@ -441,11 +489,12 @@ $('#refresh').addEventListener('click', () => { if (!state.result) return; const
 $('#commit').addEventListener('click', () => { $('#analysis-options').hidden = false; $('#options-toggle').setAttribute('aria-expanded', 'true'); $('#ref').value = state.result?.repository.branch || ''; $('#scope').value = state.result?.repository.scope || ''; $('#ref').focus(); $('#ref').select(); });
 $('#options-toggle').addEventListener('click', () => { const open = $('#analysis-options').hidden; $('#analysis-options').hidden = !open; $('#options-toggle').setAttribute('aria-expanded', String(open)); });
 $('#use-ai').addEventListener('change', updateCostNote);
-$('#tree-search').addEventListener('input', () => state.result && renderTree());
-$$('#tree-filters .chip').forEach(chip => chip.addEventListener('click', () => state.result && setFilter(chip.dataset.filter)));
+const renderFiles = () => { if (state.source === 'project') projectWs?.renderTree(); else if (state.result) renderTree(); }; // The Files sidebar lists the open project's engineering files or the repository tree.
+$('#tree-search').addEventListener('input', renderFiles);
+$$('#tree-filters .chip').forEach(chip => chip.addEventListener('click', () => { if (!hasContent()) return; setFilter(chip.dataset.filter, false); renderFiles(); }));
 $('#close-inspector').addEventListener('click', () => { $('#file-inspector').hidden = true; state.current = null; });
 $$('#view-dock [role=tab]').forEach(tab => {
-  tab.addEventListener('click', () => { if (['system', 'architecture', 'mindmap', 'documented'].includes(state.view)) state.lastDiagramView = state.view; selectView(tab.dataset.view); });
+  tab.addEventListener('click', () => { if (dockBlocked(tab)) return; if (['system', 'architecture', 'mindmap', 'documented'].includes(state.view)) state.lastDiagramView = state.view; selectView(tab.dataset.view); });
 });
 $('#architecture-mode').addEventListener('change', event => { state.mode = event.target.value; if (state.mode !== 'files') state.drill = ''; selectView('architecture'); });
 $('#drill-clear').addEventListener('click', () => { state.drill = ''; state.mode = state.result.diagrams.overview ? 'overview' : 'files'; $('#architecture-mode').value = state.mode; selectView('architecture'); });
@@ -453,7 +502,7 @@ $('#document-select').addEventListener('change', () => selectView('documented'))
 $('#zoom-in').addEventListener('click', () => zoom(1.2)); $('#zoom-out').addEventListener('click', () => zoom(1 / 1.2)); $('#fit').addEventListener('click', fit);
 $('#fullscreen').addEventListener('click', async () => { try { if (document.fullscreenElement) await document.exitFullscreen(); else await $('#canvas').requestFullscreen(); } catch { toast('Fullscreen is not available in this browser.'); } });
 $('#export-guide').addEventListener('click', () => { if (state.result) exportGuide(state.result); });
-$('#export-format').addEventListener('change', async event => { const format = event.target.value; event.target.value = ''; if (!format || !state.result) return; try { await exportDiagram(format, getSource(), getSVG(), `${state.result.repository.repo}-${diagramFor()?.key.replace(/[^a-z0-9]+/gi, '-') || state.view}`); } catch (error) { toast(error.message); } });
+$('#export-format').addEventListener('change', async event => { const format = event.target.value; event.target.value = ''; if (!format || !hasContent()) return; try { await exportDiagram(format, getSource(), getSVG(), `${exportName()}-${diagramFor()?.key.replace(/[^a-z0-9]+/gi, '-') || state.view}`); } catch (error) { toast(error.message); } });
 $('#share').addEventListener('click', async () => {
   if (!state.result) return; const repo = state.result.repository; const current = state.current?.type === 'blob' ? state.current : null;
   const url = new URL(location.origin + workspacePath(repo, { pinned: true, focus: current?.path || repo.focus, lines: current?.lines, files: state.result.coverage.maxFiles })); if (VIEWS.has(state.view) && state.view !== state.defaultView) url.searchParams.set('view', state.view); const link = url.href; // Safe state only: repository, commit, path, lines, view.
@@ -462,7 +511,7 @@ $('#share').addEventListener('click', async () => {
 $$('[data-collapse]').forEach(button => button.addEventListener('click', () => setDrawer(button.dataset.collapse, $('#studio').dataset[button.dataset.collapse] !== 'open'))); // In focus layout these close the drawers.
 $$('.mobile-switch [role=tab]').forEach(tab => tab.addEventListener('click', () => { $('#studio').dataset.pane = tab.dataset.pane; $$('.mobile-switch [role=tab]').forEach(item => item.setAttribute('aria-selected', String(item === tab))); }));
 document.addEventListener('keydown', event => { // "/" finds a file; Escape closes the inspector.
-  if (event.key === '/' && !event.target.closest('input, textarea, select') && state.result && !$('#workspace').hidden) { event.preventDefault(); setDrawer('tree', true); $('#tree-search').focus(); }
+  if (event.key === '/' && !event.target.closest('input, textarea, select') && hasContent() && !$('#workspace').hidden) { event.preventDefault(); setDrawer('tree', true); $('#tree-search').focus(); }
   if (event.key === 'Escape' && !event.target.closest('dialog')) { if (!$('#info-panel').hidden || !$('#export-menu').hidden || !$('#hl-menu').hidden) closeMenus(); else if (focusLayout() && ($('#studio').dataset.tree === 'open' || $('#studio').dataset.genius === 'open') && !tourActive()) { setDrawer('tree', false); setDrawer('genius', false); } else if (!$('#file-inspector').hidden) $('#file-inspector').hidden = true; }
 });
 document.addEventListener('diagram-error', () => { if (state.view !== 'source') $('#diagram-caption').textContent = 'This diagram has a syntax problem. Open the Mermaid source tab to fix it or reset it.'; });

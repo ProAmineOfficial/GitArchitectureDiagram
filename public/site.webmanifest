@@ -1,7 +1,7 @@
 {
   "name": "Git Architecture Diagram",
   "short_name": "Git Architecture",
-  "description": "AI diagram generator for GitHub repositories, with System Maps, Mermaid diagrams, and Genius AI.",
+  "description": "Make any product with Genius AI: turn an idea into a structured engineering project, or read a GitHub repository as architecture diagrams and System Maps.",
   "start_url": "/",
   "display": "browser",
   "background_color": "#090D14",

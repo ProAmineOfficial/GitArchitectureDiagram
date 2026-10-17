@@ -19,8 +19,9 @@ import { discoverModels, testConnection } from './src/model-registry.mjs'; // Tw
 import { runGeniusAgent } from './src/genius-agent.mjs'; // One Deep Genius agent call per request.
 import { ProviderError } from './src/provider-errors.mjs'; // Classified provider failures carry a stable kind for the interface.
 import { versionInfo, sourceDigest, SOURCE_PATTERN, cleanCommit } from './src/provenance.mjs'; // Public provenance and a non-secret build fingerprint.
+import { withSearchMetadata as searchMetadata, routeMetadata } from './src/seo.mjs'; // Route titles, descriptions, canonicals, and visible sections for the three landing pages.
 import { defaultAnalysisStore } from './src/store.mjs'; // Durable, commit-keyed saved analyses for public repositories.
-import { runEngineering, validateEngineering, engineeringStatus, prepareEngineering } from './src/engineering.mjs'; // Make Any Product with Genius AI: the interface to the private engine.
+import { runEngineering, validateEngineering, engineeringStatus, admitEngineering, createReadinessCache, describeEngineConfig } from './src/engineering.mjs'; // Make Any Product with Genius AI: the interface to the private engine.
 let defaultStore = null; // Created on first use, so importing the server never touches the disk.
 const sharedStore = () => (defaultStore ||= defaultAnalysisStore({ root: ROOT, log: message => console.info('[cache]', message) })); // GAD_CACHE_DIR chooses the folder; "off" keeps memory only.
 const prefixed = (store, prefix) => store && { get: key => store.get(prefix + key), put: (key, value) => store.put(prefix + key, value) }; // Saved public system maps share the store under their own prefix.
@@ -40,22 +41,7 @@ function guard(request, bucket = 'default') { // Validate browser origin and req
   const now = Date.now(); const ip = `${request.socket.remoteAddress || 'unknown'}|${bucket}`; const current = rates.get(ip); if (rates.size > 5000) rates.clear(); // Bound the in-memory limiter.
   const item = current && current.until > now ? current : { count: 0, until: now + 60000 }; item.count++; rates.set(ip, item); if (item.count > (LIMITS[bucket] || LIMITS.default)) throw new AppError(429, 'Too many requests. Please wait a minute.'); // Limit expensive endpoint calls per direct client address.
 } // End API request admission.
-function withSearchMetadata(page, pathname) { // Serve distinct, crawlable SEO metadata for public routes only.
-  const pages = { // Keep the canonical URLs consistent with the published sitemap.
-    '/': { title: 'Make Any Product with Genius AI | Git Architecture Diagram', description: 'Make any product with Genius AI: develop an engineering plan from an idea, or explore GitHub repositories with interactive architecture diagrams.' }, // Homepage mission and import flow.
-    '/new': { title: 'Start from an Idea with Genius AI | Git Architecture Diagram', description: 'Turn a product idea into structured requirements, proposed architecture, Mermaid diagrams, editable engineering files and clearly labeled validation reports.' }, // Idea workspace.
-    '/browse': { title: 'Browse examples · Git Architecture Diagram', description: 'Browse GitHub repository architecture diagram examples, Mermaid visualizations, software hierarchies, mind maps and source-grounded developer insights.' } // Examples directory.
-  }; // Never rewrite metadata for repository deep links or unrelated assets.
-  const route = pathname.length > 1 && pathname.endsWith('/') ? pathname.slice(0, -1) : pathname; const selected = pages[route]; if (!selected) return page; // Only three public routes need unique metadata.
-  let html = page.toString('utf8'); // Preserve application markup and client-side behavior.
-  html = html.replace('<title>Make Any Product with Genius AI | Git Architecture Diagram</title>', `<title>${selected.title}</title>`); // Distinct HTML titles are available before JavaScript runs.
-  const replaceMeta = (attribute, key, replacement) => { const prefix = `<meta ${attribute}="${key}" content="`; const start = html.indexOf(prefix); const end = html.indexOf('">', start + prefix.length); if (start !== -1 && end !== -1) html = html.slice(0, start) + prefix + replacement + html.slice(end); }; // Update one known metadata attribute without altering other HTML.
-  replaceMeta('name', 'description', selected.description); // Keep descriptions concise and relevant to their route.
-  replaceMeta('property', 'og:title', selected.title); // Keep Open Graph titles aligned.
-  replaceMeta('property', 'og:description', selected.description); // Keep Open Graph descriptions aligned.
-  html = html.replace('</head>', `  <link rel="canonical" href="https://gitarchitecturediagram.com${route}">\n</head>`); // Self-canonicalize the three indexable site pages.
-  return Buffer.from(html, 'utf8'); // Send the validated HTML body as UTF-8 bytes.
-} // End route SEO transformation.
+function withSearchMetadata(page, pathname) { return routeMetadata(pathname) ? Buffer.from(searchMetadata(page.toString('utf8'), pathname), 'utf8') : page; } // Landing pages get their own metadata and visible section (src/seo.mjs); other paths are untouched.
 async function staticAsset(url, response, method) { // Serve only public files and explicitly approved dependency distributions.
   let base = path.join(ROOT, 'public'); let relative = url.pathname.slice(1); // Default to the application public directory.
   const vendors = { '/vendor/mermaid/': 'mermaid/dist', '/vendor/dompurify/': 'dompurify/dist', '/vendor/marked/': 'marked/lib', '/vendor/fflate/': 'fflate/esm' }; // Restrict browser dependencies to known distribution roots.
@@ -69,24 +55,25 @@ async function staticAsset(url, response, method) { // Serve only public files a
   let data; try { data = await readFile(file); } catch { if (!appRoute || relative.startsWith('assets/')) throw new AppError(404, 'Asset not found.'); data = await readFile(path.join(ROOT, 'public', 'index.html')); response.writeHead(200, { 'Content-Type': MIME['.html'], 'Cache-Control': 'no-cache' }); response.end(method === 'HEAD' ? undefined : withSearchMetadata(data, url.pathname)); return; } // Real files win; otherwise repository paths get the workspace.
   response.writeHead(200, { 'Content-Type': MIME[path.extname(file)], 'Cache-Control': vendor || relative.startsWith('assets/') ? 'public, max-age=86400' : 'no-cache' }); response.end(method === 'HEAD' ? undefined : (relative === 'index.html' ? withSearchMetadata(data, url.pathname) : data)); // Cache immutable installed dependencies more aggressively than application files.
 } // End static asset serving.
-export function createAppServer({ fetchImpl = fetch, analysisStore } = {}) { // Export the actual server; tests may inject a GitHub/provider transport and a store.
+export function createAppServer({ fetchImpl = fetch, analysisStore, engineReadyTtl } = {}) { // Export the actual server; tests may inject a GitHub/provider transport, a store, and shorter readiness caching.
+  const engineCache = createReadinessCache(engineReadyTtl); // Authenticated engine readiness, cached per server.
   return http.createServer(async (request, response) => { // Handle the small application API and its frontend.
     response.setHeader('Content-Security-Policy', CSP); response.setHeader('X-Content-Type-Options', 'nosniff'); response.setHeader('Referrer-Policy', 'no-referrer'); response.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()'); // Apply browser protections before every response.
     try { // Convert all request failures into bounded user-facing errors.
       const url = new URL(request.url, 'http://localhost'); // Parse routing independently of an untrusted Host header.
       if (url.pathname === '/api/health' && request.method === 'GET') return json(response, 200, { ok: true, version: VERSION, limits: { extract: EXTRACT_LIMITS.node,  maxFiles: 120 }, providers: Object.keys(PROVIDERS), publicAI: publicAIStatus(process.env) }); // Expose capability state without secrets.
-      if (url.pathname === '/api/engineering/status' && request.method === 'GET') return json(response, 200, engineeringStatus(process.env)); // Whether the private engine is configured; never its address or token.
+      if (url.pathname === '/api/engineering/status' && request.method === 'GET') return json(response, 200, await engineeringStatus(process.env, { fetchImpl, cache: engineCache })); // Configured vs operational (an authenticated check); never the address, token, or key id.
       if (url.pathname === '/api/version' && request.method === 'GET') return json(response, 200, await (version ??= buildVersion())); // Public provenance: project, version, commit, source digest, fingerprint. No secrets.
       if (url.pathname.startsWith('/api/')) { // Admit only the documented same-origin API operations.
         if (request.method !== 'POST') throw new AppError(405, 'Use POST for this API endpoint.'); guard(request, url.pathname === '/api/genius/agent' ? 'agent' : url.pathname.startsWith('/api/engineering/') ? 'engineering' : 'default'); // Require bounded authenticated browser actions where configured.
         if (!String(request.headers['content-type'] || '').startsWith('application/json')) throw new AppError(415, 'Use application/json.'); const input = await body(request, url.pathname === '/api/genius/agent' ? 200000 : url.pathname.startsWith('/api/engineering/') ? 2600000 : url.pathname === '/api/ask' ? 64000 : 20000); if (input && typeof input === 'object') delete input.githubToken; // Reject cross-site form submissions and oversized bodies. The browser never supplies GitHub credentials; only the optional server GITHUB_TOKEN is used, for public repositories.
-        if (url.pathname === '/api/engineering/validate') { const controller = new AbortController(); response.on('close', () => { if (!response.writableEnded) controller.abort(); }); return json(response, 200, await validateEngineering(input, { fetchImpl, signal: controller.signal })); } // Engine checks only: no model call, no key.
+        if (url.pathname === '/api/engineering/validate') { const controller = new AbortController(); response.on('close', () => { if (!response.writableEnded) controller.abort(); }); return json(response, 200, await validateEngineering(input, { fetchImpl, cache: engineCache, signal: controller.signal })); } // Engine checks only: no model call, no key.
         if (url.pathname === '/api/engineering/run') { // Clarify, design, or regenerate: streamed progress, then the project.
-          prepareEngineering(input, process.env); if (active >= 3) throw new AppError(429, 'The server is busy. Please try again shortly.'); active++; // Not connected (503) and bad requests (400) answer before the stream starts.
+          await admitEngineering(input, { fetchImpl, cache: engineCache }); if (active >= 3) throw new AppError(429, 'The server is busy. Please try again shortly.'); active++; // Bad requests (400) and an engine that is not operational (503) answer before the stream starts, and before the key is used.
           const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), 600000); response.on('close', () => { if (!response.writableEnded) controller.abort(); }); // Ten-minute ceiling; cancel when the browser leaves.
           response.writeHead(200, { 'Content-Type': 'application/x-ndjson', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no' });
           const emit = data => { if (!response.destroyed) response.write(JSON.stringify(data) + '\n'); };
-          try { const result = await runEngineering(input, { fetchImpl, signal: controller.signal, progress: event => emit({ type: 'progress', ...event }) }); emit({ type: 'result', result }); }
+          try { const result = await runEngineering(input, { fetchImpl, cache: engineCache, signal: controller.signal, progress: event => emit({ type: 'progress', ...event }) }); emit({ type: 'result', result }); }
           catch (error) { emit({ type: 'error', message: error instanceof AppError ? error.message : 'The engineering run failed unexpectedly. Please try again.', status: error.status || 500, ...(error instanceof ProviderError ? { kind: error.kind, suggestion: error.suggestion } : {}) }); }
           finally { active--; clearTimeout(timer); response.end(); }
           return;
@@ -113,7 +100,7 @@ let started = null; // Listen at most once per process, however the entry file i
 export function startServer(env = process.env) { // Start the HTTP listener from HOST and PORT.
   if (started) return started; if (env.GENIUS_ACCESS_TOKEN) console.warn('GENIUS_ACCESS_TOKEN is set but no longer used: the instance password was removed in 1.1. Remove it from the hosting environment.'); // Name the variable, never its value.
   const host = env.HOST || '127.0.0.1'; const port = /^\d+$/.test(String(env.PORT ?? '').trim()) ? Number(env.PORT) : (env.PORT || 3000); // Accept a numeric port or a socket/pipe path supplied by a hosting runner.
-  started = createAppServer(); const ready = () => console.log(`Git Architecture Diagram is running at ${typeof port === 'number' ? `http://${host}:${port}` : port}`); // Report the address the application requested.
+  started = createAppServer(); const ready = () => { console.log(`Git Architecture Diagram is running at ${typeof port === 'number' ? `http://${host}:${port}` : port}`); console.info(describeEngineConfig(env)); }; // Report the address the application requested.
   if (typeof port === 'number') started.listen(port, host, ready); else started.listen(port, ready); return started; // A runner such as LiteSpeed lsnode or Passenger may still rebind listen() to its own socket.
 } // End listener startup.
 // Hosting runners (Hostinger Node.js Web Apps via LiteSpeed lsnode, Passenger, PM2) load this entry file with require() or import() from their own script, so process.argv[1] is not this file. Start on load; tests opt out with GIT_ARCHITECTURE_DIAGRAM_AUTOSTART=0.
