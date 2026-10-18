@@ -14,12 +14,14 @@ export const SITE = 'https://gitarchitecturediagram.com';
 export const PAGE_TITLES = {
   home: 'Git Architecture Diagram — Make Any Product with Genius AI',
   idea: 'Start from an Idea with Genius AI | Git Architecture Diagram',
+  rep: 'Reverse Engineer Any Product — REP | Git Architecture Diagram',
   browse: 'Browse examples · Git Architecture Diagram',
 };
 
 const PAGES = {
   '/': { page: 'home', canonical: '/', description: 'Make any product with Genius AI: develop an engineering plan from an idea, or explore GitHub repositories with interactive architecture diagrams.' },
   '/new': { page: 'idea', canonical: '/new', description: 'Turn a product idea into structured requirements, proposed architecture, Mermaid diagrams, editable engineering files and clearly labeled validation reports.' },
+  '/rep': { page: 'rep', canonical: '/rep', description: 'Reverse Engineer Any Product: import an accessible GitHub project and read its architecture, algorithms and dependencies as a source-grounded specification, then redesign and build your own improved engineering solution.' },
   '/browse': { page: 'browse', canonical: '/browse', description: 'Browse GitHub repository architecture diagram examples, Mermaid visualizations, software hierarchies, mind maps and source-grounded developer insights.' },
   '/examples': { page: 'browse', canonical: '/browse', description: 'Browse GitHub repository architecture diagram examples, Mermaid visualizations, software hierarchies, mind maps and source-grounded developer insights.' }, // An alias of /browse; canonical to it.
 };
@@ -55,6 +57,7 @@ export function withSearchMetadata(html, pathname) {
   // the catalog for /browse.
   page = setHidden(page, /<section\b[^>]*\bid="welcome"[^>]*>/, meta.page !== 'home');
   page = setHidden(page, /<section\b[^>]*\bid="browse-view"[^>]*>/, meta.page !== 'browse');
+  page = setHidden(page, /<section\b[^>]*\bid="rep-view"[^>]*>/, meta.page !== 'rep'); // REP reuses the shared command bar, moved into #rep-slot by the script.
   page = setHidden(page, /<section\b[^>]*\bclass="command-bar"[^>]*>/, meta.page === 'idea'); // The workspace composer has its own form.
   if (meta.page === 'idea') {
     page = setHidden(page, /<section\b[^>]*\bid="workspace"[^>]*>/, false).replace(/(<section\b[^>]*\bid="workspace"[^>]*\bdata-source=")repository(")/, '$1project$2');

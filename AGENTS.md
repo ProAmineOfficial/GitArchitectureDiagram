@@ -19,3 +19,15 @@ Follow [docs/SECURITY_POLICY.md](docs/SECURITY_POLICY.md) for every change. It i
 - Never delete or keep a legacy file because of its age. Trace it and classify it (KEEP, UPDATE, MIGRATE, DEPRECATE, REMOVE) with a reason. See [docs/LEGACY_AUDIT.md](docs/LEGACY_AUDIT.md).
 - Provenance is public attribution (headers, `PROVENANCE.json`, `/api/version`), never tracking or telemetry. Keep the copyright header and provenance ID at the top of every core module. The project license is GNU AGPL-3.0-only; do not change it without the owner's approval.
 - End every meaningful update with the SECURITY STATUS report from the policy.
+
+## Private Core first — private by default (permanent)
+
+New proprietary engineering intelligence is developed in the private repository `ProAmineOfficial/GitArchitectureDiagram-Private-Core` by default, even when a feature is reached from a visible page in this public site. Weakened only with the owner's explicit approval.
+
+- Build in the private core by default: analysis and generation algorithms, Algorithm Intelligence, the REP orchestration engine, engineering generation, result evaluation and validation rules, design rule packs, specialized domain rule packs, and internal model prompts and instructions. Reaching a feature from the public homepage or Workspace is not a reason to place its logic in the public repository.
+- The public repository keeps only the interface, routing, display code, the data/integration contracts, and the thin client needed to call the private services. Example: the REP card, its entry page and its result display can be public, while REP's analysis algorithms stay private. Never copy private engine logic into browser JavaScript.
+- Every byte sent to the browser is inspectable. A private repository alone does not make delivered HTML, CSS, JavaScript, SVG or images secret, and minification or variable renaming is not source protection. Protect logic by keeping it server-side, behind authentication and authorization.
+- The browser calls the application server; the application server calls the private engine with its own authentication. `ENGINE_TOKEN` / `GENIUS_ENGINE_TOKEN` stay in server environment variables and never reach the browser or any public file. Responses, logs and error messages return only the requested result — never internal prompts, engine rules or secrets.
+- Deliver public and private changes as separate, clearly named packages. Never place private source, a private patch, or a private git bundle inside the public repository tree or its build outputs.
+- Moving an existing public file to private does not erase its prior publication or its license obligations. Do not rewrite history or force-push as part of a migration. Migrate in stages: inventory the file, its purpose, its dependencies and its destination; move it with the call sites and tests updated; keep the public behaviour working; never delete the in-use public version before the private replacement is integrated and green.
+- Do not present a planned capability as working, and do not change the approved UI design or behaviour without a task-linked need.

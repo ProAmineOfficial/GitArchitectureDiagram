@@ -90,6 +90,8 @@ https://gitarchitecturediagram.com/ProAmineOfficial/NanoKit-ESP32/blob/main/READ
 
 Each repository link must open the workspace and start analysis automatically.
 
+Pages load the application scripts and stylesheet from `/_v/<version>/app.js` and `/_v/<version>/styles.css`, where the version is a fingerprint of those files computed at start-up. Every release therefore moves them to new URLs, so a browser, CDN, or proxy cache can never run the previous release's scripts against the new page. After a deployment, view the page source: the `/_v/…` version must differ from the previous release's whenever a script or the stylesheet changed. Those URLs are cached for a year (`immutable`); the page itself is always revalidated (`no-cache`).
+
 Also check the footer: its images load from `/assets/brand/` (a missing image shows a labeled placeholder, never a broken icon), and the copyright line reads `© 2026 Pro_Amine LLC · Created & Developed by Amine Saoud ibn al-Bashir`. The browser tab shows the official Git Architecture Diagram icon. See [BRAND.md](BRAND.md) for adding the official images.
 
 ## Docker

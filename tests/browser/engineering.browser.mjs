@@ -58,7 +58,7 @@ test('the home page leads with the mission; Start from an Idea opens the Workspa
   const page = await open('/'); await page.waitForSelector('#welcome:not([hidden])');
   assert.equal(await page.title(), 'Git Architecture Diagram — Make Any Product with Genius AI');
   assert.equal((await page.textContent('#mission-title')).trim(), 'Make Any Product with Genius AI');
-  assert.deepEqual(await page.$$eval('.mission-card strong', nodes => nodes.map(node => node.textContent)), ['Start from an Idea', 'Import GitHub Project']);
+  assert.deepEqual(await page.$$eval('.mission-card strong', nodes => nodes.map(node => node.textContent)), ['Start from an Idea', 'Import GitHub Project', 'Reverse Engineer Any Product — REP']);
   assert.ok(await page.locator('#hero-slot .command-bar').isVisible(), 'the GitHub input is still on the home page');
   await page.click('#mission-import'); await page.waitForFunction(() => document.activeElement?.id === 'repository');
   await page.click('#mission-idea'); await page.waitForSelector('#workspace:not([hidden]) #workspace-start:not([hidden])');

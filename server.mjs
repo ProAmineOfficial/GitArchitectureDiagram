@@ -5,6 +5,7 @@
 // Features: same-origin API, streamed progress, bundled browser modules, bounded analysis, and secure defaults.
 import http from 'node:http'; // Serve the application without an additional web framework.
 import { readFile, readdir } from 'node:fs/promises'; // Read allowlisted static assets and the release files for /api/version.
+import { readdirSync, readFileSync } from 'node:fs'; import { createHash } from 'node:crypto'; // Fingerprint the application scripts once at start-up.
 import path from 'node:path'; // Resolve static files within fixed roots.
 import { fileURLToPath } from 'node:url'; // Resolve the application directory independently of the working directory.
 import { AppError, VERSION } from './src/github.mjs'; // Reuse user-facing HTTP errors and the release identifier.
@@ -20,6 +21,12 @@ import { runGeniusAgent } from './src/genius-agent.mjs'; // One Deep Genius agen
 import { ProviderError } from './src/provider-errors.mjs'; // Classified provider failures carry a stable kind for the interface.
 import { versionInfo, sourceDigest, SOURCE_PATTERN, cleanCommit } from './src/provenance.mjs'; // Public provenance and a non-secret build fingerprint.
 import { withSearchMetadata as searchMetadata, routeMetadata } from './src/seo.mjs'; // Route titles, descriptions, canonicals, and visible sections for the three landing pages.
+/** A short fingerprint of the application scripts and stylesheet ({ name, data } each); it changes whenever any of them changes. */
+export function assetVersion(files) { const hash = createHash('sha256'); for (const { name, data } of [...files].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))) hash.update(`${name}\0${data.length}\0`).update(data); return hash.digest('hex').slice(0, 16); }
+// Pages load the scripts and stylesheet from /_v/<version>/, so every release moves the whole module graph to new URLs and no browser or
+// proxy cache can run a previous release's script against a newer page (a cached app.js looking for removed elements left /new blank).
+const ASSET_VERSION = assetVersion(readdirSync(path.join(ROOT, 'public')).filter(name => /\.(?:js|css)$/.test(name)).map(name => ({ name, data: readFileSync(path.join(ROOT, 'public', name)) })));
+const VERSIONED_ASSET = /^\/_v\/([0-9a-f]{16})\/([\w-]+(?:\.[\w-]+)*\.(?:js|css))$/; // Top-level public scripts and the stylesheet only: no folders, no traversal.
 import { defaultAnalysisStore } from './src/store.mjs'; // Durable, commit-keyed saved analyses for public repositories.
 import { runEngineering, validateEngineering, engineeringStatus, admitEngineering, createReadinessCache, describeEngineConfig } from './src/engineering.mjs'; // Make Any Product with Genius AI: the interface to the private engine.
 let defaultStore = null; // Created on first use, so importing the server never touches the disk.
@@ -41,19 +48,26 @@ function guard(request, bucket = 'default') { // Validate browser origin and req
   const now = Date.now(); const ip = `${request.socket.remoteAddress || 'unknown'}|${bucket}`; const current = rates.get(ip); if (rates.size > 5000) rates.clear(); // Bound the in-memory limiter.
   const item = current && current.until > now ? current : { count: 0, until: now + 60000 }; item.count++; rates.set(ip, item); if (item.count > (LIMITS[bucket] || LIMITS.default)) throw new AppError(429, 'Too many requests. Please wait a minute.'); // Limit expensive endpoint calls per direct client address.
 } // End API request admission.
-function withSearchMetadata(page, pathname) { return routeMetadata(pathname) ? Buffer.from(searchMetadata(page.toString('utf8'), pathname), 'utf8') : page; } // Landing pages get their own metadata and visible section (src/seo.mjs); other paths are untouched.
+function htmlPage(page, pathname) { // Every page: landing pages get their own metadata and visible section (src/seo.mjs); all pages get versioned asset URLs.
+  const text = routeMetadata(pathname) ? searchMetadata(page.toString('utf8'), pathname) : page.toString('utf8');
+  return Buffer.from(text.replace('src="/app.js"', `src="/_v/${ASSET_VERSION}/app.js"`).replace('href="/styles.css"', `href="/_v/${ASSET_VERSION}/styles.css"`), 'utf8');
+}
 async function staticAsset(url, response, method) { // Serve only public files and explicitly approved dependency distributions.
+  if (url.pathname.startsWith('/_v/')) { // Versioned scripts and stylesheet. The /_v/ namespace never falls back to the workspace page (no GitHub owner is named _v).
+    const match = url.pathname.match(VERSIONED_ASSET); let data; try { if (!match) throw new Error('not a versioned asset'); data = await readFile(path.join(ROOT, 'public', match[2])); } catch { throw new AppError(404, 'Asset not found.'); }
+    response.writeHead(200, { 'Content-Type': MIME[path.extname(match[2])], 'Cache-Control': match[1] === ASSET_VERSION ? 'public, max-age=31536000, immutable' : 'no-cache' }); response.end(method === 'HEAD' ? undefined : data); return; // Another release's version still loads, but only this release's files are cached for good.
+  }
   let base = path.join(ROOT, 'public'); let relative = url.pathname.slice(1); // Default to the application public directory.
   const vendors = { '/vendor/mermaid/': 'mermaid/dist', '/vendor/dompurify/': 'dompurify/dist', '/vendor/marked/': 'marked/lib', '/vendor/fflate/': 'fflate/esm' }; // Restrict browser dependencies to known distribution roots.
   const vendor = Object.keys(vendors).find(prefix => url.pathname.startsWith(prefix)); // Detect an approved browser-module URL.
   if (url.pathname === '/shared/evidence.mjs') { base = path.join(ROOT, 'src'); relative = 'evidence.mjs'; } // Serve the single portable browser search module from an explicit allowlist.
   else if (vendor) { base = path.join(ROOT, 'node_modules', vendors[vendor]); relative = url.pathname.slice(vendor.length); } // Resolve dependency assets under their distribution directory.
-  const appRoute = !vendor && url.pathname !== '/shared/evidence.mjs' && (relative === '' || /^(examples|browse|new)\/?$/.test(relative) || /^[\w.-]+\/[\w.-]+(?:\/.*)?$/.test(relative)); // Any /owner/repo/... path opens the workspace, which explains unsupported GitHub pages.
+  const appRoute = !vendor && url.pathname !== '/shared/evidence.mjs' && (relative === '' || /^(examples|browse|new|rep)\/?$/.test(relative) || /^[\w.-]+\/[\w.-]+(?:\/.*)?$/.test(relative)); // Any /owner/repo/... path opens the workspace, which explains unsupported GitHub pages.
   if (relative === '') relative = 'index.html';
   try { relative = decodeURIComponent(relative); } catch { throw new AppError(400, 'Invalid asset path.'); } // Decode once before containment checking.
-  const file = path.resolve(base, relative); if (!file.startsWith(base + path.sep) || relative.includes('\\') || (!MIME[path.extname(file)] && !appRoute)) throw new AppError(404, 'Asset not found.'); if (!MIME[path.extname(file)]) { const page = await readFile(path.join(ROOT, 'public', 'index.html')); response.writeHead(200, { 'Content-Type': MIME['.html'], 'Cache-Control': 'no-cache' }); response.end(method === 'HEAD' ? undefined : withSearchMetadata(page, url.pathname)); return; } // Prevent arbitrary filesystem reads and directory listing.
-  let data; try { data = await readFile(file); } catch { if (!appRoute || relative.startsWith('assets/')) throw new AppError(404, 'Asset not found.'); data = await readFile(path.join(ROOT, 'public', 'index.html')); response.writeHead(200, { 'Content-Type': MIME['.html'], 'Cache-Control': 'no-cache' }); response.end(method === 'HEAD' ? undefined : withSearchMetadata(data, url.pathname)); return; } // Real files win; otherwise repository paths get the workspace.
-  response.writeHead(200, { 'Content-Type': MIME[path.extname(file)], 'Cache-Control': vendor || relative.startsWith('assets/') ? 'public, max-age=86400' : 'no-cache' }); response.end(method === 'HEAD' ? undefined : (relative === 'index.html' ? withSearchMetadata(data, url.pathname) : data)); // Cache immutable installed dependencies more aggressively than application files.
+  const file = path.resolve(base, relative); if (!file.startsWith(base + path.sep) || relative.includes('\\') || (!MIME[path.extname(file)] && !appRoute)) throw new AppError(404, 'Asset not found.'); if (!MIME[path.extname(file)]) { const page = await readFile(path.join(ROOT, 'public', 'index.html')); response.writeHead(200, { 'Content-Type': MIME['.html'], 'Cache-Control': 'no-cache' }); response.end(method === 'HEAD' ? undefined : htmlPage(page, url.pathname)); return; } // Prevent arbitrary filesystem reads and directory listing.
+  let data; try { data = await readFile(file); } catch { if (!appRoute || relative.startsWith('assets/')) throw new AppError(404, 'Asset not found.'); data = await readFile(path.join(ROOT, 'public', 'index.html')); response.writeHead(200, { 'Content-Type': MIME['.html'], 'Cache-Control': 'no-cache' }); response.end(method === 'HEAD' ? undefined : htmlPage(data, url.pathname)); return; } // Real files win; otherwise repository paths get the workspace.
+  response.writeHead(200, { 'Content-Type': MIME[path.extname(file)], 'Cache-Control': vendor || relative.startsWith('assets/') ? 'public, max-age=86400' : 'no-cache' }); response.end(method === 'HEAD' ? undefined : (relative === 'index.html' ? htmlPage(data, url.pathname) : data)); // Cache immutable installed dependencies more aggressively than application files.
 } // End static asset serving.
 export function createAppServer({ fetchImpl = fetch, analysisStore, engineReadyTtl } = {}) { // Export the actual server; tests may inject a GitHub/provider transport, a store, and shorter readiness caching.
   const engineCache = createReadinessCache(engineReadyTtl); // Authenticated engine readiness, cached per server.

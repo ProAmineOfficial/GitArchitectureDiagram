@@ -93,14 +93,18 @@
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
+  <div id="space-bg" class="space-bg" aria-hidden="true"><span class="nebula n1"></span><span class="nebula n2"></span><span class="nebula n3"></span><span class="nebula n4"></span><span class="planet"></span><span class="black-hole"><i></i></span><span class="space-veil"></span></div>
+  <canvas id="space-stars" class="space-stars" aria-hidden="true"></canvas>
+  <button id="space-motion" class="space-motion" type="button" aria-pressed="true" title="Pause background motion"><span data-icon="pause"></span><span class="sr-only">Pause background motion</span></button>
   <header class="topbar">
     <a class="brand" href="/" aria-label="Git Architecture Diagram home"><span class="brand-icon official"><img class="brand-mark" src="/assets/brand/icons/gad-icon-64.png" srcset="/assets/brand/icons/gad-icon-48.png 48w, /assets/brand/icons/gad-icon-64.png 64w, /assets/brand/icons/gad-icon-96.png 96w, /assets/brand/icons/gad-icon-180.png 180w" sizes="(max-width: 720px) 30px, 34px" width="34" height="34" alt="Git Architecture Diagram logo" decoding="async"></span><span class="brand-name">Git Architecture <strong>Diagram</strong></span></a>
     <nav class="top-actions" aria-label="Application">
-      <a class="nav-link" href="/" id="workspace-nav">Workspace</a>
+      <a class="nav-link" href="/" id="home-nav">Home</a>
+      <a class="nav-link" href="/new" id="workspace-nav">Workspace</a>
       <a class="nav-link" href="/browse" id="browse-nav">Browse</a>
       <a class="nav-link github-link" href="https://github.com/ProAmineOfficial/GitArchitectureDiagram" target="_blank" rel="noreferrer">GitHub</a>
       <button id="theme" class="icon-button" type="button" aria-label="Switch to light theme" title="Switch theme"><span data-icon="moon"></span></button>
-      <button id="settings-open" class="quiet-button" type="button"><span data-icon="key"></span><span>API settings</span></button>
+      <button id="settings-open" class="quiet-button" type="button"><span data-icon="key"></span><span>API &amp; Integrations</span></button>
     </nav>
   </header>
   <main id="main">
@@ -134,7 +138,12 @@
           </a>
           <a class="mission-card" id="mission-import" href="#import-github">
             <span class="glass-icon"><span data-icon="branch"></span></span>
-            <span class="mission-card-body"><small class="mission-kicker">Second path</small><strong>Import GitHub Project</strong><span>Read an existing repository as architecture diagrams, a System Map, and a Genius guide.</span></span>
+            <span class="mission-card-body"><small class="mission-kicker">Second path</small><strong>Import GitHub Project</strong><span>Read an existing repository as architecture diagrams, a System Map, and a Genius guide, with source-grounded reverse-engineering insight for GitHub projects.</span></span>
+            <span class="mission-go" data-icon="next"></span>
+          </a>
+          <a class="mission-card rep" id="mission-rep" href="/rep" data-internal>
+            <span class="glass-icon"><span data-icon="chip"></span></span>
+            <span class="mission-card-body"><small class="mission-kicker">Third path</small><strong>Reverse Engineer Any Product — REP</strong><span>Understand any accessible product or GitHub project from architecture, logic, algorithms, and dependencies down to application behavior, assembly and native binaries — then redesign and rebuild your own improved solution.</span><span class="mission-sub">From application behavior down to native binaries · assembly · logic · dependencies</span></span>
             <span class="mission-go" data-icon="next"></span>
           </a>
         </div>
@@ -164,6 +173,36 @@
       <div id="starter-examples" class="example-grid"></div>
     </section>
 
+    </section>
+
+    <section id="rep-view" class="rep-view" hidden aria-labelledby="rep-title">
+      <div class="rep-hero">
+        <p class="hero-kicker"><span data-icon="chip"></span>Reverse Engineer Any Product — REP</p>
+        <h1 id="rep-title" class="hero-title">From application behavior down to native binaries.</h1>
+        <p class="rep-lead">Import an accessible GitHub project and read it as a source-grounded engineering specification: architecture, algorithms, dependencies, and the critical review you need to redesign and build your own improved solution. Every claim is tied to the source it came from.</p>
+        <div id="rep-slot" class="rep-slot"></div>
+        <p class="hero-note">REP opens the same unified Workspace used across Git Architecture Diagram. The first analysis needs no AI key; Genius and Deep Genius use the provider key you set in API settings.</p>
+      </div>
+      <div class="rep-caps">
+        <div class="rep-cap">
+          <p class="rep-cap-head"><span data-icon="check"></span>Available now</p>
+          <ul>
+            <li>Source-grounded architecture, System Map, and component graph</li>
+            <li>Algorithms and control flow explained from the actual source, with file and line evidence</li>
+            <li>Dependency findings and a source-backed critical review (strengths, weaknesses, risks)</li>
+            <li>Redesign and generate a new engineering project in the Workspace, with honest provenance</li>
+          </ul>
+        </div>
+        <div class="rep-cap">
+          <p class="rep-cap-head planned"><span data-icon="layers"></span>Planned — not available yet</p>
+          <ul>
+            <li>Native binary inspection and disassembly (ELF, PE, Mach-O, WebAssembly)</li>
+            <li>Decompiled pseudocode, call graphs, and uploaded-artifact analysis</li>
+          </ul>
+          <p class="rep-cap-note">These need sandboxed, isolated tooling and owner approval for authorized artifacts only. Until that backend exists, these actions are shown as unavailable and no disassembly results are produced.</p>
+        </div>
+      </div>
+      <p class="rep-legal subtle">Analyze only repositories and artifacts you are authorized to use. REP respects licenses, attribution, and access controls; a public repository is not automatically an open-source-licensed one.</p>
     </section>
 
     <section id="browse-view" class="browse-view" hidden>
