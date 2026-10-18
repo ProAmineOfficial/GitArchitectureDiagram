@@ -565,6 +565,7 @@ ul.hier,ul.hier ul{list-style:none;margin:0;padding:0}ul.hier ul{margin-left:20p
 .mission-paths{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;width:100%;margin-top:18px}
 @media(max-width:1080px){.mission-paths{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .mission-card.rep .glass-icon{color:var(--purple);border-color:#b6a4e95c;background:linear-gradient(160deg,#8b6ff022,var(--glass))}
+.mission-sub{display:block;margin-top:9px;padding-top:9px;border-top:1px solid var(--line);font-size:11.5px;letter-spacing:.2px;color:color-mix(in srgb,var(--purple) 80%,var(--muted))}
 .mission-card.rep:hover{border-color:color-mix(in srgb,var(--purple) 50%,transparent)}
 .rep-view{max-width:1280px;margin:38px auto 0}
 .rep-hero{border:1px solid var(--glass-border);background:var(--glass-strong);border-radius:22px;padding:26px;box-shadow:var(--glass-hi),var(--shadow);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}

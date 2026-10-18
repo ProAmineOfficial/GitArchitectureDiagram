@@ -15,7 +15,7 @@ const prefOff = () => { try { return localStorage.getItem('gad-space-motion') ==
 export function setupSpace() {
   const canvas = document.getElementById('space-stars');
   const ctx = canvas?.getContext?.('2d', { alpha: true });
-  if (!canvas || !ctx) return { setActive() {}, setMotion() {} }; // No canvas (or very old engine): the CSS nebula alone stands in.
+  if (!canvas || !ctx) return { setActive() {}, setMotion() {}, motionOn() { return false; } }; // No canvas (or very old engine): the CSS nebula alone stands in. The full API (including motionOn) is returned so the app never breaks.
 
   let stars = []; let shooting = null; let nextShot = 0; let raf = 0; let active = false; let width = 0; let height = 0;
   const dpr = Math.min(globalThis.devicePixelRatio || 1, 2);

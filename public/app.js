@@ -53,7 +53,8 @@ const HOME_TITLE = 'Git Architecture Diagram — Make Any Product with Genius AI
 const REP_TITLE = 'Reverse Engineer Any Product — REP | Git Architecture Diagram'; // Same text as src/seo.mjs.
 const space = setupSpace(); // The decorative starfield behind the landing pages (public/space.js).
 function syncSpaceMotion() { // The small pause/play control in the corner; prefers-reduced-motion always wins.
-  const on = space.motionOn(); const button = $('#space-motion'); if (!button) return;
+  const button = $('#space-motion'); if (!button) return;
+  const on = space.motionOn();
   button.setAttribute('aria-pressed', String(on)); button.title = on ? 'Pause background motion' : 'Play background motion';
   button.firstElementChild.replaceChildren(icon(on ? 'pause' : 'play')); button.lastElementChild.textContent = button.title;
   document.body.classList.toggle('space-still', !on);
@@ -63,7 +64,7 @@ function showPage(page) {
   space.setActive(page === 'home' || page === 'rep'); syncSpaceMotion(); // Space background on the landing pages only; the Workspace stays calm.
   const bar = $('.command-bar'); if (page === 'home') $('#hero-slot').append(bar); else if (page === 'rep') $('#rep-slot').append(bar); else if (bar.parentElement !== $('#main')) $('#main').prepend(bar); bar.classList.toggle('tucked', page === 'repo'); bar.hidden = page === 'idea'; // Home centers the input; REP reuses it to import a repository; a repository page tucks it away; the idea workspace has its own form.
   $('#welcome').hidden = page !== 'home'; $('#browse-view').hidden = page !== 'browse'; $('#rep-view').hidden = page !== 'rep'; $('#workspace').hidden = page !== 'repo' && page !== 'idea'; // One workspace for repositories and idea projects.
-  $('#workspace-nav').toggleAttribute('aria-current', page === 'home' || page === 'repo' || page === 'idea'); $('#browse-nav').toggleAttribute('aria-current', page === 'browse');
+  $('#home-nav').toggleAttribute('aria-current', page === 'home'); $('#workspace-nav').toggleAttribute('aria-current', page === 'repo' || page === 'idea' || page === 'rep'); $('#browse-nav').toggleAttribute('aria-current', page === 'browse');
   if (page === 'repo') enterRepository();
   if (page === 'browse') { document.title = 'Browse examples · Git Architecture Diagram'; renderBrowse(); } // Same titles as src/seo.mjs, so search engines see one title per page.
   if (page === 'rep') document.title = REP_TITLE; // One title per page, matching src/seo.mjs.

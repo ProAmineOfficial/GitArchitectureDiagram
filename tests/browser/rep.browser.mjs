@@ -25,7 +25,7 @@ test('the homepage shows three independent primary cards in order', async () => 
   const page = await (await browser.newContext({ viewport: { width: 1440, height: 940 } })).newPage();
   await page.goto(`${base}/`); await page.waitForSelector('#welcome:not([hidden])');
   const titles = await page.$$eval('.mission-paths .mission-card strong', nodes => nodes.map(n => n.textContent));
-  assert.deepEqual(titles, ['Start from an Idea', 'Import GitHub Project', 'Reverse Engineer Any Product']);
+  assert.deepEqual(titles, ['Start from an Idea', 'Import GitHub Project', 'Reverse Engineer Any Product — REP']);
   assert.equal(await page.getAttribute('#mission-rep', 'href'), '/rep');
   assert.ok(await page.isVisible('#mission-rep'));
   await page.close();
