@@ -134,7 +134,12 @@
           </a>
           <a class="mission-card" id="mission-import" href="#import-github">
             <span class="glass-icon"><span data-icon="branch"></span></span>
-            <span class="mission-card-body"><small class="mission-kicker">Second path</small><strong>Import GitHub Project</strong><span>Read an existing repository as architecture diagrams, a System Map, and a Genius guide.</span></span>
+            <span class="mission-card-body"><small class="mission-kicker">Second path</small><strong>Import GitHub Project</strong><span>Read an existing repository as architecture diagrams, a System Map, and a Genius guide, with source-grounded reverse-engineering insight for GitHub projects.</span></span>
+            <span class="mission-go" data-icon="next"></span>
+          </a>
+          <a class="mission-card rep" id="mission-rep" href="/rep" data-internal>
+            <span class="glass-icon"><span data-icon="chip"></span></span>
+            <span class="mission-card-body"><small class="mission-kicker">Third path</small><strong>Reverse Engineer Any Product</strong><span>Understand an accessible GitHub project through its architecture, logic, algorithms, and dependencies, then redesign and build your own improved solution.</span></span>
             <span class="mission-go" data-icon="next"></span>
           </a>
         </div>
@@ -164,6 +169,36 @@
       <div id="starter-examples" class="example-grid"></div>
     </section>
 
+    </section>
+
+    <section id="rep-view" class="rep-view" hidden aria-labelledby="rep-title">
+      <div class="rep-hero">
+        <p class="hero-kicker"><span data-icon="chip"></span>Reverse Engineer Any Product — REP</p>
+        <h1 id="rep-title" class="hero-title">From application behavior down to native binaries.</h1>
+        <p class="rep-lead">Import an accessible GitHub project and read it as a source-grounded engineering specification: architecture, algorithms, dependencies, and the critical review you need to redesign and build your own improved solution. Every claim is tied to the source it came from.</p>
+        <div id="rep-slot" class="rep-slot"></div>
+        <p class="hero-note">REP opens the same unified Workspace used across Git Architecture Diagram. The first analysis needs no AI key; Genius and Deep Genius use the provider key you set in API settings.</p>
+      </div>
+      <div class="rep-caps">
+        <div class="rep-cap">
+          <p class="rep-cap-head"><span data-icon="check"></span>Available now</p>
+          <ul>
+            <li>Source-grounded architecture, System Map, and component graph</li>
+            <li>Algorithms and control flow explained from the actual source, with file and line evidence</li>
+            <li>Dependency findings and a source-backed critical review (strengths, weaknesses, risks)</li>
+            <li>Redesign and generate a new engineering project in the Workspace, with honest provenance</li>
+          </ul>
+        </div>
+        <div class="rep-cap">
+          <p class="rep-cap-head planned"><span data-icon="layers"></span>Planned — not available yet</p>
+          <ul>
+            <li>Native binary inspection and disassembly (ELF, PE, Mach-O, WebAssembly)</li>
+            <li>Decompiled pseudocode, call graphs, and uploaded-artifact analysis</li>
+          </ul>
+          <p class="rep-cap-note">These need sandboxed, isolated tooling and owner approval for authorized artifacts only. Until that backend exists, these actions are shown as unavailable and no disassembly results are produced.</p>
+        </div>
+      </div>
+      <p class="rep-legal subtle">Analyze only repositories and artifacts you are authorized to use. REP respects licenses, attribution, and access controls; a public repository is not automatically an open-source-licensed one.</p>
     </section>
 
     <section id="browse-view" class="browse-view" hidden>

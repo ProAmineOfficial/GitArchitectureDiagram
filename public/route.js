@@ -6,7 +6,7 @@
 // Pure functions only, so the same rules are unit-tested in Node and used by the browser.
 
 export const DEFAULT_FILES = 32; // The file budget used when a link does not specify one.
-const PAGES = { '': 'home', examples: 'browse', browse: 'browse', new: 'idea' }; // Application pages that are not repositories. GitHub reserves /new, so it never names an owner.
+const PAGES = { '': 'home', examples: 'browse', browse: 'browse', new: 'idea', rep: 'rep' }; // Application pages that are not repositories. A repository always needs an owner and a name, so a single known segment never collides with one.
 const SEGMENT = /^[A-Za-z0-9_.-]+$/; // GitHub owner and repository name characters.
 
 /** Parse a GitHub-style line anchor such as #L12 or #L12-L20. */
