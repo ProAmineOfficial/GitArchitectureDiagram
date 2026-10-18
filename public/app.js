@@ -19,6 +19,7 @@ import { redactSecrets } from './secret-scan.js'; // Copied and downloaded text 
 import { setupDeepGenius, errorTitle } from './deep-genius.js';
 import { pinnedSourceURL } from './source-navigation.js';
 import { icon, installIcons } from './icons.js';
+import { setupSpace } from './space.js';
 import { parseRoute, workspacePath, inputToPath, lineAnchor, DEFAULT_FILES } from './route.js';
 import { setupAsk } from './ask.js';
 import { renderBrowse, renderStarters } from './browse.js';
@@ -50,7 +51,16 @@ function setMode(mode) { const input = document.querySelector(`[name=analysis-mo
 // ——— Pages and routing ———
 const HOME_TITLE = 'Git Architecture Diagram — Make Any Product with Genius AI'; // Same text as <title> in index.html and src/seo.mjs.
 const REP_TITLE = 'Reverse Engineer Any Product — REP | Git Architecture Diagram'; // Same text as src/seo.mjs.
+const space = setupSpace(); // The decorative starfield behind the landing pages (public/space.js).
+function syncSpaceMotion() { // The small pause/play control in the corner; prefers-reduced-motion always wins.
+  const on = space.motionOn(); const button = $('#space-motion'); if (!button) return;
+  button.setAttribute('aria-pressed', String(on)); button.title = on ? 'Pause background motion' : 'Play background motion';
+  button.firstElementChild.replaceChildren(icon(on ? 'pause' : 'play')); button.lastElementChild.textContent = button.title;
+  document.body.classList.toggle('space-still', !on);
+}
+$('#space-motion')?.addEventListener('click', () => { space.setMotion(!space.motionOn()); syncSpaceMotion(); });
 function showPage(page) {
+  space.setActive(page === 'home' || page === 'rep'); syncSpaceMotion(); // Space background on the landing pages only; the Workspace stays calm.
   const bar = $('.command-bar'); if (page === 'home') $('#hero-slot').append(bar); else if (page === 'rep') $('#rep-slot').append(bar); else if (bar.parentElement !== $('#main')) $('#main').prepend(bar); bar.classList.toggle('tucked', page === 'repo'); bar.hidden = page === 'idea'; // Home centers the input; REP reuses it to import a repository; a repository page tucks it away; the idea workspace has its own form.
   $('#welcome').hidden = page !== 'home'; $('#browse-view').hidden = page !== 'browse'; $('#rep-view').hidden = page !== 'rep'; $('#workspace').hidden = page !== 'repo' && page !== 'idea'; // One workspace for repositories and idea projects.
   $('#workspace-nav').toggleAttribute('aria-current', page === 'home' || page === 'repo' || page === 'idea'); $('#browse-nav').toggleAttribute('aria-current', page === 'browse');

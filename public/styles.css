@@ -702,3 +702,31 @@ ul.hier,ul.hier ul{list-style:none;margin:0;padding:0}ul.hier ul{margin-left:20p
 @media(max-width:760px){.workspace-home{padding:14px}.workspace-alternatives,.ws-grid{grid-template-columns:1fr}.project-file textarea{min-height:260px}}
 .project-pill{font-family:inherit;letter-spacing:0}
 .tree-file[data-project=true]{color:var(--text)}.tree-file[data-project=true] .ui-icon{color:var(--accent);opacity:1}.tree-file[data-project=true] .idea-badge{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,sans-serif;flex:none;overflow:visible}
+
+/* ——— Decorative space background (home and REP only; dark theme). Never takes pointer events. ——— */
+.space-bg,.space-stars{position:fixed;inset:0;pointer-events:none;opacity:0;transition:opacity .6s ease;visibility:hidden}
+.space-bg{z-index:-2;overflow:hidden;background:radial-gradient(ellipse at 50% 120%,#0a0f1f 0%,#05070d 70%)}
+.space-stars{z-index:-1;width:100%;height:100%;display:block}
+body.space-on .space-bg,body.space-on .space-stars{opacity:1;visibility:visible}
+body.space-on{background:#05070d}
+.nebula{position:absolute;border-radius:50%;filter:blur(60px);opacity:.55;will-change:transform;animation:nebula-drift 90s ease-in-out infinite alternate}
+.nebula.n1{width:62vw;height:52vw;left:-14vw;top:-18vw;background:radial-gradient(circle at 40% 45%,#3a5bd9 0%,#2a3f9a55 38%,transparent 70%)}
+.nebula.n2{width:56vw;height:48vw;right:-16vw;top:6vh;background:radial-gradient(circle at 55% 50%,#7b4fd6 0%,#5a35a855 40%,transparent 72%);animation-duration:120s;animation-delay:-30s}
+.nebula.n3{width:40vw;height:34vw;left:30vw;bottom:-14vw;background:radial-gradient(circle at 50% 50%,#b0405f88 0%,#7a2a4a33 40%,transparent 70%);opacity:.35;animation-duration:140s;animation-delay:-60s}
+.nebula.n4{width:34vw;height:30vw;left:-6vw;bottom:8vh;background:radial-gradient(circle at 50% 50%,#2f9f8f66 0%,#1f6f6522 45%,transparent 72%);opacity:.3;animation-duration:110s;animation-delay:-15s}
+@keyframes nebula-drift{0%{transform:translate3d(0,0,0) scale(1)}100%{transform:translate3d(3vw,2vh,0) scale(1.06)}}
+.planet{position:absolute;right:-9vw;bottom:-11vw;width:28vw;height:28vw;max-width:420px;max-height:420px;border-radius:50%;background:radial-gradient(circle at 32% 30%,#5a6fb0 0%,#2b3768 38%,#10162e 70%,#080b18 100%);box-shadow:inset -3vw -2vw 4vw #000a,0 0 60px #4b62c42a;opacity:.38}
+.black-hole{position:absolute;left:5vw;top:56vh;width:150px;height:150px;opacity:.55}
+.black-hole::before{content:"";position:absolute;inset:38px;border-radius:50%;background:#000;box-shadow:0 0 24px 6px #000,0 0 42px 14px #2c3f9a40}
+.black-hole i{position:absolute;inset:0;border-radius:50%;background:conic-gradient(from 0deg,transparent 0 12%,#6f8cff55 22%,#b28cff66 38%,transparent 52%,#6f8cff44 70%,transparent 84%);-webkit-mask:radial-gradient(circle,transparent 44px,#000 46px,#000 66px,transparent 74px);mask:radial-gradient(circle,transparent 44px,#000 46px,#000 66px,transparent 74px);filter:blur(1.5px);animation:hole-spin 140s linear infinite}
+@keyframes hole-spin{to{transform:rotate(360deg)}}
+.space-veil{position:absolute;inset:0;background:radial-gradient(ellipse 70% 55% at 50% 38%,#05070d8c 0%,#05070d40 55%,transparent 80%),linear-gradient(180deg,#05070d55 0%,transparent 30%,transparent 70%,#05070d99 100%)}
+.space-motion{position:fixed;left:16px;bottom:16px;z-index:5;display:none;align-items:center;justify-content:center;width:36px;height:36px;min-height:0;padding:0;border-radius:12px;color:var(--muted);background:color-mix(in srgb,var(--surface) 55%,transparent);border:1px solid var(--line);backdrop-filter:blur(10px);opacity:.6}
+.space-motion:hover,.space-motion:focus-visible{opacity:1;color:var(--text)}
+.space-motion .ui-icon{width:16px;height:16px}
+body.space-on .space-motion{display:inline-flex}
+html[data-theme=light] .space-bg,html[data-theme=light] .space-stars,html[data-theme=light] body.space-on .space-motion{display:none}
+html[data-theme=light] body.space-on{background:var(--bg)}
+@media(max-width:760px){.nebula{filter:blur(40px);opacity:.42}.planet,.black-hole{display:none}}
+@media(prefers-reduced-motion:reduce){.nebula,.black-hole i{animation:none}.space-motion{display:none!important}}
+body.space-still .nebula,body.space-still .black-hole i{animation-play-state:paused}
